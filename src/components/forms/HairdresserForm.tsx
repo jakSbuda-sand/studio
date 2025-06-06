@@ -18,9 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Hairdresser, Salon } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card"; 
-import { Lock, Palette } from "lucide-react";
-import React from "react"; 
+import { Card, CardContent } from "@/components/ui/card";
+import { Lock, Palette } from "lucide-react"; // Palette might be unused now
+import React from "react";
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
@@ -30,7 +30,7 @@ const hairdresserFormSchema = z.object({
   specialties: z.string().min(3, {message: "Enter at least one specialty."}),
   availability: z.string().min(5, {message: "Please describe working days/hours."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
-  color_code: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/, "Invalid hex color (e.g. #RRGGBB or #RGB).").optional().or(z.literal('')),
+  // color_code: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/, "Invalid hex color (e.g. #RRGGBB or #RGB).").optional().or(z.literal('')),
 });
 
 export type HairdresserFormValues = z.infer<typeof hairdresserFormSchema>;
@@ -45,39 +45,49 @@ interface HairdresserFormProps {
 
 export function HairdresserForm({ initialData, salons, onSubmit, isEditing = false, isLoading = false }: HairdresserFormProps) {
   
-  // const getInitialFormValues = () => {
-  //   // DIAGNOSTIC: Always return fixed default values to simplify
-  //   return {
-  //     name: "Test Name",
-  //     email: "test@example.com",
-  //     initialPassword: "",
-  //     salonId: salons.length > 0 ? salons[0].id : "", 
-  //     specialties: "Testing, Styling",
-  //     availability: "Mon-Fri 9am-5pm",
-  //     profilePictureUrl: "",
-  //     color_code: "#FF00FF", 
-  //   };
-  // };
+  const getInitialFormValues = React.useCallback(() => {
+    if (initialData) {
+      return {
+        name: initialData.name || "",
+        email: initialData.email || "",
+        initialPassword: "", 
+        salonId: initialData.salonId || (salons.length > 0 ? salons[0].id : ""),
+        specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
+        availability: initialData.availability || "",
+        profilePictureUrl: initialData.profilePictureUrl || "",
+        // color_code: initialData.color_code || "", 
+      };
+    } else {
+      return {
+        name: "",
+        email: "",
+        initialPassword: "", 
+        salonId: salons.length > 0 ? salons[0].id : "", 
+        specialties: "",
+        availability: "",
+        profilePictureUrl: "", 
+        // color_code: "#FFFFFF", 
+      };
+    }
+  }, [initialData, salons]);
 
-  // const form = useForm<HairdresserFormValues>({
-  //   resolver: zodResolver(hairdresserFormSchema),
-  //   defaultValues: getInitialFormValues(),
-  // });
-  
-  // React.useEffect(() => {
-  //   // If initialData changes (e.g., user switches from add to edit or vice-versa), reset the form.
-  //   // form.reset(getInitialFormValues());
-  // }, [initialData, salons]);
+  const form = useForm<HairdresserFormValues>({
+    resolver: zodResolver(hairdresserFormSchema),
+    defaultValues: getInitialFormValues(),
+  });
 
+  React.useEffect(() => {
+    form.reset(getInitialFormValues());
+  }, [initialData, salons, form, getInitialFormValues]);
 
-  // const handleSubmitInternal = async (data: HairdresserFormValues) => {
-  //   await onSubmit(data);
-  // };
+  const handleSubmitInternal = async (data: HairdresserFormValues) => {
+    await onSubmit(data);
+  };
 
   return (
     <Card className="shadow-none border-none">
         <CardContent className="p-0">
-            {/* <Form {...form}>
+            <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmitInternal)} className="space-y-6 font-body">
                 <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem> <FormLabel>Full Name</FormLabel> <FormControl> <Input placeholder="e.g., Alice Wonderland" {...field} /> </FormControl> <FormMessage /> </FormItem>
@@ -106,11 +116,13 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
                 <FormField control={form.control} name="availability" render={({ field }) => (
                     <FormItem> <FormLabel>Working Days / General Availability</FormLabel> <FormControl> <Textarea placeholder="e.g., Mon, Tue, Wed, Fri (9am-5pm); Sat (10am-2pm)" {...field} /> </FormControl> <FormDescription>Describe their general working days and hours.</FormDescription> <FormMessage /> </FormItem>
                 )}/>
-                 <FormField control={form.control} name="color_code" render={({ field }) => (
+                {/* 
+                <FormField control={form.control} name="color_code" render={({ field }) => (
                     <FormItem> <FormLabel>Calendar Color Code (Optional)</FormLabel>
                     <FormControl> <div className="flex items-center gap-2"> <Palette className="h-5 w-5 text-muted-foreground" /> <Input type="text" placeholder="#RRGGBB" {...field} className="w-32" /> <div style={{backgroundColor: field.value || '#ccc'}} className="w-6 h-6 rounded-sm border"/></div></FormControl>
                     <FormDescription>Hex color for their appointments in the calendar.</FormDescription> <FormMessage /> </FormItem>
                 )}/>
+                */}
                 <FormField control={form.control} name="profilePictureUrl" render={({ field }) => (
                     <FormItem> <FormLabel>Profile Picture URL (Optional)</FormLabel> <FormControl> <Input placeholder="https://example.com/image.png" {...field} /> </FormControl> <FormMessage /> </FormItem>
                 )}/>
@@ -118,8 +130,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
                     {isLoading ? (isEditing ? "Saving..." : "Adding...") : (isEditing ? "Save Changes" : "Add Hairdresser")}
                 </Button>
             </form>
-            </Form> */}
-            <div>Hello from HairdresserForm. This is a diagnostic view.</div>
+            </Form>
         </CardContent>
     </Card>
   );
