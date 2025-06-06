@@ -66,7 +66,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
         specialties: "",
         availability: "", // e.g., "Monday, Tuesday, Friday"
         profilePictureUrl: "", 
-        color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Ensure template literal for color
+        color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Default random color
       };
     }
   };
