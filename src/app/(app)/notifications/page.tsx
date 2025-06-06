@@ -1,3 +1,4 @@
+
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bell, Mail, MessageSquare, Settings } from "lucide-react";
@@ -16,7 +17,7 @@ export default function NotificationsPage() {
         <CardHeader>
           <CardTitle className="font-headline text-xl">Notification System Overview</CardTitle>
           <CardDescription className="font-body">
-            SalonVerse automatically sends notifications to clients for booking confirmations and reminders. 
+            LaPresh Beauty Salon automatically sends notifications to clients for booking confirmations and reminders. 
             This helps reduce no-shows and keeps your clients informed.
           </CardDescription>
         </CardHeader>

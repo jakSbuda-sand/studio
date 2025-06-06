@@ -1,3 +1,4 @@
+
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +43,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Welcome to SalonVerse"
+        title="Welcome to LaPresh Beauty Salon"
         description="Your command center for managing salon operations efficiently."
         icon={LayoutDashboard}
         actions={

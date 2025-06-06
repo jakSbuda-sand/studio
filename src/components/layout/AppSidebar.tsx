@@ -1,3 +1,4 @@
+
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -37,7 +38,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 const Logo = () => (
   <div className="flex items-center gap-2 px-3 py-4">
     <Scissors className="h-8 w-8 text-primary" />
-    <h1 className="text-2xl font-headline font-semibold text-foreground">SalonVerse</h1>
+    <h1 className="text-2xl font-headline font-semibold text-foreground">LaPresh Beauty Salon</h1>
   </div>
 );
 

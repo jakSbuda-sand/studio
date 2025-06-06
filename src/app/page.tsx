@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Scissors } from "lucide-react";
@@ -13,7 +14,7 @@ export default function HomePage() {
             <Scissors className="h-10 w-10" />
           </div>
           <CardTitle className="text-5xl font-headline text-primary-foreground tracking-wider">
-            SalonVerse
+            LaPresh Beauty Salon
           </CardTitle>
           <CardDescription className="text-lg text-primary-foreground/80 font-body mt-2">
             Elegance & Efficiency, Reimagined.
@@ -21,7 +22,7 @@ export default function HomePage() {
         </CardHeader>
         <CardContent className="p-8 space-y-6">
           <p className="text-center text-lg text-foreground/90 font-body leading-relaxed">
-            Welcome to SalonVerse, your all-in-one solution for modern salon management. Streamline your bookings, manage your team, and delight your clients.
+            Welcome to LaPresh Beauty Salon, your all-in-one solution for modern salon management. Streamline your bookings, manage your team, and delight your clients.
           </p>
           <div className="relative h-48 w-full rounded-lg overflow-hidden shadow-md">
             <Image 
@@ -40,7 +41,7 @@ export default function HomePage() {
         </CardFooter>
       </Card>
       <footer className="mt-12 text-center text-muted-foreground font-body">
-        <p>&copy; {new Date().getFullYear()} SalonVerse. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} LaPresh Beauty Salon. All rights reserved.</p>
         <p className="text-sm">Crafted with care for the modern salon.</p>
       </footer>
     </div>

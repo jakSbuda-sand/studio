@@ -1,3 +1,4 @@
+
 "use client";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -13,8 +14,8 @@ import Link from "next/link";
 
 // Mock Data (same as bookings page for consistency)
 const mockSalonsData: Salon[] = [
-  { id: "1", name: "SalonVerse Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand" },
-  { id: "2", name: "SalonVerse Randburg", address: "456 Republic Road, Randburg Central, Randburg" },
+  { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand" },
+  { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg" },
 ];
 
 const mockHairdressersData: Hairdresser[] = [

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -46,8 +47,8 @@ async function deleteSalonAction(id: string): Promise<void> {
 
 
 const mockSalons: Salon[] = [
-  { id: "1", name: "SalonVerse Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand", phone: "011 555 1234", operatingHours: "Mon-Fri: 9am-6pm, Sat: 9am-4pm" },
-  { id: "2", name: "SalonVerse Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
+  { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand", phone: "011 555 1234", operatingHours: "Mon-Fri: 9am-6pm, Sat: 9am-4pm" },
+  { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
 ];
 
 export default function LocationsPage() {
