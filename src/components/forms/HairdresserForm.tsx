@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Hairdresser, Salon } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Lock, Palette } from "lucide-react";
+import React from "react";
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
@@ -49,12 +50,12 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
       return {
         name: initialData.name,
         email: initialData.email,
-        initialPassword: "",
+        initialPassword: "", 
         salonId: initialData.assigned_locations?.[0] || "",
         specialties: initialData.specialties.join(", "),
         availability: initialData.working_days?.join(", ") || initialData.availability,
         profilePictureUrl: initialData.profilePictureUrl || "",
-        color_code: initialData.color_code || "",
+        color_code: initialData.color_code || "#FFFFFF", 
       };
     } else {
       return {
@@ -64,23 +65,49 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
         salonId: "",
         specialties: "",
         availability: "",
-        profilePictureUrl: "",
-        color_code: "#FFFFFF", // Simplified for debugging
+        profilePictureUrl: "", 
+        color_code: "#FFFFFF",
       };
     }
   };
-  const defaultInitialValues = getInitialFormValues();
 
   const form = useForm<HairdresserFormValues>({
     resolver: zodResolver(hairdresserFormSchema),
-    defaultValues: defaultInitialValues,
+    defaultValues: getInitialFormValues(),
   });
+  
+  React.useEffect(() => {
+    if (initialData) {
+        form.reset({
+            name: initialData.name,
+            email: initialData.email,
+            initialPassword: "",
+            salonId: initialData.assigned_locations?.[0] || "",
+            specialties: initialData.specialties.join(", "),
+            availability: initialData.working_days?.join(", ") || initialData.availability,
+            profilePictureUrl: initialData.profilePictureUrl || "",
+            color_code: initialData.color_code || "#FFFFFF",
+        });
+    } else {
+        form.reset({ 
+            name: "",
+            email: "",
+            initialPassword: "",
+            salonId: "",
+            specialties: "",
+            availability: "",
+            profilePictureUrl: "",
+            color_code: "#FFFFFF",
+        });
+    }
+  }, [initialData, form.reset]);
+
 
   const handleSubmitInternal = async (data: HairdresserFormValues) => {
     const submissionData = { ...data };
-    if (isEditing && !submissionData.initialPassword) {
-      delete submissionData.initialPassword;
-    }
+    // Removed the 'delete submissionData.initialPassword;' line.
+    // If initialPassword is "" (empty string from form), it will be passed as such.
+    // This is handled correctly by the Zod schema and downstream functions.
     await onSubmit(submissionData);
   };
 
@@ -125,7 +152,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
                     <FormItem> <FormLabel>Profile Picture URL (Optional)</FormLabel> <FormControl> <Input placeholder="https://example.com/image.png" {...field} /> </FormControl> <FormMessage /> </FormItem>
                 )}/>
                 <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-                    {isLoading ? (initialData ? "Saving..." : "Adding...") : (initialData ? "Save Changes" : "Add Hairdresser")}
+                    {isLoading ? (isEditing ? "Saving..." : "Adding...") : (isEditing ? "Save Changes" : "Add Hairdresser")}
                 </Button>
             </form>
             </Form>
