@@ -27,7 +27,7 @@ const hairdresserFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
   initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
   salonId: z.string({ required_error: "Please select a salon." }), // For assigned_locations, simplified to one for now
-  specialties: z.string().min(3, {message: "Enter at least one specialty."}), 
+  specialties: z.string().min(3, {message: "Enter at least one specialty."}),
   availability: z.string().min(5, {message: "Please describe working days/hours."}), // For working_days
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   color_code: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/, "Invalid hex color (e.g. #RRGGBB or #RGB).").optional().or(z.literal('')),
@@ -64,7 +64,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
       availability: "", // e.g., "Monday, Tuesday, Friday"
       profilePictureUrl: "",
       color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Default random color
-    },
+    }
   });
 
   const handleSubmit = async (data: HairdresserFormValues) => {
