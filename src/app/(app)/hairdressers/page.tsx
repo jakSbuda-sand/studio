@@ -19,6 +19,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -85,7 +86,7 @@ export default function HairdressersPage() {
       displayName: data.name,
       assigned_locations: [data.salonId], // Assuming single salon assignment for now from form
       working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing, improve as needed
-      color_code: data.color_code || `#${Math.floor(Math.random()*16777215).toString(16)}`, // Random color if not provided
+      color_code: data.color_code || `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Random color if not provided
       specialties: data.specialties.split(",").map(s => s.trim()),
       profilePictureUrl: data.profilePictureUrl,
     };
@@ -109,7 +110,7 @@ export default function HairdressersPage() {
         specialties: data.specialties.split(",").map(s => s.trim()),
         availability: data.availability, // This needs better parsing or structure for working_days
         working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], // Placeholder
-        profilePictureUrl: data.profilePictureUrl,
+        profilePictureUrl: data.profilePictureUrl || `https://placehold.co/100x100.png?text=${data.name.split(" ").map(n=>n[0]).join("").toUpperCase()}`,
         color_code: hairdresserDataForFunction.color_code,
         must_reset_password: true,
       };
@@ -117,6 +118,7 @@ export default function HairdressersPage() {
       toast({ title: "Hairdresser Added (Simulation)", description: `${data.name} was added. Temporary Password: ${tempPassword}. Real integration requires deploying and calling the 'createHairdresserUser' Cloud Function.` });
 
       setIsFormOpen(false);
+      setEditingHairdresser(null); // Clear editing state
     } catch (error: any) {
       console.error("Error calling createHairdresserUser function:", error);
       toast({ title: "Error Adding Hairdresser", description: error.message || "Could not add hairdresser.", variant: "destructive" });
@@ -141,7 +143,7 @@ export default function HairdressersPage() {
       specialties: data.specialties.split(",").map(s => s.trim()),
       availability: data.availability,
       working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing
-      profilePictureUrl: data.profilePictureUrl,
+      profilePictureUrl: data.profilePictureUrl || editingHairdresser.profilePictureUrl,
       color_code: data.color_code || editingHairdresser.color_code,
     };
     setHairdressers(prev => prev.map(h => h.id === editingHairdresser.id ? updatedMockHairdresser : h));
@@ -188,7 +190,7 @@ export default function HairdressersPage() {
               <DialogHeader> <DialogTitle className="font-headline text-2xl"> {editingHairdresser ? "Edit Hairdresser Profile" : "Add New Hairdresser"} </DialogTitle> </DialogHeader>
               <HairdresserForm
                 initialData={editingHairdresser}
-                salons={salons} // Pass real salon data when available from Firestore
+                salons={salons} 
                 onSubmit={editingHairdresser ? handleUpdateHairdresser : handleAddHairdresser}
                 isEditing={!!editingHairdresser}
                 isLoading={isLoading}
@@ -198,7 +200,7 @@ export default function HairdressersPage() {
         }
       />
 
-      {hairdressers.length === 0 && !isLoading ? ( // Check isLoading for initial fetch
+      {hairdressers.length === 0 && !isLoading ? ( 
         <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader> <Users className="mx-auto h-16 w-16 text-muted-foreground" /> <CardTitle className="mt-4 text-2xl font-headline">No Hairdressers Yet</CardTitle> </CardHeader>
           <CardContent> <CardDescription className="font-body text-lg"> Add your first hairdresser to assign them to salons and manage their schedules. </CardDescription> </CardContent>
@@ -241,5 +243,7 @@ export default function HairdressersPage() {
     </div>
   );
 }
+
+    
 
     
