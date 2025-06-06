@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { LogIn, Scissors } from "lucide-react";
-import Image from "next/image";
+// import Image from "next/image"; // Image component not used here
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -22,17 +22,11 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const success = await login(email, password);
-    if (success) {
-      toast({ title: "Login Successful", description: "Welcome back!" });
-      router.push("/dashboard");
-    } else {
-      toast({
-        title: "Login Failed",
-        description: "Invalid email or password. Please try again.",
-        variant: "destructive",
-      });
-    }
+    const loginSuccessful = await login(email, password);
+    // Redirection is handled by AuthContext's onAuthStateChanged effect
+    // If login is successful, onAuthStateChanged will pick up the new user
+    // and redirect accordingly (e.g., to /dashboard or /auth/force-password-reset).
+    // If login fails, the toast is shown by the login function itself.
     setIsLoading(false);
   };
 
@@ -84,7 +78,7 @@ export default function LoginPage() {
         </CardContent>
          <CardFooter className="p-4 sm:p-6 bg-secondary/30 text-center">
             <p className="text-xs text-muted-foreground font-body">
-                For demo purposes, use admin@salonverse.com or alice@salonverse.com with password "password".
+                Enter your registered email and password.
             </p>
         </CardFooter>
       </Card>
@@ -94,3 +88,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

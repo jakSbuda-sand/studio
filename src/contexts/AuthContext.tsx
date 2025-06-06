@@ -1,108 +1,165 @@
 
 "use client";
 
-import type { User } from '@/lib/types';
+import type { User, UserDoc, HairdresserDoc } from '@/lib/types';
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
-
-// For mock purposes, include password here. NEVER do this in a real app.
-interface MockUserInternal extends User {
-  password?: string;
-  needsPasswordChange?: boolean; // Explicitly add here as well
-}
-
-const mockUsers: MockUserInternal[] = [
-  { id: "admin01", name: "Admin User", email: "admin@salonverse.com", password: "password", role: "admin", avatarUrl: "https://placehold.co/128x128.png?text=AU", needsPasswordChange: false },
-  { id: "hairdresser01", name: "Alice Smith", email: "alice@salonverse.com", password: "password", role: "hairdresser", hairdresserProfileId: "h1", avatarUrl: "https://placehold.co/128x128.png?text=AS", needsPasswordChange: false },
-  { id: "hairdresser02", name: "Bob Johnson", email: "bob@salonverse.com", password: "password", role: "hairdresser", hairdresserProfileId: "h2", avatarUrl: "https://placehold.co/128x128.png?text=BJ", needsPasswordChange: false },
-  { id: "hairdresser03", name: "Carol White", email: "carol@salonverse.com", password: "password", role: "hairdresser", hairdresserProfileId: "h3", avatarUrl: "https://placehold.co/128x128.png?text=CW", needsPasswordChange: false },
-];
+import { useRouter, usePathname } from 'next/navigation';
+import { 
+  auth, 
+  db, 
+  onAuthStateChanged, 
+  firebaseSignOut, 
+  firebaseSignInWithEmailAndPassword,
+  firebaseSendPasswordResetEmail,
+  doc,
+  getDoc,
+  updateDoc
+} from '@/lib/firebase';
+import type { User as FirebaseUser } from 'firebase/auth';
+import { toast } from '@/hooks/use-toast';
 
 interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<boolean | 'needsPasswordChange'>;
+  user: User | null; // This is your application's User type
+  firebaseUser: FirebaseUser | null; // Raw Firebase Auth user object
+  login: (email: string, password_param: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
-  updatePasswordForUser: (userId: string, newPassword: string) => Promise<boolean>; // Mock password update
-  addMockUser: (user: MockUserInternal) => void; // To add users from hairdresser form
+  sendPasswordReset: (email: string) => Promise<boolean>;
+  updateHairdresserPasswordResetFlag: (hairdresserAuthUid: string, value: boolean) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const [internalMockUsers, setInternalMockUsers] = useState<MockUserInternal[]>(mockUsers);
-
+  const pathname = usePathname();
 
   useEffect(() => {
-    const storedUserJson = localStorage.getItem('salonVerseUser');
-    if (storedUserJson) {
-      const storedUser = JSON.parse(storedUserJson) as User;
-      // Check if this user exists in our current mockUsers list to get full details including needsPasswordChange
-      const liveUser = internalMockUsers.find(u => u.id === storedUser.id);
-      if (liveUser) {
-        setUser(liveUser);
-      } else {
-        // Stored user not in current mock list, maybe outdated. Clear it.
-        localStorage.removeItem('salonVerseUser');
-      }
-    }
-    setLoading(false);
-  }, [internalMockUsers]);
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setLoading(true);
+      if (fbUser) {
+        setFirebaseUser(fbUser);
+        // Fetch user role and other details from Firestore 'users' collection
+        const userDocRef = doc(db, "users", fbUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-  const addMockUser = (newUser: MockUserInternal) => {
-    setInternalMockUsers(prevUsers => [...prevUsers, newUser]);
+        if (userDocSnap.exists()) {
+          const userDocData = userDocSnap.data() as UserDoc;
+          const appUser: User = {
+            uid: fbUser.uid,
+            name: fbUser.displayName || userDocData.name,
+            email: fbUser.email,
+            role: userDocData.role,
+            avatarUrl: fbUser.photoURL || undefined, // You might store this in UserDoc too
+          };
+
+          if (appUser.role === 'hairdresser') {
+            // Fetch hairdresser-specific details, like must_reset_password
+            const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid); // Assuming hairdresser doc ID is Auth UID
+            const hairdresserDocSnap = await getDoc(hairdresserDocRef);
+            if (hairdresserDocSnap.exists()) {
+              const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
+              appUser.must_reset_password = hairdresserData.must_reset_password;
+              appUser.hairdresserDocId = hairdresserDocSnap.id; // Store doc ID for convenience
+            } else {
+              console.warn(`Hairdresser profile not found in Firestore for UID: ${fbUser.uid}`);
+              appUser.role = 'unknown'; // Or handle as an error
+            }
+          }
+          setUser(appUser);
+          
+          // Handle redirection for password reset
+          if (appUser.role === 'hairdresser' && appUser.must_reset_password) {
+            if (pathname !== '/auth/force-password-reset') {
+              router.replace('/auth/force-password-reset');
+            }
+          } else if (pathname === '/login' || pathname === '/') {
+             router.replace('/dashboard');
+          }
+
+        } else {
+          console.warn(`User document not found in Firestore for UID: ${fbUser.uid}. Logging out.`);
+          // This user exists in Auth but not in our 'users' collection, potential issue
+          await firebaseSignOut(auth);
+          setUser(null);
+          setFirebaseUser(null);
+          if (pathname !== '/login') router.replace('/login');
+        }
+      } else {
+        setUser(null);
+        setFirebaseUser(null);
+        if (!pathname.startsWith('/login') && !pathname.startsWith('/auth/force-password-reset') && pathname !== '/') {
+           // Don't redirect from public pages if any are added later
+        }
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [router, pathname]);
+
+  const login = async (email: string, password_param: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      await firebaseSignInWithEmailAndPassword(auth, email, password_param);
+      // onAuthStateChanged will handle setting user state and redirection
+      // The role check and must_reset_password check happens in onAuthStateChanged
+      setLoading(false);
+      return true; // Indicates Auth was successful, redirection logic is in useEffect
+    } catch (error: any) {
+      console.error("Firebase login error:", error);
+      toast({ title: "Login Failed", description: error.message || "Invalid credentials.", variant: "destructive"});
+      setLoading(false);
+      return false;
+    }
   };
 
-  const login = async (email: string, password_param: string): Promise<boolean | 'needsPasswordChange'> => {
+  const logout = async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const foundUser = internalMockUsers.find(u => u.email === email && u.password === password_param);
-    
-    if (foundUser) {
-      const { password, ...userToStore } = foundUser;
-      setUser(userToStore);
-      localStorage.setItem('salonVerseUser', JSON.stringify(userToStore));
-      setLoading(false);
-      if (userToStore.role === 'hairdresser' && userToStore.needsPasswordChange) {
-        return 'needsPasswordChange';
+    try {
+      await firebaseSignOut(auth);
+      // onAuthStateChanged will clear user state
+      router.push('/login');
+    } catch (error) {
+      console.error("Firebase logout error:", error);
+      toast({ title: "Logout Failed", description: "Could not log out. Please try again.", variant: "destructive"});
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const sendPasswordReset = async (email: string): Promise<boolean> => {
+    try {
+      await firebaseSendPasswordResetEmail(auth, email);
+      return true;
+    } catch (error: any) {
+      console.error("Send password reset email error:", error);
+      toast({title: "Error", description: error.message || "Could not send password reset email.", variant: "destructive"});
+      return false;
+    }
+  };
+
+  const updateHairdresserPasswordResetFlag = async (hairdresserAuthUid: string, value: boolean): Promise<boolean> => {
+    try {
+      const hairdresserDocRef = doc(db, "hairdressers", hairdresserAuthUid);
+      await updateDoc(hairdresserDocRef, { must_reset_password: value });
+      // If current user is this hairdresser, update local state
+      if (user && user.uid === hairdresserAuthUid) {
+        setUser(prev => prev ? ({ ...prev, must_reset_password: value }) : null);
       }
       return true;
+    } catch (error: any) {
+      console.error("Error updating must_reset_password flag:", error);
+      toast({title: "Error", description: "Failed to update password reset status.", variant: "destructive"});
+      return false;
     }
-    setLoading(false);
-    return false;
   };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('salonVerseUser');
-    router.push('/login');
-  };
-
-  const updatePasswordForUser = async (userId: string, newPassword: string): Promise<boolean> => {
-    // Mock password update
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setInternalMockUsers(prevUsers => 
-      prevUsers.map(u => 
-        u.id === userId 
-        ? { ...u, password: newPassword, needsPasswordChange: false } 
-        : u
-      )
-    );
-    // If the currently logged-in user is the one changing password, update their state
-    if (user && user.id === userId) {
-      const updatedUser = { ...user, needsPasswordChange: false };
-      setUser(updatedUser);
-      localStorage.setItem('salonVerseUser', JSON.stringify(updatedUser));
-    }
-    return true;
-  };
-
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, updatePasswordForUser, addMockUser }}>
+    <AuthContext.Provider value={{ user, firebaseUser, login, logout, loading, sendPasswordReset, updateHairdresserPasswordResetFlag }}>
       {children}
     </AuthContext.Provider>
   );
@@ -115,3 +172,5 @@ export function useAuth() {
   }
   return context;
 }
+
+    

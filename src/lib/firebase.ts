@@ -1,12 +1,37 @@
 
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
-// import { getFunctions, connectFunctionsEmulator } from "firebase/functions"; // Uncomment if you use Functions
+import { 
+  getAuth, 
+  connectAuthEmulator, 
+  EmailAuthProvider, 
+  GoogleAuthProvider, // Example if you add Google Sign-In
+  onAuthStateChanged,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
+  signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword,
+  createUserWithEmailAndPassword as firebaseCreateUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile as firebaseUpdateProfile,
+  updatePassword as firebaseUpdatePassword
+} from "firebase/auth";
+import { 
+  getFirestore, 
+  connectFirestoreEmulator,
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  deleteDoc,
+  writeBatch
+} from "firebase/firestore";
+import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 // import { getStorage, connectStorageEmulator } from "firebase/storage"; // Uncomment if you use Storage
 
-// Your web app's Firebase configuration
-// IMPORTANT: Replace with your actual Firebase project configuration!
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "YOUR_API_KEY",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
@@ -26,16 +51,11 @@ if (!getApps().length) {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-// const functions = getFunctions(app); // Uncomment if you use Functions
+const functions = getFunctions(app); // Initialize Functions
 // const storage = getStorage(app); // Uncomment if you use Storage
 
-// Connect to emulators if running in development and emulators are running
 if (process.env.NODE_ENV === 'development') {
-  // Check if emulators are running by trying to fetch their config
-  // This is a common pattern, but you might need a more robust check
-  // or simply rely on an environment variable like process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS
   const useEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true';
-
   if (useEmulators) {
     console.log("Connecting to Firebase Emulators");
     try {
@@ -50,12 +70,12 @@ if (process.env.NODE_ENV === 'development') {
     } catch (e) {
         console.warn("Firestore Emulator connection failed or already connected:", e);
     }
-    // try { // Uncomment if you use Functions
-    //   connectFunctionsEmulator(functions, "localhost", 5001);
-    //   console.log("Functions Emulator connected");
-    // } catch (e) {
-    //   console.warn("Functions Emulator connection failed or already connected:", e);
-    // }
+    try { 
+      connectFunctionsEmulator(functions, "localhost", 5001);
+      console.log("Functions Emulator connected");
+    } catch (e) {
+      console.warn("Functions Emulator connection failed or already connected:", e);
+    }
     // try { // Uncomment if you use Storage
     //   connectStorageEmulator(storage, "localhost", 9199);
     //   console.log("Storage Emulator connected");
@@ -65,5 +85,34 @@ if (process.env.NODE_ENV === 'development') {
   }
 }
 
-export { app, auth, db };
-// export { app, auth, db, functions, storage }; // Uncomment if you use Functions/Storage
+export { 
+  app, 
+  auth, 
+  db,
+  functions, // Export functions
+  // storage, // Export storage if used
+  EmailAuthProvider,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  firebaseSendPasswordResetEmail,
+  firebaseSignInWithEmailAndPassword,
+  firebaseCreateUserWithEmailAndPassword,
+  firebaseSignOut,
+  firebaseUpdateProfile,
+  firebaseUpdatePassword,
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  deleteDoc,
+  writeBatch,
+  httpsCallable
+};
+
+    
