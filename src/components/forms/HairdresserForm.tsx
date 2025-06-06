@@ -16,20 +16,19 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea"; // Assuming Textarea might be used for other fields if form expands
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Hairdresser, Salon } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Lock } from "lucide-react"; // Users for header icon
+import { Card, CardContent } from "@/components/ui/card"; // CardHeader, CardTitle removed as not used directly
+import { Users, Lock } from "lucide-react";
 
-// Schema without color_code for now
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
   initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
-  salonId: z.string({ required_error: "Please select a salon." }),
-  specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}), // Changed description
-  availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}), // Changed description
+  assigned_locations: z.array(z.string()).nonempty({ message: "Please select at least one salon." }),
+  specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
+  availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
 });
 
@@ -56,24 +55,23 @@ export function HairdresserForm({
       return {
         name: initialData.name || "",
         email: initialData.email || "",
-        initialPassword: "", // Password field is for initial creation or specific reset, not for general edit
-        salonId: initialData.salonId || (salons.length > 0 ? salons[0].id : ""),
+        initialPassword: "", 
+        assigned_locations: initialData.assigned_locations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
         availability: initialData.availability || "",
         profilePictureUrl: initialData.profilePictureUrl || "",
       };
     }
-    // For new hairdresser
     return {
       name: "",
       email: "",
       initialPassword: "",
-      salonId: salons.length > 0 ? salons[0].id : "",
+      assigned_locations: [],
       specialties: "",
       availability: "",
       profilePictureUrl: "",
     };
-  }, [initialData, salons, isEditing]);
+  }, [initialData, isEditing]);
 
   const form = useForm<HairdresserFormValues>({
     resolver: zodResolver(hairdresserFormSchema),
@@ -82,14 +80,10 @@ export function HairdresserForm({
 
   useEffect(() => {
     form.reset(getInitialFormValues());
-  }, [initialData, salons, isEditing, form.reset, getInitialFormValues]);
+  }, [initialData, getInitialFormValues, form]); // form.reset simplified to just 'form'
 
   const handleSubmitInternal = async (data: HairdresserFormValues) => {
-    const submissionData = { ...data };
-    // If editing and password field is empty, don't submit it (it's optional)
-    // This logic is now handled by the backend/Cloud Function if password isn't provided for update
-    // For creation, if initialPassword is empty, the backend will generate one.
-    await onSubmit(submissionData);
+    await onSubmit(data);
   };
 
   return (
@@ -139,20 +133,55 @@ export function HairdresserForm({
                 )}
 
                 <FormField
-                control={form.control}
-                name="salonId"
-                render={({ field }) => (
+                  control={form.control}
+                  name="assigned_locations"
+                  render={() => (
                     <FormItem>
-                    <FormLabel>Assign to Salon</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select a salon" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                        {salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
+                      <div className="mb-4">
+                        <FormLabel className="text-base">Assigned Salons</FormLabel>
+                        <FormDescription>
+                          Select all salons this hairdresser will work at.
+                        </FormDescription>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {salons.map((salon) => (
+                          <FormField
+                            key={salon.id}
+                            control={form.control}
+                            name="assigned_locations"
+                            render={({ field }) => {
+                              return (
+                                <FormItem
+                                  key={salon.id}
+                                  className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm hover:bg-accent/50 transition-colors"
+                                >
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value?.includes(salon.id)}
+                                      onCheckedChange={(checked) => {
+                                        const currentValue = field.value || [];
+                                        return checked
+                                          ? field.onChange([...currentValue, salon.id])
+                                          : field.onChange(
+                                              currentValue.filter(
+                                                (value) => value !== salon.id
+                                              )
+                                            );
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormLabel className="font-normal cursor-pointer flex-1">
+                                    {salon.name}
+                                  </FormLabel>
+                                </FormItem>
+                              );
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
                     </FormItem>
-                )}
+                  )}
                 />
                 <FormField
                 control={form.control}

@@ -7,37 +7,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter } from "lucide-react"; // Renamed User to UserIcon
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Mock Data
 const mockSalonsData: Salon[] = [
   { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand" },
   { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg" },
 ];
 
 const mockHairdressersData: Hairdresser[] = [
-  { id: "h1", name: "Alice Smith", salonId: "1", specialties: [], availability: "", email: "alice@salonverse.com" },
-  { id: "h2", name: "Bob Johnson", salonId: "2", specialties: [], availability: "", email: "bob@salonverse.com" },
-  { id: "h3", name: "Carol White", salonId: "1", specialties: [], availability: "", email: "carol@salonverse.com" },
+  { id: "h1", name: "Alice Smith", userId: "uid1", email: "alice@example.com", assigned_locations: ["1"], specialties: [], availability: "", working_days: [] },
+  { id: "h2", name: "Bob Johnson", userId: "uid2", email: "bob@example.com", assigned_locations: ["2", "1"], specialties: [], availability: "", working_days: [] },
+  { id: "h3", name: "Carol White", userId: "uid3", email: "carol@example.com", assigned_locations: ["1"], specialties: [], availability: "", working_days: [] },
 ];
 
-// This needs to be mutable and accessible if bookings are added/updated elsewhere via mock actions
 let globalMockBookingsDataForCalendar: Booking[] = [
   { id: "b1", clientName: "John Doe", salonId: "1", hairdresserId: "h1", service: "Men's Cut", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 45, status: "Confirmed", clientPhone: "0811234567", color: "hsl(var(--chart-1))" },
   { id: "b2", clientName: "Jane Smith", salonId: "2", hairdresserId: "h2", service: "Ladies Cut & Blowdry", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 2)), durationMinutes: 90, status: "Pending", clientPhone: "0821234567", color: "hsl(var(--chart-2))" },
   { id: "b3", clientName: "Mike Brown", salonId: "1", hairdresserId: "h3", service: "Color Correction", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 180, status: "Completed", clientPhone: "0831234567", color: "hsl(var(--chart-3))" },
   { id: "b4", clientName: "Sarah Wilson", salonId: "1", hairdresserId: "h1", service: "Highlights", appointmentDateTime: new Date(), durationMinutes: 120, status: "Confirmed", clientPhone: "0841234567", color: "hsl(var(--chart-4))" },
+  { id: "b5", clientName: "Chris Green", salonId: "1", hairdresserId: "h2", service: "Beard Trim", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 30, status: "Confirmed", clientPhone: "0851234567", color: "hsl(var(--chart-5))" },
 ];
 
 
 export default function CalendarPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [bookings, setBookings] = useState<Booking[]>(globalMockBookingsDataForCalendar); // Use global mock
+  const [bookings] = useState<Booking[]>(globalMockBookingsDataForCalendar);
   const [salons] = useState<Salon[]>(mockSalonsData);
   const [hairdressers] = useState<Hairdresser[]>(mockHairdressersData);
 
@@ -45,25 +44,25 @@ export default function CalendarPage() {
   const [filterHairdresserId, setFilterHairdresserId] = useState<string>("all");
 
   useEffect(() => {
-    // If user is hairdresser, pre-filter by their ID and disable hairdresser filter
     if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
       setFilterHairdresserId(user.hairdresserProfileId);
-      // Optionally, pre-filter by their salon too
-      const hairdresserSalon = mockHairdressersData.find(h => h.id === user.hairdresserProfileId)?.salonId;
-      if (hairdresserSalon) {
-        setFilterSalonId(hairdresserSalon);
+      const hairdresserDetails = mockHairdressersData.find(h => h.id === user.hairdresserProfileId);
+      if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
+        // If hairdresser is assigned to multiple, admin might pick.
+        // For now, pre-filter by their first assigned salon if they are a hairdresser.
+        setFilterSalonId(hairdresserDetails.assigned_locations[0]);
       }
     }
   }, [user]);
 
   const filteredBookings = bookings
     .filter(booking => selectedDate ? isSameDay(new Date(booking.appointmentDateTime), selectedDate) : true)
-    .filter(booking => filterSalonId === "all" || booking.salonId === filterSalonId)
+    .filter(booking => filterSalonId === "all" || booking.salonId === filterSalonId) // Filter by salon where booking occurs
     .filter(booking => {
       if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
-        return booking.hairdresserId === user.hairdresserProfileId; // Hairdresser sees only their own
+        return booking.hairdresserId === user.hairdresserProfileId;
       }
-      return filterHairdresserId === "all" || booking.hairdresserId === filterHairdresserId; // Admin can filter
+      return filterHairdresserId === "all" || booking.hairdresserId === filterHairdresserId;
     })
     .sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
   
@@ -80,7 +79,10 @@ export default function CalendarPage() {
     }
   };
   
-  const availableHairdressersForFilter = filterSalonId === "all" ? hairdressers : hairdressers.filter(h => h.salonId === filterSalonId);
+  // Hairdressers available for filter dropdown, based on selected salon (if any)
+  const availableHairdressersForFilter = filterSalonId === "all" 
+    ? hairdressers 
+    : hairdressers.filter(h => h.assigned_locations.includes(filterSalonId));
   
   if (!user) return <p>Loading...</p>;
 
@@ -112,14 +114,18 @@ export default function CalendarPage() {
                 </div>
                 <div>
                   <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Hairdresser</label>
-                  <Select value={filterHairdresserId} onValueChange={setFilterHairdresserId} disabled={availableHairdressersForFilter.length === 0 && filterSalonId !== "all"}>
+                  <Select 
+                    value={filterHairdresserId} 
+                    onValueChange={setFilterHairdresserId} 
+                    disabled={user.role === 'hairdresser' || (filterSalonId !== "all" && availableHairdressersForFilter.length === 0)}
+                  >
                     <SelectTrigger id="hairdresser-filter"><SelectValue placeholder="All Hairdressers" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Hairdressers</SelectItem>
                       {availableHairdressersForFilter.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  {availableHairdressersForFilter.length === 0 && filterSalonId !== "all" && <p className="text-xs text-muted-foreground mt-1">No hairdressers in selected salon.</p>}
+                  {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1">No hairdressers assigned to selected salon.</p>}
                 </div>
               </>
             )}
@@ -158,7 +164,7 @@ export default function CalendarPage() {
                       </div>
                       <div className="mt-2 space-y-1 text-sm font-body">
                         <p className="flex items-center gap-1"><ClockIcon size={14} className="text-primary"/> {format(new Date(booking.appointmentDateTime), "p")} ({booking.durationMinutes} mins)</p>
-                        {user.role === 'admin' && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>}
+                        {(user.role === 'admin' || booking.hairdresserId !== user.hairdresserProfileId) && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>}
                         <p className="flex items-center gap-1"><StoreIcon size={14} className="text-primary"/> {getSalonName(booking.salonId)}</p>
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
@@ -183,4 +189,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-

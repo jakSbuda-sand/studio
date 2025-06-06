@@ -2,12 +2,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link"; // Import Link
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // DialogTrigger removed as it's not used here
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
 import type { Hairdresser, Salon, DayOfWeek, User } from "@/lib/types";
 import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail } from "lucide-react";
@@ -25,33 +25,29 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-// import { functions, httpsCallable } from "@/lib/firebase"; // For Cloud Function call (delete only for now)
+import { Badge } from "@/components/ui/badge";
 
-// Mock Data (replace with Firestore fetches)
 const mockSalonsData: Salon[] = [
   { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand", phone: "011 555 1234", operatingHours: "Mon-Fri: 9am-6pm, Sat: 9am-4pm" },
   { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
 ];
 
 const initialMockHairdressers: Hairdresser[] = [
-  // This will be replaced by Firestore data
-  { id: "mock-h1", userId: "mock-uid1", name: "Alice Smith (Mock)", salonId: "1", assigned_locations: ["1"], specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], profilePictureUrl: "https://placehold.co/100x100.png?text=AS", email: "alice.mock@salonverse.com", must_reset_password: false, color_code: "#FFB3D9" },
-  { id: "mock-h2", userId: "mock-uid2", name: "Bob Johnson (Mock)", salonId: "2", assigned_locations: ["2"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob.mock@salonverse.com", must_reset_password: false, color_code: "#D0B8FF"},
+  { id: "mock-h1", userId: "mock-uid1", name: "Alice Smith (Mock)", assigned_locations: ["1"], specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], profilePictureUrl: "https://placehold.co/100x100.png?text=AS", email: "alice.mock@salonverse.com", must_reset_password: false },
+  { id: "mock-h2", userId: "mock-uid2", name: "Bob Johnson (Mock)", assigned_locations: ["2", "1"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob.mock@salonverse.com", must_reset_password: false },
 ];
 
 
 export default function HairdressersPage() {
-  const { user } = useAuth(); // AuthContext user
+  const { user } = useAuth();
   const router = useRouter();
-  const [hairdressers, setHairdressers] = useState<Hairdresser[]>(initialMockHairdressers); // Replace with Firestore state
-  const [salons] = useState<Salon[]>(mockSalonsData); // Replace with Firestore state
-  const [isEditFormOpen, setIsEditFormOpen] = useState(false); // Renamed for clarity, specifically for edit dialog
+  const [hairdressers, setHairdressers] = useState<Hairdresser[]>(initialMockHairdressers);
+  const [salons] = useState<Salon[]>(mockSalonsData);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [editingHairdresser, setEditingHairdresser] = useState<Hairdresser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // TODO: useEffect to fetch hairdressers from Firestore when component mounts and user is admin
-
-  if (!user || user.role === 'unknown') return <p>Loading...</p>; // Or a skeleton loader
+  if (!user || user.role === 'unknown') return <p>Loading...</p>;
 
   if (user.role !== 'admin') {
     return (
@@ -65,27 +61,21 @@ export default function HairdressersPage() {
     );
   }
 
-  // handleAddHairdresser is removed, it will be in /hairdressers/new/page.tsx
-
   const handleUpdateHairdresser = async (data: HairdresserFormValues) => {
     if (!editingHairdresser) return;
     setIsLoading(true);
-    console.log("Updating hairdresser (Firestore logic needed):", editingHairdresser.id, data);
+    console.log("Updating hairdresser (mock):", editingHairdresser.id, data);
     
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     const updatedMockHairdresser: Hairdresser = {
       ...editingHairdresser,
       name: data.name,
-      // email: data.email, // Email shouldn't be changed this way usually
-      salonId: data.salonId,
-      assigned_locations: [data.salonId],
+      assigned_locations: data.assigned_locations,
       specialties: data.specialties.split(",").map(s => s.trim()),
       availability: data.availability, 
-      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing, refine
+      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek),
       profilePictureUrl: data.profilePictureUrl || editingHairdresser.profilePictureUrl,
-      // color_code removed from form for now
     };
     setHairdressers(prev => prev.map(h => h.id === editingHairdresser.id ? updatedMockHairdresser : h));
     toast({ title: "Hairdresser Updated (Simulation)", description: `${data.name} has been updated.` });
@@ -96,13 +86,10 @@ export default function HairdressersPage() {
 
   const handleDeleteHairdresser = async (hairdresserToDelete: Hairdresser) => {
     setIsLoading(true);
-    console.log("Deleting hairdresser (Cloud Function logic needed):", hairdresserToDelete.id, hairdresserToDelete.userId);
-    // Placeholder for actual deletion
-    // const deleteHairdresserFn = httpsCallable(functions, 'deleteHairdresserUser');
-    // await deleteHairdresserFn({ userId: hairdresser.userId, hairdresserDocId: hairdresser.id });
+    console.log("Deleting hairdresser (mock):", hairdresserToDelete.id, hairdresserToDelete.userId);
     await new Promise(resolve => setTimeout(resolve, 1000));
     setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
-    toast({ title: "Hairdresser Deleted (Simulation)", description: `Hairdresser ${hairdresserToDelete.name} has been removed. Real deletion requires a Cloud Function.`, variant: "destructive" });
+    toast({ title: "Hairdresser Deleted (Simulation)", description: `Hairdresser ${hairdresserToDelete.name} has been removed.`, variant: "destructive" });
     setIsLoading(false);
   };
 
@@ -111,7 +98,17 @@ export default function HairdressersPage() {
     setIsEditFormOpen(true);
   };
   
-  const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "Unknown Salon";
+  const getSalonNames = (locationIds: string[]) => {
+    return locationIds.map(id => salons.find(s => s.id === id)?.name || "Unknown Salon").join(", ");
+  };
+  
+  const getSalonBadges = (locationIds: string[]) => {
+    return locationIds.map(id => {
+        const salon = salons.find(s => s.id === id);
+        return salon ? <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon.name}</Badge> : null;
+    }).filter(Boolean);
+  };
+
 
   return (
     <div className="space-y-8">
@@ -128,11 +125,10 @@ export default function HairdressersPage() {
         }
       />
 
-      {/* Dialog for Editing Hairdresser */}
       <Dialog open={isEditFormOpen} onOpenChange={(isOpen) => { setIsEditFormOpen(isOpen); if (!isOpen) setEditingHairdresser(null); }}>
         <DialogContent className="sm:max-w-lg font-body">
           <DialogHeader> <DialogTitle className="font-headline text-2xl">Edit Hairdresser Profile</DialogTitle> </DialogHeader>
-          {editingHairdresser && ( // Only render form if editingHairdresser is set
+          {editingHairdresser && (
             <HairdresserForm
               initialData={editingHairdresser}
               salons={salons} 
@@ -160,14 +156,17 @@ export default function HairdressersPage() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {hairdressers.map((hairdresser) => (
             <Card key={hairdresser.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg overflow-hidden">
-              <CardHeader className="flex flex-row items-center gap-4 bg-secondary/30 p-4">
-                <Avatar className="h-16 w-16 border-2 border-primary">
+              <CardHeader className="flex flex-row items-start gap-4 bg-secondary/30 p-4">
+                <Avatar className="h-16 w-16 border-2 border-primary shrink-0">
                   <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait" />
                   <AvatarFallback className="bg-primary/30 text-primary font-headline"> {hairdresser.name.split(" ").map(n => n[0]).join("").toUpperCase()} </AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="flex-grow">
                   <CardTitle className="font-headline text-xl text-foreground">{hairdresser.name}</CardTitle>
-                  <CardDescription className="font-body text-primary flex items-center gap-1"> <Store size={14}/> {getSalonName(hairdresser.salonId)} </CardDescription>
+                  <div className="font-body text-primary flex items-center gap-1 mt-1"> <Store size={14}/> Salons: </div>
+                  <div className="flex flex-wrap mt-1">
+                    {getSalonBadges(hairdresser.assigned_locations)}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-2 font-body flex-grow p-4">
@@ -177,10 +176,7 @@ export default function HairdressersPage() {
                 <div className="flex items-start text-sm"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability: </strong> {hairdresser.availability} </div> </div>
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                {/* Edit button directly triggers the Dialog for editing via state change */}
-                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}>
-                  <Edit3 className="mr-2 h-4 w-4" /> Edit
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
                  <AlertDialog>
                   <AlertDialogTrigger asChild><Button variant="destructive" size="sm" className="font-body" disabled={isLoading}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button></AlertDialogTrigger>
                   <AlertDialogContent>

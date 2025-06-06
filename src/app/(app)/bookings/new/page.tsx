@@ -10,53 +10,40 @@ import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 
-// Mock data - in a real app, this would come from an API
 const mockSalonsData: Salon[] = [
   { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand" },
   { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg" },
 ];
 
+// Ensure this mock data uses `assigned_locations`
 const mockHairdressersData: Hairdresser[] = [
-  { id: "h1", name: "Alice Smith", salonId: "1", specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", email: "alice@salonverse.com" },
-  { id: "h2", name: "Bob Johnson", salonId: "2", specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", email: "bob@salonverse.com" },
-  { id: "h3", name: "Carol White", salonId: "1", specialties: ["Extensions", "Bridal Hair"], availability: "Wed-Sun 11am-7pm", email: "carol@salonverse.com" },
-  { id: "h4", name: "David Brown", salonId: "2", specialties: ["Perms", "Treatments"], availability: "Mon, Wed, Fri 10am-7pm", email: "david@salonverse.com" },
+  { id: "h1", name: "Alice Smith", userId: "uid1", email: "alice@example.com", assigned_locations: ["1"], specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]},
+  { id: "h2", name: "Bob Johnson", userId: "uid2", email: "bob@example.com", assigned_locations: ["2", "1"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] },
+  { id: "h3", name: "Carol White", userId: "uid3", email: "carol@example.com", assigned_locations: ["1"], specialties: ["Extensions", "Bridal Hair"], availability: "Wed-Sun 11am-7pm", working_days: ["Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+  { id: "h4", name: "David Brown", userId: "uid4", email: "david@example.com", assigned_locations: ["2"], specialties: ["Perms", "Treatments"], availability: "Mon, Wed, Fri 10am-7pm", working_days: ["Monday", "Wednesday", "Friday"] },
 ];
 
-// This should ideally be shared with bookings/page.tsx or fetched from a central store/API
-let globalMockBookingsDataRefForNewPage: Booking[] = []; // This will be populated by a fetch or effect if needed
 
 async function createBookingAction(data: BookingFormValues, currentUser: User | null): Promise<Booking> {
   console.log("Creating booking:", data);
-  // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  let hairdresserIdToUse = data.hairdresserId;
-  if (currentUser?.role === 'hairdresser' && currentUser.hairdresserProfileId) {
-    // If a hairdresser is creating a booking, it should be for themselves,
-    // unless the form explicitly allows them to choose (which it does).
-    // For safety, one might enforce this or pre-fill. Current form allows choice.
-    // If form doesn't pre-fill or lock, this check might be redundant or for logging.
-    console.log(`Booking created by hairdresser ${currentUser.name} for ${mockHairdressersData.find(h=>h.id === data.hairdresserId)?.name || 'unknown'}`);
-  }
-
   const newBooking: Booking = {
     id: Math.random().toString(36).substr(2, 9),
     clientName: data.clientName,
     clientEmail: data.clientEmail,
     clientPhone: data.clientPhone,
-    salonId: data.salonId,
-    hairdresserId: hairdresserIdToUse,
+    salonId: data.salonId, // Salon where booking is made
+    hairdresserId: data.hairdresserId,
     service: data.service,
-    appointmentDateTime: data.appointmentDateTime, // Already combined Date object
+    appointmentDateTime: data.appointmentDateTime,
     durationMinutes: data.durationMinutes,
-    status: 'Confirmed', // Default status for new booking
+    status: 'Confirmed',
     notes: data.notes,
   };
-  // Add to the global mock data if it's being used by other pages
-  // globalMockBookingsDataRefForNewPage.push(newBooking);
-  // For consistency with bookings/page.tsx, we need a way to update its source.
-  // This is a limitation of mock data. In a real app, API would handle this.
+  // This needs to be communicated to the BookingsPage, typically via API state update.
+  // For mock, we'd need a shared mutable reference or event system.
+  // For now, we rely on redirection and potential re-fetch/re-render logic on BookingsPage.
   toast({ title: "Booking Created", description: `Appointment for ${data.clientName} has been successfully scheduled.` });
   return newBooking;
 }
@@ -71,10 +58,6 @@ export default function NewBookingPage() {
   const handleCreateBooking = async (data: BookingFormValues) => {
     try {
       await createBookingAction(data, user);
-      // To see the new booking on the /bookings page, we'd need to update its data source.
-      // This is tricky with mock data isolated in components.
-      // For now, redirect and user can see it if data source is somehow shared or re-fetched.
-      // The bookings/page.tsx now uses a global let variable for mock data, so this should work if that page re-renders.
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error) {
       console.error("Failed to create booking:", error);
@@ -86,9 +69,17 @@ export default function NewBookingPage() {
     }
   };
   
-  const initialFormValues = user?.role === 'hairdresser' && user.hairdresserProfileId ? 
-  { hairdresserId: user.hairdresserProfileId, salonId: mockHairdressersData.find(h => h.id === user.hairdresserProfileId)?.salonId || "" }
-  : {};
+  // Pre-fill form if hairdresser is creating a booking for themselves
+  const initialFormValues: Partial<BookingFormValues> = {};
+  if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
+    initialFormValues.hairdresserId = user.hairdresserProfileId;
+    // Pre-select the first salon the hairdresser is assigned to, if any
+    const hairdresserDetails = mockHairdressersData.find(h => h.id === user.hairdresserProfileId);
+    if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
+      initialFormValues.salonId = hairdresserDetails.assigned_locations[0];
+    }
+  }
+
 
   if (!user) return <p>Loading or redirecting...</p>;
 
@@ -103,9 +94,8 @@ export default function NewBookingPage() {
         salons={salons}
         allHairdressers={hairdressers}
         onSubmit={handleCreateBooking}
-        initialDataPreselected={initialFormValues} // Pass pre-selections
+        initialDataPreselected={initialFormValues}
       />
     </div>
   );
 }
-

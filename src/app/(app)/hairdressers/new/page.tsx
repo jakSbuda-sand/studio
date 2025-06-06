@@ -5,19 +5,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
-import type { Salon, DayOfWeek } from "@/lib/types"; // Hairdresser type not directly needed here, form handles it
+import type { Salon, DayOfWeek } from "@/lib/types";
 import { UserPlus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-// Assuming functions and httpsCallable are for future Firebase integration
-// import { functions, httpsCallable } from "@/lib/firebase"; 
 
-// Mock Data (replace with Firestore fetches if necessary, or pass from parent if this page structure changes)
 const mockSalonsData: Salon[] = [
   { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand", phone: "011 555 1234", operatingHours: "Mon-Fri: 9am-6pm, Sat: 9am-4pm" },
   { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
 ];
 
-// Helper to generate a temporary password (client-side, for admin to see)
 const generateTemporaryPassword = (length = 10) => {
   const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()";
   let retVal = "";
@@ -29,7 +25,7 @@ const generateTemporaryPassword = (length = 10) => {
 
 export default function NewHairdresserPage() {
   const router = useRouter();
-  const [salons] = useState<Salon[]>(mockSalonsData); // In a real app, fetch this or ensure it's up-to-date
+  const [salons] = useState<Salon[]>(mockSalonsData);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAddHairdresser = async (data: HairdresserFormValues) => {
@@ -40,9 +36,8 @@ export default function NewHairdresserPage() {
       email: data.email,
       password: tempPassword,
       displayName: data.name,
-      assigned_locations: [data.salonId],
-      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing, refine as needed
-      // color_code: data.color_code || `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // color_code removed from form for now
+      assigned_locations: data.assigned_locations, // This is now an array
+      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing
       specialties: data.specialties.split(",").map(s => s.trim()),
       profilePictureUrl: data.profilePictureUrl,
     };
@@ -50,19 +45,13 @@ export default function NewHairdresserPage() {
     console.log("Submitting to Cloud Function (simulated):", hairdresserDataForFunction);
 
     try {
-      // **Placeholder for Cloud Function Call**
-      // const createHairdresser = httpsCallable(functions, 'createHairdresserUser');
-      // const result = await createHairdresser(hairdresserDataForFunction);
-      // console.log("Cloud Function result:", result.data);
-      // toast({ title: "Hairdresser Added", description: `${data.name} created. Temp Password: ${tempPassword}. Cloud function call needed.` });
-      // router.push("/hairdressers");
-      
-      // Simulate success for UI testing:
       await new Promise(resolve => setTimeout(resolve, 1000)); 
       toast({ 
         title: "Hairdresser Added (Simulation)", 
-        description: `${data.name} was added. Temporary Password: ${tempPassword}. Real integration requires deploying and calling the 'createHairdresserUser' Cloud Function.` 
+        description: `${data.name} was added. Assigned to ${data.assigned_locations.length} salon(s). Temp Password: ${tempPassword}. Real integration needed.` 
       });
+      // In a real app, you'd likely update a global state or re-fetch hairdressers on the main page.
+      // For now, we just navigate back.
       router.push("/hairdressers");
 
     } catch (error: any) {
