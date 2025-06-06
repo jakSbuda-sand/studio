@@ -1,0 +1,73 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to get user's role
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    // Helper function to get user's associated hairdresser ID
+    function getAssociatedHairdresserId(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.associated_hairdresser_id;
+    }
+
+    // Locations Collection
+    match /locations/{locationId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Hairdressers Collection
+    match /hairdressers/{hairdresserId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Styles Collection
+    match /styles/{styleId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Bookings Collection
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null && 
+                    (getUserRole(request.auth.uid) == 'admin' || 
+                     (getUserRole(request.auth.uid) == 'hairdresser' && resource.data.hairdresser_id == getAssociatedHairdresserId(request.auth.uid)));
+      allow create, update, delete: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+      // Hairdressers can update status of their own bookings to 'completed'
+      allow update: if request.auth != null &&
+                       getUserRole(request.auth.uid) == 'hairdresser' &&
+                       resource.data.hairdresser_id == getAssociatedHairdresserId(request.auth.uid) &&
+                       request.resource.data.status == 'completed' &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']); 
+    }
+
+    // Users Collection
+    // User documents store public profile information and role.
+    match /users/{userId} {
+      // Allow user to read their own document, and admins to read any.
+      allow read: if request.auth != null && (request.auth.uid == userId || getUserRole(request.auth.uid) == 'admin');
+      // Allow user to create their own document (e.g., on sign up).
+      // Ensure role is not set to 'admin' by a non-admin during creation.
+      allow create: if request.auth != null && request.auth.uid == userId && 
+                       !(request.resource.data.role == 'admin' && getUserRole(request.auth.uid) != 'admin');
+      // Allow user to update their own document (except role), admins can update anything.
+      allow update: if request.auth != null &&
+                      ( (request.auth.uid == userId && !('role' in request.resource.data.diff(resource.data).affectedKeys())) || 
+                        getUserRole(request.auth.uid) == 'admin' );
+      // Only admins can delete user documents.
+      allow delete: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      // Typically, notifications are read by admins or system processes.
+      // Writes are often handled by backend triggers/functions.
+      allow read, write: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+  }
+}
