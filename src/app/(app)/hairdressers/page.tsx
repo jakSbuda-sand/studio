@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; // DialogTrigger still needed for Edit
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // DialogTrigger removed as it's not used here
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
 import type { Hairdresser, Salon, DayOfWeek, User } from "@/lib/types";
 import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail } from "lucide-react";
@@ -35,8 +35,8 @@ const mockSalonsData: Salon[] = [
 
 const initialMockHairdressers: Hairdresser[] = [
   // This will be replaced by Firestore data
-  { id: "mock-h1", userId: "mock-uid1", name: "Alice Smith (Mock)", salonId: "1", assigned_locations: ["1"], specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], profilePictureUrl: "https://placehold.co/100x100.png?text=AS", email: "alice.mock@salonverse.com", color_code: "#FFB3D9", must_reset_password: false },
-  { id: "mock-h2", userId: "mock-uid2", name: "Bob Johnson (Mock)", salonId: "2", assigned_locations: ["2"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob.mock@salonverse.com", color_code: "#D0B8FF", must_reset_password: false },
+  { id: "mock-h1", userId: "mock-uid1", name: "Alice Smith (Mock)", salonId: "1", assigned_locations: ["1"], specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], profilePictureUrl: "https://placehold.co/100x100.png?text=AS", email: "alice.mock@salonverse.com", must_reset_password: false, color_code: "#FFB3D9" },
+  { id: "mock-h2", userId: "mock-uid2", name: "Bob Johnson (Mock)", salonId: "2", assigned_locations: ["2"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob.mock@salonverse.com", must_reset_password: false, color_code: "#D0B8FF"},
 ];
 
 
@@ -85,7 +85,7 @@ export default function HairdressersPage() {
       availability: data.availability, 
       working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing, refine
       profilePictureUrl: data.profilePictureUrl || editingHairdresser.profilePictureUrl,
-      // color_code: data.color_code || editingHairdresser.color_code, // color_code removed from form
+      // color_code removed from form for now
     };
     setHairdressers(prev => prev.map(h => h.id === editingHairdresser.id ? updatedMockHairdresser : h));
     toast({ title: "Hairdresser Updated (Simulation)", description: `${data.name} has been updated.` });
@@ -177,10 +177,10 @@ export default function HairdressersPage() {
                 <div className="flex items-start text-sm"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability: </strong> {hairdresser.availability} </div> </div>
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                {/* Edit button now directly triggers the Dialog for editing */}
-                <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
-                </DialogTrigger>
+                {/* Edit button directly triggers the Dialog for editing via state change */}
+                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}>
+                  <Edit3 className="mr-2 h-4 w-4" /> Edit
+                </Button>
                  <AlertDialog>
                   <AlertDialogTrigger asChild><Button variant="destructive" size="sm" className="font-body" disabled={isLoading}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button></AlertDialogTrigger>
                   <AlertDialogContent>
