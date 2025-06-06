@@ -2,11 +2,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link"; // Import Link
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; // DialogTrigger still needed for Edit
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
 import type { Hairdresser, Salon, DayOfWeek, User } from "@/lib/types";
 import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail } from "lucide-react";
@@ -24,7 +25,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { functions, httpsCallable } from "@/lib/firebase"; // For Cloud Function call
+// import { functions, httpsCallable } from "@/lib/firebase"; // For Cloud Function call (delete only for now)
 
 // Mock Data (replace with Firestore fetches)
 const mockSalonsData: Salon[] = [
@@ -38,24 +39,13 @@ const initialMockHairdressers: Hairdresser[] = [
   { id: "mock-h2", userId: "mock-uid2", name: "Bob Johnson (Mock)", salonId: "2", assigned_locations: ["2"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob.mock@salonverse.com", color_code: "#D0B8FF", must_reset_password: false },
 ];
 
-// Helper to generate a temporary password (client-side, for admin to see)
-// In a real scenario, the Cloud Function might generate this or handle it more securely.
-const generateTemporaryPassword = (length = 10) => {
-  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()";
-  let retVal = "";
-  for (let i = 0, n = charset.length; i < length; ++i) {
-    retVal += charset.charAt(Math.floor(Math.random() * n));
-  }
-  return retVal;
-};
-
 
 export default function HairdressersPage() {
   const { user } = useAuth(); // AuthContext user
   const router = useRouter();
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>(initialMockHairdressers); // Replace with Firestore state
   const [salons] = useState<Salon[]>(mockSalonsData); // Replace with Firestore state
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false); // Renamed for clarity, specifically for edit dialog
   const [editingHairdresser, setEditingHairdresser] = useState<Hairdresser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -75,100 +65,50 @@ export default function HairdressersPage() {
     );
   }
 
-  const handleAddHairdresser = async (data: HairdresserFormValues) => {
-    setIsLoading(true);
-    const tempPassword = data.initialPassword || generateTemporaryPassword(); // Use provided or generate
-    
-    // Data to send to the Cloud Function
-    const hairdresserDataForFunction = {
-      email: data.email,
-      password: tempPassword, // Send the temporary password to the function
-      displayName: data.name,
-      assigned_locations: [data.salonId], // Assuming single salon assignment for now from form
-      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing, improve as needed
-      color_code: data.color_code || `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Random color if not provided
-      specialties: data.specialties.split(",").map(s => s.trim()),
-      profilePictureUrl: data.profilePictureUrl,
-    };
-
-    try {
-      // **Placeholder for Cloud Function Call**
-      // const createHairdresser = httpsCallable(functions, 'createHairdresserUser');
-      // const result = await createHairdresser(hairdresserDataForFunction);
-      // console.log("Cloud Function result:", result.data);
-      // toast({ title: "Hairdresser Added (Simulated)", description: `${data.name} created. Temp Password: ${tempPassword}. Cloud function call needed.` });
-      
-      // Simulate success for UI testing without deploying function yet:
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
-      const newMockHairdresser: Hairdresser = {
-        id: `new-hd-${Date.now()}`,
-        userId: `new-uid-${Date.now()}`,
-        name: data.name,
-        email: data.email,
-        salonId: data.salonId,
-        assigned_locations: [data.salonId],
-        specialties: data.specialties.split(",").map(s => s.trim()),
-        availability: data.availability, // This needs better parsing or structure for working_days
-        working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], // Placeholder
-        profilePictureUrl: data.profilePictureUrl || `https://placehold.co/100x100.png?text=${data.name.split(" ").map(n=>n[0]).join("").toUpperCase()}`,
-        color_code: hairdresserDataForFunction.color_code,
-        must_reset_password: true,
-      };
-      setHairdressers(prev => [...prev, newMockHairdresser]);
-      toast({ title: "Hairdresser Added (Simulation)", description: `${data.name} was added. Temporary Password: ${tempPassword}. Real integration requires deploying and calling the 'createHairdresserUser' Cloud Function.` });
-
-      setIsFormOpen(false);
-      setEditingHairdresser(null); // Clear editing state
-    } catch (error: any) {
-      console.error("Error calling createHairdresserUser function:", error);
-      toast({ title: "Error Adding Hairdresser", description: error.message || "Could not add hairdresser.", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // handleAddHairdresser is removed, it will be in /hairdressers/new/page.tsx
 
   const handleUpdateHairdresser = async (data: HairdresserFormValues) => {
-    // TODO: Implement Firestore update logic for hairdresser profile (not Auth user)
     if (!editingHairdresser) return;
     setIsLoading(true);
     console.log("Updating hairdresser (Firestore logic needed):", editingHairdresser.id, data);
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     const updatedMockHairdresser: Hairdresser = {
       ...editingHairdresser,
       name: data.name,
-      // email typically not changed directly or handled with care
+      // email: data.email, // Email shouldn't be changed this way usually
       salonId: data.salonId,
       assigned_locations: [data.salonId],
       specialties: data.specialties.split(",").map(s => s.trim()),
-      availability: data.availability,
-      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing
+      availability: data.availability, 
+      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek), // Basic parsing, refine
       profilePictureUrl: data.profilePictureUrl || editingHairdresser.profilePictureUrl,
-      color_code: data.color_code || editingHairdresser.color_code,
+      // color_code: data.color_code || editingHairdresser.color_code, // color_code removed from form
     };
     setHairdressers(prev => prev.map(h => h.id === editingHairdresser.id ? updatedMockHairdresser : h));
     toast({ title: "Hairdresser Updated (Simulation)", description: `${data.name} has been updated.` });
-    setIsFormOpen(false);
+    setIsEditFormOpen(false);
     setEditingHairdresser(null);
     setIsLoading(false);
   };
 
-  const handleDeleteHairdresser = async (hairdresser: Hairdresser) => {
-    // TODO: Implement secure delete (Cloud Function to delete Auth user and Firestore docs)
+  const handleDeleteHairdresser = async (hairdresserToDelete: Hairdresser) => {
     setIsLoading(true);
-    console.log("Deleting hairdresser (Cloud Function logic needed):", hairdresser.id, hairdresser.userId);
+    console.log("Deleting hairdresser (Cloud Function logic needed):", hairdresserToDelete.id, hairdresserToDelete.userId);
     // Placeholder for actual deletion
     // const deleteHairdresserFn = httpsCallable(functions, 'deleteHairdresserUser');
     // await deleteHairdresserFn({ userId: hairdresser.userId, hairdresserDocId: hairdresser.id });
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setHairdressers(prev => prev.filter(h => h.id !== hairdresser.id));
-    toast({ title: "Hairdresser Deleted (Simulation)", description: `Hairdresser ${hairdresser.name} has been removed. Real deletion requires a Cloud Function.`, variant: "destructive" });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
+    toast({ title: "Hairdresser Deleted (Simulation)", description: `Hairdresser ${hairdresserToDelete.name} has been removed. Real deletion requires a Cloud Function.`, variant: "destructive" });
     setIsLoading(false);
   };
 
-  const openEditForm = (hairdresser: Hairdresser) => {
-    setEditingHairdresser(hairdresser);
-    setIsFormOpen(true);
+  const openEditForm = (hairdresserToEdit: Hairdresser) => {
+    setEditingHairdresser(hairdresserToEdit);
+    setIsEditFormOpen(true);
   };
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "Unknown Salon";
@@ -180,31 +120,41 @@ export default function HairdressersPage() {
         description="Manage your talented team of hairdressers."
         icon={Users}
         actions={
-          <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingHairdresser(null); }}>
-            <DialogTrigger asChild>
-              <Button onClick={() => { setEditingHairdresser(null); setIsFormOpen(true);}} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <PlusCircle className="mr-2 h-4 w-4" /> Add New Hairdresser
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg font-body">
-              <DialogHeader> <DialogTitle className="font-headline text-2xl"> {editingHairdresser ? "Edit Hairdresser Profile" : "Add New Hairdresser"} </DialogTitle> </DialogHeader>
-              <HairdresserForm
-                initialData={editingHairdresser}
-                salons={salons} 
-                onSubmit={editingHairdresser ? handleUpdateHairdresser : handleAddHairdresser}
-                isEditing={!!editingHairdresser}
-                isLoading={isLoading}
-              />
-            </DialogContent>
-          </Dialog>
+          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Link href="/hairdressers/new">
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Hairdresser
+            </Link>
+          </Button>
         }
       />
+
+      {/* Dialog for Editing Hairdresser */}
+      <Dialog open={isEditFormOpen} onOpenChange={(isOpen) => { setIsEditFormOpen(isOpen); if (!isOpen) setEditingHairdresser(null); }}>
+        <DialogContent className="sm:max-w-lg font-body">
+          <DialogHeader> <DialogTitle className="font-headline text-2xl">Edit Hairdresser Profile</DialogTitle> </DialogHeader>
+          {editingHairdresser && ( // Only render form if editingHairdresser is set
+            <HairdresserForm
+              initialData={editingHairdresser}
+              salons={salons} 
+              onSubmit={handleUpdateHairdresser}
+              isEditing={true}
+              isLoading={isLoading}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {hairdressers.length === 0 && !isLoading ? ( 
         <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader> <Users className="mx-auto h-16 w-16 text-muted-foreground" /> <CardTitle className="mt-4 text-2xl font-headline">No Hairdressers Yet</CardTitle> </CardHeader>
           <CardContent> <CardDescription className="font-body text-lg"> Add your first hairdresser to assign them to salons and manage their schedules. </CardDescription> </CardContent>
-          <CardFooter className="justify-center"> <Button onClick={() => { setEditingHairdresser(null); setIsFormOpen(true);}} className="bg-primary hover:bg-primary/90 text-primary-foreground"> <PlusCircle className="mr-2 h-4 w-4" /> Add First Hairdresser </Button> </CardFooter>
+          <CardFooter className="justify-center"> 
+            <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Link href="/hairdressers/new">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add First Hairdresser
+                </Link>
+            </Button>
+           </CardFooter>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -227,7 +177,10 @@ export default function HairdressersPage() {
                 <div className="flex items-start text-sm"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability: </strong> {hairdresser.availability} </div> </div>
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
+                {/* Edit button now directly triggers the Dialog for editing */}
+                <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
+                </DialogTrigger>
                  <AlertDialog>
                   <AlertDialogTrigger asChild><Button variant="destructive" size="sm" className="font-body" disabled={isLoading}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button></AlertDialogTrigger>
                   <AlertDialogContent>
@@ -243,5 +196,3 @@ export default function HairdressersPage() {
     </div>
   );
 }
-
-    
