@@ -18,9 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Hairdresser, Salon } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card"; 
 import { Lock, Palette } from "lucide-react";
-import React from "react";
+import React from "react"; 
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
@@ -45,76 +45,39 @@ interface HairdresserFormProps {
 
 export function HairdresserForm({ initialData, salons, onSubmit, isEditing = false, isLoading = false }: HairdresserFormProps) {
   
-  const getInitialFormValues = () => {
-    if (initialData) {
-      return {
-        name: initialData.name,
-        email: initialData.email,
-        initialPassword: "", 
-        salonId: initialData.assigned_locations?.[0] || "",
-        specialties: initialData.specialties.join(", "),
-        availability: initialData.working_days?.join(", ") || initialData.availability,
-        profilePictureUrl: initialData.profilePictureUrl || "",
-        color_code: initialData.color_code || "#FFFFFF", 
-      };
-    } else {
-      return {
-        name: "",
-        email: "",
-        initialPassword: "",
-        salonId: "",
-        specialties: "",
-        availability: "",
-        profilePictureUrl: "", 
-        color_code: "#FFFFFF",
-      };
-    }
-  };
+  // const getInitialFormValues = () => {
+  //   // DIAGNOSTIC: Always return fixed default values to simplify
+  //   return {
+  //     name: "Test Name",
+  //     email: "test@example.com",
+  //     initialPassword: "",
+  //     salonId: salons.length > 0 ? salons[0].id : "", 
+  //     specialties: "Testing, Styling",
+  //     availability: "Mon-Fri 9am-5pm",
+  //     profilePictureUrl: "",
+  //     color_code: "#FF00FF", 
+  //   };
+  // };
 
-  const form = useForm<HairdresserFormValues>({
-    resolver: zodResolver(hairdresserFormSchema),
-    defaultValues: getInitialFormValues(),
-  });
+  // const form = useForm<HairdresserFormValues>({
+  //   resolver: zodResolver(hairdresserFormSchema),
+  //   defaultValues: getInitialFormValues(),
+  // });
   
-  React.useEffect(() => {
-    if (initialData) {
-        form.reset({
-            name: initialData.name,
-            email: initialData.email,
-            initialPassword: "",
-            salonId: initialData.assigned_locations?.[0] || "",
-            specialties: initialData.specialties.join(", "),
-            availability: initialData.working_days?.join(", ") || initialData.availability,
-            profilePictureUrl: initialData.profilePictureUrl || "",
-            color_code: initialData.color_code || "#FFFFFF",
-        });
-    } else {
-        form.reset({ 
-            name: "",
-            email: "",
-            initialPassword: "",
-            salonId: "",
-            specialties: "",
-            availability: "",
-            profilePictureUrl: "",
-            color_code: "#FFFFFF",
-        });
-    }
-  }, [initialData, form.reset]);
+  // React.useEffect(() => {
+  //   // If initialData changes (e.g., user switches from add to edit or vice-versa), reset the form.
+  //   // form.reset(getInitialFormValues());
+  // }, [initialData, salons]);
 
 
-  const handleSubmitInternal = async (data: HairdresserFormValues) => {
-    const submissionData = { ...data };
-    // Removed the 'delete submissionData.initialPassword;' line.
-    // If initialPassword is "" (empty string from form), it will be passed as such.
-    // This is handled correctly by the Zod schema and downstream functions.
-    await onSubmit(submissionData);
-  };
+  // const handleSubmitInternal = async (data: HairdresserFormValues) => {
+  //   await onSubmit(data);
+  // };
 
   return (
     <Card className="shadow-none border-none">
         <CardContent className="p-0">
-            <Form {...form}>
+            {/* <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmitInternal)} className="space-y-6 font-body">
                 <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem> <FormLabel>Full Name</FormLabel> <FormControl> <Input placeholder="e.g., Alice Wonderland" {...field} /> </FormControl> <FormMessage /> </FormItem>
@@ -155,7 +118,8 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
                     {isLoading ? (isEditing ? "Saving..." : "Adding...") : (isEditing ? "Save Changes" : "Add Hairdresser")}
                 </Button>
             </form>
-            </Form>
+            </Form> */}
+            <div>Hello from HairdresserForm. This is a diagnostic view.</div>
         </CardContent>
     </Card>
   );
