@@ -62,7 +62,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
       salonId: "",
       specialties: "",
       availability: "", // e.g., "Monday, Tuesday, Friday"
-      profilePictureUrl: "",
+      profilePictureUrl: "", // Corrected: Should be empty string for new hairdresser
       color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Default random color
     }
   });
