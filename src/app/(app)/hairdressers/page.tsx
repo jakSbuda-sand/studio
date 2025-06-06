@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
-import type { Hairdresser, Salon, DayOfWeek } from "@/lib/types"; // Removed User type
+import type { Hairdresser, Salon, DayOfWeek, User } from "@/lib/types";
 import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail } from "lucide-react";
 import {
   AlertDialog,
@@ -19,7 +19,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -229,7 +229,7 @@ export default function HairdressersPage() {
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
                 <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
                  <AlertDialog>
-                  <AlertDialogTrigger asChild> <Button variant="destructive" size="sm" className="font-body" disabled={isLoading}> <Trash2 className="mr-2 h-4 w-4" /> Delete </Button> </AlertDialogTrigger>
+                  <AlertDialogTrigger asChild><Button variant="destructive" size="sm" className="font-body" disabled={isLoading}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button></AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action cannot be undone. This will permanently delete the hairdresser "{hairdresser.name}". Real deletion requires a Cloud Function. </AlertDialogDescription> </AlertDialogHeader>
                     <AlertDialogFooter> <AlertDialogCancel className="font-body">Cancel</AlertDialogCancel> <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body"> Delete (Simulated) </AlertDialogAction> </AlertDialogFooter>
@@ -243,7 +243,5 @@ export default function HairdressersPage() {
     </div>
   );
 }
-
-    
 
     
