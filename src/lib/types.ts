@@ -13,12 +13,12 @@ export interface Salon {
 export interface Hairdresser {
   id: string; // This will be hairdresserProfileId for User type
   name: string;
+  email: string; // Added for login and user creation
   salonId: string; // Current frontend type uses this
   assigned_locations?: string[]; // For Firestore alignment
   specialties: string[]; // e.g., ["Cutting", "Coloring", "Styling"]
   availability: string; // Simplified for form: "Mon-Fri 9am-5pm, Sat 10am-2pm"
   profilePictureUrl?: string;
-  email?: string; // For linking with User
   working_days?: string[]; // For Firestore alignment
   role?: string; // For Firestore alignment
   user_id?: string; // For Firestore alignment
@@ -58,6 +58,7 @@ export interface User {
   avatarUrl?: string;
   hairdresserProfileId?: string; // Links to Hairdresser.id if role is 'hairdresser'
   associated_hairdresser_id?: string; // For Firestore alignment
+  needsPasswordChange?: boolean; // For forcing password change on first login
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
@@ -79,6 +80,7 @@ export interface LocationDoc {
 
 export interface HairdresserDoc {
   name: string;
+  email: string; // Added for consistency
   assigned_locations: string[]; // Array of location IDs
   working_days: string[]; // e.g., ["Monday", "Tuesday"]
   role: string; // e.g., "hairdresser"
@@ -117,6 +119,7 @@ export interface UserDoc {
   email: string;
   role: string; // e.g., "admin", "hairdresser"
   associated_hairdresser_id?: string; // Optional: links to a document ID in 'hairdressers' collection
+  needs_password_change?: boolean; // For Firestore
 }
 
 export interface NotificationDoc {

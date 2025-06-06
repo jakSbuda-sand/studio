@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
 import type { Hairdresser, Salon } from "@/lib/types";
-import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,26 +25,40 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 
 // Mock server actions (replace with actual API calls)
-async function addHairdresserAction(data: HairdresserFormValues): Promise<Hairdresser> {
-  console.log("Adding hairdresser:", data);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  const newHairdresser: Hairdresser = {
-    ...data,
-    id: Math.random().toString(36).substr(2, 9),
-    specialties: data.specialties.split(",").map(s => s.trim()),
-    // email needs to be handled if added to form
-  };
-  toast({ title: "Hairdresser Added", description: `${data.name} has been successfully added.` });
-  return newHairdresser;
-}
+// The addMockUser function is now part of AuthContext
+// async function addHairdresserAction(data: HairdresserFormValues): Promise<Hairdresser> {
+//   console.log("Adding hairdresser:", data);
+//   // In a real app, here you would:
+//   // 1. Create Firebase Auth user with data.email and data.initialPassword
+//   // 2. Get the UID from the created Auth user
+//   // 3. Create a document in Firestore 'hairdressers' collection with profile details
+//   // 4. Create/update a document in Firestore 'users' collection with role='hairdresser', email, name, associated_hairdresser_id
+//   await new Promise(resolve => setTimeout(resolve, 500));
+//   const newHairdresser: Hairdresser = {
+//     id: Math.random().toString(36).substr(2, 9), // This would be Firestore doc ID
+//     name: data.name,
+//     email: data.email,
+//     salonId: data.salonId,
+//     specialties: data.specialties.split(",").map(s => s.trim()),
+//     availability: data.availability,
+//     profilePictureUrl: data.profilePictureUrl,
+//   };
+//   toast({ title: "Hairdresser Added", description: `${data.name} has been successfully added. Initial password: ${data.initialPassword}` });
+//   return newHairdresser;
+// }
 
 async function updateHairdresserAction(id: string, data: HairdresserFormValues): Promise<Hairdresser> {
   console.log("Updating hairdresser:", id, data);
   await new Promise(resolve => setTimeout(resolve, 500));
   const updatedHairdresser: Hairdresser = {
-    ...mockHairdressers.find(h => h.id === id)!,
-    ...data,
+    ...(mockHairdressers.find(h => h.id === id)!), // This needs to be dynamic state
+    name: data.name,
+    // Email typically not changed, or handled separately
+    salonId: data.salonId,
     specialties: data.specialties.split(",").map(s => s.trim()),
+    availability: data.availability,
+    profilePictureUrl: data.profilePictureUrl,
+    email: data.email, // Assuming email is part of form values even if disabled during edit
   };
   toast({ title: "Hairdresser Updated", description: `${data.name} has been successfully updated.` });
   return updatedHairdresser;
@@ -52,6 +66,7 @@ async function updateHairdresserAction(id: string, data: HairdresserFormValues):
 
 async function deleteHairdresserAction(id: string): Promise<void> {
   console.log("Deleting hairdresser:", id);
+  // Also need to remove from mockUsers in AuthContext if they were added
   await new Promise(resolve => setTimeout(resolve, 500));
   toast({ title: "Hairdresser Deleted", description: `Hairdresser has been successfully deleted.`, variant: "destructive" });
 }
@@ -61,7 +76,8 @@ const mockSalonsData: Salon[] = [
   { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
 ];
 
-const mockHairdressers: Hairdresser[] = [
+// Initial mock hairdressers. This will be augmented by hairdressers added via the form.
+const initialMockHairdressers: Hairdresser[] = [
   { id: "h1", name: "Alice Smith", salonId: "1", specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", profilePictureUrl: "https://placehold.co/100x100.png?text=AS", email: "alice@salonverse.com" },
   { id: "h2", name: "Bob Johnson", salonId: "2", specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob@salonverse.com" },
   { id: "h3", name: "Carol White", salonId: "1", specialties: ["Extensions", "Bridal Hair"], availability: "Wed-Sun 11am-7pm", email: "carol@salonverse.com" },
@@ -69,9 +85,9 @@ const mockHairdressers: Hairdresser[] = [
 
 
 export default function HairdressersPage() {
-  const { user } = useAuth();
+  const { user, addMockUser } = useAuth(); // Get addMockUser from context
   const router = useRouter();
-  const [hairdressers, setHairdressers] = useState<Hairdresser[]>(mockHairdressers);
+  const [hairdressers, setHairdressers] = useState<Hairdresser[]>(initialMockHairdressers);
   const [salons] = useState<Salon[]>(mockSalonsData);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingHairdresser, setEditingHairdresser] = useState<Hairdresser | null>(null);
@@ -109,10 +125,47 @@ export default function HairdressersPage() {
   }
 
   const handleAddHairdresser = async (data: HairdresserFormValues) => {
-    const newHairdresser = await addHairdresserAction(data);
-    setHairdressers(prev => [...prev, newHairdresser]);
+    console.log("Adding hairdresser with initial password:", data);
+    // Simulate creating Firebase Auth user and Firestore documents
+    const newHairdresserId = `hd-${Math.random().toString(36).substr(2, 7)}`; // Mock ID for hairdresser profile
+    const newAuthUserId = `auth-${Math.random().toString(36).substr(2, 7)}`; // Mock Auth UID
+
+    const newHairdresserProfile: Hairdresser = {
+      id: newHairdresserId,
+      name: data.name,
+      email: data.email,
+      salonId: data.salonId,
+      specialties: data.specialties.split(",").map(s => s.trim()),
+      availability: data.availability,
+      profilePictureUrl: data.profilePictureUrl,
+    };
+
+    // Add to local state for display
+    setHairdressers(prev => [...prev, newHairdresserProfile]);
+    
+    // Add to mock auth users
+    if (data.initialPassword) {
+        addMockUser({
+            id: newAuthUserId,
+            name: data.name,
+            email: data.email,
+            password: data.initialPassword, // Store initial password for mock login
+            role: 'hairdresser',
+            hairdresserProfileId: newHairdresserId,
+            avatarUrl: data.profilePictureUrl || `https://placehold.co/128x128.png?text=${data.name.split(" ").map(n=>n[0]).join("").toUpperCase()}`,
+            needsPasswordChange: true, // IMPORTANT: Set this flag
+        });
+        toast({ title: "Hairdresser Added", description: `${data.name} created. They will need to change their password on first login.` });
+    } else {
+         toast({ title: "Error", description: `Initial password is required to add a new hairdresser.`, variant: "destructive" });
+         // Potentially roll back hairdresser profile creation if auth user creation fails.
+         // For mock, we'll just warn.
+         return;
+    }
+
     setIsFormOpen(false);
   };
+
 
   const handleUpdateHairdresser = async (data: HairdresserFormValues) => {
     if (!editingHairdresser) return;
@@ -123,8 +176,11 @@ export default function HairdressersPage() {
   };
 
   const handleDeleteHairdresser = async (id: string) => {
+    const hairdresserToDelete = hairdressers.find(h => h.id === id);
     await deleteHairdresserAction(id);
     setHairdressers(prev => prev.filter(h => h.id !== id));
+    // TODO: Also remove from mockUsers in AuthContext if they were added
+    console.log("Need to implement removal from AuthContext.mockUsers for:", hairdresserToDelete?.email);
   };
 
   const openEditForm = (hairdresser: Hairdresser) => {
@@ -146,7 +202,7 @@ export default function HairdressersPage() {
             if (!isOpen) setEditingHairdresser(null);
           }}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button onClick={() => { setEditingHairdresser(null); setIsFormOpen(true);}} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Hairdresser
               </Button>
             </DialogTrigger>
@@ -160,6 +216,7 @@ export default function HairdressersPage() {
                 initialData={editingHairdresser}
                 salons={salons}
                 onSubmit={editingHairdresser ? handleUpdateHairdresser : handleAddHairdresser}
+                isEditing={!!editingHairdresser}
               />
             </DialogContent>
           </Dialog>
@@ -178,7 +235,7 @@ export default function HairdressersPage() {
             </CardDescription>
           </CardContent>
            <CardFooter className="justify-center">
-             <Button onClick={() => setIsFormOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+             <Button onClick={() => { setEditingHairdresser(null); setIsFormOpen(true);}} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add First Hairdresser
               </Button>
           </CardFooter>
@@ -202,6 +259,15 @@ export default function HairdressersPage() {
                 </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-2 font-body flex-grow p-4">
+                 {hairdresser.email && (
+                  <div className="flex items-start text-sm">
+                    <Mail className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <div>
+                        <strong className="text-muted-foreground">Email: </strong>
+                        {hairdresser.email}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-start text-sm">
                   <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" />
                   <div>
@@ -216,15 +282,6 @@ export default function HairdressersPage() {
                     {hairdresser.availability}
                   </div>
                 </div>
-                 {hairdresser.email && (
-                  <div className="flex items-start text-sm">
-                    <Mail className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" />
-                    <div>
-                        <strong className="text-muted-foreground">Email: </strong>
-                        {hairdresser.email}
-                    </div>
-                  </div>
-                )}
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
                 <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body">
@@ -259,6 +316,3 @@ export default function HairdressersPage() {
     </div>
   );
 }
-
-// Added Mail icon import above
-import { Mail } from "lucide-react"; 

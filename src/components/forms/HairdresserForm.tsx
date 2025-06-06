@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,10 +19,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Hairdresser, Salon } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users } from "lucide-react";
+import { Users, Lock } from "lucide-react";
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
+  email: z.string().email({ message: "Please enter a valid email address." }),
+  initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
   salonId: z.string({ required_error: "Please select a salon." }),
   specialties: z.string().min(3, {message: "Enter at least one specialty."}), // Storing as comma-separated string for simplicity
   availability: z.string().min(5, {message: "Please describe availability."}), // Simplified availability
@@ -34,16 +37,21 @@ interface HairdresserFormProps {
   initialData?: Hairdresser | null;
   salons: Salon[]; // To populate salon selection
   onSubmit: (data: HairdresserFormValues) => Promise<void>;
+  isEditing?: boolean;
 }
 
-export function HairdresserForm({ initialData, salons, onSubmit }: HairdresserFormProps) {
+export function HairdresserForm({ initialData, salons, onSubmit, isEditing = false }: HairdresserFormProps) {
   const form = useForm<HairdresserFormValues>({
     resolver: zodResolver(hairdresserFormSchema),
     defaultValues: initialData ? {
       ...initialData,
+      email: initialData.email || "",
       specialties: initialData.specialties.join(", "), // Convert array to string
+      initialPassword: "", // Password field should not be pre-filled for edits
     } : {
       name: "",
+      email: "",
+      initialPassword: "",
       salonId: "",
       specialties: "",
       availability: "",
@@ -52,7 +60,12 @@ export function HairdresserForm({ initialData, salons, onSubmit }: HairdresserFo
   });
 
   const handleSubmit = async (data: HairdresserFormValues) => {
-    await onSubmit(data);
+    // Ensure initialPassword is not sent if it's empty and not required (e.g. during edit)
+    const submissionData = { ...data };
+    if (isEditing && !submissionData.initialPassword) {
+      delete submissionData.initialPassword;
+    }
+    await onSubmit(submissionData);
   };
 
   return (
@@ -79,6 +92,39 @@ export function HairdresserForm({ initialData, salons, onSubmit }: HairdresserFo
                     </FormItem>
                 )}
                 />
+                 <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                        <Input type="email" placeholder="e.g., alice@salonverse.com" {...field} disabled={isEditing} />
+                    </FormControl>
+                    <FormDescription>{isEditing ? "Email cannot be changed after creation." : "This will be their login email."}</FormDescription>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+                {!isEditing && (
+                    <FormField
+                    control={form.control}
+                    name="initialPassword"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Initial Password</FormLabel>
+                        <FormControl>
+                            <div className="relative">
+                                <Lock className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input type="password" placeholder="Set an initial password" {...field} className="pl-8"/>
+                            </div>
+                        </FormControl>
+                        <FormDescription>The hairdresser will be prompted to change this on first login.</FormDescription>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                )}
                 <FormField
                 control={form.control}
                 name="salonId"
