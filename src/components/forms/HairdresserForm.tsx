@@ -17,18 +17,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Hairdresser, Salon } from "@/lib/types"; // Hairdresser type from lib/types
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Lock, Palette } from "lucide-react";
+import type { Hairdresser, Salon } from "@/lib/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Lock, Palette } from "lucide-react";
 
-// Updated schema for Firebase integration
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
   initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
-  salonId: z.string({ required_error: "Please select a salon." }), // For assigned_locations, simplified to one for now
+  salonId: z.string({ required_error: "Please select a salon." }),
   specialties: z.string().min(3, {message: "Enter at least one specialty."}),
-  availability: z.string().min(5, {message: "Please describe working days/hours."}), // For working_days
+  availability: z.string().min(5, {message: "Please describe working days/hours."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   color_code: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/, "Invalid hex color (e.g. #RRGGBB or #RGB).").optional().or(z.literal('')),
 });
@@ -36,7 +35,7 @@ const hairdresserFormSchema = z.object({
 export type HairdresserFormValues = z.infer<typeof hairdresserFormSchema>;
 
 interface HairdresserFormProps {
-  initialData?: Hairdresser | null; // Hairdresser type from lib/types
+  initialData?: Hairdresser | null;
   salons: Salon[];
   onSubmit: (data: HairdresserFormValues) => Promise<void>;
   isEditing?: boolean;
@@ -50,10 +49,10 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
       return {
         name: initialData.name,
         email: initialData.email,
-        initialPassword: "", // Not pre-filled for edits
-        salonId: initialData.assigned_locations?.[0] || "", // Assuming first assigned location for simplicity
+        initialPassword: "",
+        salonId: initialData.assigned_locations?.[0] || "",
         specialties: initialData.specialties.join(", "),
-        availability: initialData.working_days?.join(", ") || initialData.availability, // Use working_days if available
+        availability: initialData.working_days?.join(", ") || initialData.availability,
         profilePictureUrl: initialData.profilePictureUrl || "",
         color_code: initialData.color_code || "",
       };
@@ -64,9 +63,9 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
         initialPassword: "",
         salonId: "",
         specialties: "",
-        availability: "", // e.g., "Monday, Tuesday, Friday"
-        profilePictureUrl: "", 
-        color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Default random color
+        availability: "",
+        profilePictureUrl: "",
+        color_code: "#FFFFFF", // Simplified for debugging
       };
     }
   };
@@ -77,9 +76,9 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
     defaultValues: defaultInitialValues,
   });
 
-  const handleSubmit = async (data: HairdresserFormValues) => {
+  const handleSubmitInternal = async (data: HairdresserFormValues) => {
     const submissionData = { ...data };
-    if (isEditing && !submissionData.initialPassword) { // Don't send empty password string for edits if not changed
+    if (isEditing && !submissionData.initialPassword) {
       delete submissionData.initialPassword;
     }
     await onSubmit(submissionData);
@@ -89,7 +88,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
     <Card className="shadow-none border-none">
         <CardContent className="p-0">
             <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 font-body">
+            <form onSubmit={form.handleSubmit(handleSubmitInternal)} className="space-y-6 font-body">
                 <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem> <FormLabel>Full Name</FormLabel> <FormControl> <Input placeholder="e.g., Alice Wonderland" {...field} /> </FormControl> <FormMessage /> </FormItem>
                 )}/>
@@ -102,7 +101,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
                         <FormControl> <div className="relative"> <Lock className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /> <Input type="password" placeholder="Leave blank to auto-generate" {...field} className="pl-8"/> </div> </FormControl>
                         <FormDescription>User will be required to change this on first login. If blank, one will be auto-generated.</FormDescription> <FormMessage /> </FormItem>
                     )}
-                )}
+                  )}
                 <FormField control={form.control} name="salonId" render={({ field }) => (
                     <FormItem> <FormLabel>Primary Assigned Salon</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -114,7 +113,7 @@ export function HairdresserForm({ initialData, salons, onSubmit, isEditing = fal
                 <FormField control={form.control} name="specialties" render={({ field }) => (
                     <FormItem> <FormLabel>Specialties</FormLabel> <FormControl> <Input placeholder="e.g., Haircuts, Coloring, Balayage" {...field} /> </FormControl> <FormDescription>Comma-separated list.</FormDescription> <FormMessage /> </FormItem>
                 )}/>
-                <FormField control={form.control} name="availability" render={({ field }) => ( // Renamed from working_days for form simplicity
+                <FormField control={form.control} name="availability" render={({ field }) => (
                     <FormItem> <FormLabel>Working Days / General Availability</FormLabel> <FormControl> <Textarea placeholder="e.g., Mon, Tue, Wed, Fri (9am-5pm); Sat (10am-2pm)" {...field} /> </FormControl> <FormDescription>Describe their general working days and hours.</FormDescription> <FormMessage /> </FormItem>
                 )}/>
                  <FormField control={form.control} name="color_code" render={({ field }) => (
