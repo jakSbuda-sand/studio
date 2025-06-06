@@ -44,27 +44,37 @@ interface HairdresserFormProps {
 }
 
 export function HairdresserForm({ initialData, salons, onSubmit, isEditing = false, isLoading = false }: HairdresserFormProps) {
+  
+  const getInitialFormValues = () => {
+    if (initialData) {
+      return {
+        name: initialData.name,
+        email: initialData.email,
+        initialPassword: "", // Not pre-filled for edits
+        salonId: initialData.assigned_locations?.[0] || "", // Assuming first assigned location for simplicity
+        specialties: initialData.specialties.join(", "),
+        availability: initialData.working_days?.join(", ") || initialData.availability, // Use working_days if available
+        profilePictureUrl: initialData.profilePictureUrl || "",
+        color_code: initialData.color_code || "",
+      };
+    } else {
+      return {
+        name: "",
+        email: "",
+        initialPassword: "",
+        salonId: "",
+        specialties: "",
+        availability: "", // e.g., "Monday, Tuesday, Friday"
+        profilePictureUrl: "", 
+        color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Ensure template literal for color
+      };
+    }
+  };
+  const defaultInitialValues = getInitialFormValues();
+
   const form = useForm<HairdresserFormValues>({
     resolver: zodResolver(hairdresserFormSchema),
-    defaultValues: initialData ? {
-      name: initialData.name,
-      email: initialData.email,
-      initialPassword: "", // Not pre-filled for edits
-      salonId: initialData.assigned_locations?.[0] || "", // Assuming first assigned location for simplicity
-      specialties: initialData.specialties.join(", "),
-      availability: initialData.working_days?.join(", ") || initialData.availability, // Use working_days if available
-      profilePictureUrl: initialData.profilePictureUrl || "",
-      color_code: initialData.color_code || "",
-    } : {
-      name: "",
-      email: "",
-      initialPassword: "",
-      salonId: "",
-      specialties: "",
-      availability: "", // e.g., "Monday, Tuesday, Friday"
-      profilePictureUrl: "", // Corrected: Should be empty string for new hairdresser
-      color_code: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`, // Default random color
-    }
+    defaultValues: defaultInitialValues,
   });
 
   const handleSubmit = async (data: HairdresserFormValues) => {
