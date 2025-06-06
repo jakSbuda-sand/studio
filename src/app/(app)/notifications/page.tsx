@@ -1,10 +1,42 @@
 
+"use client";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, Mail, MessageSquare, Settings } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Bell, Mail, MessageSquare, Settings, ShieldAlert } from "lucide-react";
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  if (!user) return <p>Loading...</p>;
+
+  if (user.role !== 'admin') {
+    return (
+      <div className="space-y-8 flex flex-col items-center justify-center h-full">
+        <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
+          <CardHeader>
+            <ShieldAlert className="mx-auto h-16 w-16 text-destructive" />
+            <CardTitle className="mt-4 text-2xl font-headline">Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription className="font-body text-lg">
+              You do not have permission to view notification settings.
+            </CardDescription>
+          </CardContent>
+           <CardFooter className="justify-center">
+             <Button onClick={() => router.push('/dashboard')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                Go to Dashboard
+              </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader

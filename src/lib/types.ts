@@ -7,13 +7,13 @@ export interface Salon {
 }
 
 export interface Hairdresser {
-  id: string;
+  id: string; // This will be hairdresserProfileId for User type
   name: string;
-  salonId: string; 
+  salonId: string;
   specialties: string[]; // e.g., ["Cutting", "Coloring", "Styling"]
-  // Example: { "Monday": { start: "09:00", end: "17:00" }, "Tuesday": null }
   availability: string; // Simplified for form: "Mon-Fri 9am-5pm, Sat 10am-2pm"
   profilePictureUrl?: string;
+  email?: string; // For linking with User
 }
 
 export interface Booking {
@@ -23,9 +23,9 @@ export interface Booking {
   clientPhone: string;
   salonId: string;
   hairdresserId: string;
-  service: string; 
+  service: string;
   appointmentDateTime: Date;
-  durationMinutes: number; 
+  durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
   color?: string; // For calendar color-coding
@@ -37,6 +37,9 @@ export interface User {
   email: string;
   role: 'admin' | 'hairdresser';
   avatarUrl?: string;
+  hairdresserProfileId?: string; // Links to Hairdresser.id if role is 'hairdresser'
+  // password property is intentionally omitted from the type shared with client components
+  // It will be handled within the AuthContext for mock purposes
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';

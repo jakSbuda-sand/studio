@@ -1,50 +1,87 @@
 
+"use client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bell, CalendarCheck, ClipboardList, MapPin, PlusCircle, Users, DollarSign, Store, Scissors } from "lucide-react";
+import { BarChart, Bell, CalendarCheck, ClipboardList, MapPin, PlusCircle, Users, Store, Scissors, UserCog } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
+import type { User } from "@/lib/types";
 
-const StatCard = ({ title, value, icon: Icon, description, link, linkText }: { title: string, value: string | number, icon: React.ElementType, description?: string, link?: string, linkText?: string }) => (
-  <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-lg">
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium font-body text-muted-foreground">{title}</CardTitle>
-      <Icon className="h-5 w-5 text-primary" />
-    </CardHeader>
-    <CardContent>
-      <div className="text-3xl font-bold font-headline text-foreground">{value}</div>
-      {description && <p className="text-xs text-muted-foreground font-body pt-1">{description}</p>}
-      {link && linkText && (
-        <Button variant="link" asChild className="px-0 pt-2 text-primary font-body">
-          <Link href={link}>{linkText}</Link>
-        </Button>
-      )}
-    </CardContent>
-  </Card>
-);
+const StatCard = ({ title, value, icon: Icon, description, link, linkText, userRole }: { title: string, value: string | number, icon: React.ElementType, description?: string, link?: string, linkText?: string, userRole?: User['role'] }) => {
+  // Hide certain cards or links based on role if needed
+  if (title === "Active Salons" && userRole === 'hairdresser') return null;
+  if (title === "Available Hairdressers" && userRole === 'hairdresser') return null;
+  if (title === "Pending Notifications" && userRole === 'hairdresser') return null;
+
+
+  return (
+    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-lg">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium font-body text-muted-foreground">{title}</CardTitle>
+        <Icon className="h-5 w-5 text-primary" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-3xl font-bold font-headline text-foreground">{value}</div>
+        {description && <p className="text-xs text-muted-foreground font-body pt-1">{description}</p>}
+        {link && linkText && (
+          <Button variant="link" asChild className="px-0 pt-2 text-primary font-body">
+            <Link href={link}>{linkText}</Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function DashboardPage() {
-  // Mock data for dashboard
-  const stats = [
+  const { user } = useAuth();
+
+  // Mock data for dashboard - this could be dynamic based on user role
+  const adminStats = [
     { title: "Total Bookings Today", value: 12, icon: CalendarCheck, description: "+5 from yesterday" },
     { title: "Active Salons", value: 2, icon: Store, link: "/locations", linkText: "Manage Locations" },
     { title: "Available Hairdressers", value: 8, icon: Users, link: "/hairdressers", linkText: "View Hairdressers" },
     { title: "Pending Notifications", value: 3, icon: Bell, link: "/notifications", linkText: "Check Notifications" },
   ];
+  
+  const hairdresserStats = [
+    { title: "My Bookings Today", value: 3, icon: CalendarCheck, description: "View your schedule" },
+    { title: "My Upcoming Appointments", value: 7, icon: ClipboardList, link: "/bookings?view=mine", linkText: "View My Bookings" },
+    // Add more hairdresser-specific stats if needed
+  ];
 
-  const quickActions = [
+  const stats = user?.role === 'admin' ? adminStats : hairdresserStats;
+
+  const adminQuickActions = [
     { href: "/bookings/new", label: "New Booking", icon: PlusCircle },
     { href: "/locations", label: "Add Salon", icon: MapPin },
     { href: "/hairdressers", label: "Add Hairdresser", icon: Users },
     { href: "/calendar", label: "View Calendar", icon: CalendarCheck },
   ];
 
+  const hairdresserQuickActions = [
+    { href: "/bookings/new", label: "New Booking", icon: PlusCircle }, // Assuming hairdressers can create bookings
+    { href: "/calendar", label: "My Calendar", icon: CalendarCheck },
+    { href: "/bookings?view=mine", label: "My Bookings", icon: ClipboardList },
+    { href: "/profile", label: "My Profile", icon: UserCog },
+  ];
+
+  const quickActions = user?.role === 'admin' ? adminQuickActions : hairdresserQuickActions;
+  
+  const pageTitle = user?.role === 'admin' ? "Welcome to LaPresh Beauty Salon Admin" : `Welcome, ${user?.name || 'Hairdresser'}!`;
+  const pageDescription = user?.role === 'admin' ? "Your command center for managing salon operations efficiently." : "Manage your appointments and client interactions.";
+
+
+  if (!user) return <p>Loading dashboard...</p>;
+
+
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Welcome to LaPresh Beauty Salon"
-        description="Your command center for managing salon operations efficiently."
+        title={pageTitle}
+        description={pageDescription}
         icon={LayoutDashboard}
         actions={
           <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -56,7 +93,7 @@ export default function DashboardPage() {
       />
 
       <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map(stat => <StatCard key={stat.title} {...stat} />)}
+        {stats.map(stat => <StatCard key={stat.title} {...stat} userRole={user.role}/>)}
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6">

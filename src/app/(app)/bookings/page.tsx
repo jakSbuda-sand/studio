@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
-import type { Booking, Salon, Hairdresser } from "@/lib/types";
-import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, User, StoreIcon, ClockIcon } from "lucide-react";
+import type { Booking, Salon, Hairdresser, User } from "@/lib/types";
+import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import {
@@ -24,6 +24,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSearchParams } from 'next/navigation';
 
 // Mock data (replace with actual API calls)
 const mockSalonsData: Salon[] = [
@@ -32,15 +34,16 @@ const mockSalonsData: Salon[] = [
 ];
 
 const mockHairdressersData: Hairdresser[] = [
-  { id: "h1", name: "Alice Smith", salonId: "1", specialties: [], availability: "" },
-  { id: "h2", name: "Bob Johnson", salonId: "2", specialties: [], availability: "" },
-  { id: "h3", name: "Carol White", salonId: "1", specialties: [], availability: "" },
+  { id: "h1", name: "Alice Smith", salonId: "1", specialties: [], availability: "", email: "alice@salonverse.com" },
+  { id: "h2", name: "Bob Johnson", salonId: "2", specialties: [], availability: "", email: "bob@salonverse.com" },
+  { id: "h3", name: "Carol White", salonId: "1", specialties: [], availability: "", email: "carol@salonverse.com" },
 ];
 
-const mockBookingsData: Booking[] = [
+let globalMockBookingsData: Booking[] = [
   { id: "b1", clientName: "John Doe", clientPhone: "0812345678", salonId: "1", hairdresserId: "h1", service: "Men's Cut", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 45, status: "Confirmed" },
   { id: "b2", clientName: "Jane Smith", clientPhone: "0823456789", salonId: "2", hairdresserId: "h2", service: "Ladies Cut & Blowdry", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 2)), durationMinutes: 90, status: "Pending" },
   { id: "b3", clientName: "Mike Brown", clientPhone: "0834567890", salonId: "1", hairdresserId: "h3", service: "Color Correction", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 3)), durationMinutes: 180, status: "Completed" },
+  { id: "b4", clientName: "Alice Client", clientPhone: "0811112222", salonId: "1", hairdresserId: "h1", service: "Highlights", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 4)), durationMinutes: 120, status: "Confirmed" },
 ];
 
 
@@ -48,7 +51,7 @@ async function updateBookingAction(id: string, data: BookingFormValues): Promise
   console.log("Updating booking:", id, data);
   await new Promise(resolve => setTimeout(resolve, 500));
    const updatedBooking: Booking = {
-    ...mockBookingsData.find(b => b.id === id)!,
+    ...(globalMockBookingsData.find(b => b.id === id)!),
     clientName: data.clientName,
     clientEmail: data.clientEmail,
     clientPhone: data.clientPhone,
@@ -58,8 +61,9 @@ async function updateBookingAction(id: string, data: BookingFormValues): Promise
     appointmentDateTime: data.appointmentDateTime,
     durationMinutes: data.durationMinutes,
     notes: data.notes,
-    status: mockBookingsData.find(b => b.id === id)?.status || 'Pending', // Keep existing status or default
+    status: globalMockBookingsData.find(b => b.id === id)?.status || 'Pending', // Keep existing status or default
   };
+  globalMockBookingsData = globalMockBookingsData.map(b => b.id === id ? updatedBooking : b);
   toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
   return updatedBooking;
 }
@@ -67,36 +71,64 @@ async function updateBookingAction(id: string, data: BookingFormValues): Promise
 async function cancelBookingAction(id: string): Promise<Booking> {
   console.log("Cancelling booking:", id);
   await new Promise(resolve => setTimeout(resolve, 500));
-  const bookingToCancel = mockBookingsData.find(b => b.id === id);
+  const bookingToCancel = globalMockBookingsData.find(b => b.id === id);
   if (!bookingToCancel) throw new Error("Booking not found");
   const cancelledBooking = { ...bookingToCancel, status: 'Cancelled' as 'Cancelled' };
+  globalMockBookingsData = globalMockBookingsData.map(b => b.id === id ? cancelledBooking : b);
   toast({ title: "Booking Cancelled", description: `Booking has been cancelled.`, variant: "destructive" });
   return cancelledBooking;
 }
 
 
 export default function BookingsPage() {
-  const [bookings, setBookings] = useState<Booking[]>(mockBookingsData);
-  const [salons, setSalons] = useState<Salon[]>(mockSalonsData);
-  const [hairdressers, setHairdressers] = useState<Hairdresser[]>(mockHairdressersData);
+  const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const viewMode = searchParams.get('view'); // For hairdresser's "My Bookings"
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [salons] = useState<Salon[]>(mockSalonsData);
+  const [hairdressers] = useState<Hairdresser[]>(mockHairdressersData);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  
+  const [pageTitle, setPageTitle] = useState("All Bookings");
+  const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
+
 
   useEffect(() => {
-    // Fetch initial data in a real app
-  }, []);
+    if (user) {
+      let filteredData = globalMockBookingsData;
+      if (user.role === 'hairdresser' && viewMode === 'mine') {
+        filteredData = globalMockBookingsData.filter(b => b.hairdresserId === user.hairdresserProfileId);
+        setPageTitle("My Bookings");
+        setPageDescription("View and manage your scheduled appointments.");
+      } else if (user.role === 'hairdresser' && viewMode !== 'mine') {
+        // Hairdressers trying to access /bookings directly will be redirected by sidebar or should see their bookings
+        // For now, if they land here without `view=mine`, show their bookings.
+        filteredData = globalMockBookingsData.filter(b => b.hairdresserId === user.hairdresserProfileId);
+         setPageTitle("My Bookings");
+        setPageDescription("View and manage your scheduled appointments.");
+      } else {
+        // Admin sees all
+        setPageTitle("All Bookings");
+        setPageDescription("View and manage all scheduled appointments.");
+      }
+      setBookings(filteredData.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+    }
+  }, [user, viewMode]);
+
 
   const handleUpdateBooking = async (data: BookingFormValues) => {
     if (!editingBooking) return;
     const updatedBooking = await updateBookingAction(editingBooking.id, data);
-    setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBooking : b));
+    setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBooking : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
     setIsFormOpen(false);
     setEditingBooking(null);
   };
 
   const handleCancelBooking = async (id: string) => {
     const cancelledBooking = await cancelBookingAction(id);
-    setBookings(prev => prev.map(b => b.id === id ? cancelledBooking : b));
+    setBookings(prev => prev.map(b => b.id === id ? cancelledBooking : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
   };
   
   const openEditForm = (booking: Booking) => {
@@ -109,19 +141,21 @@ export default function BookingsPage() {
 
   const getStatusBadgeVariant = (status: Booking['status']): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
-      case 'Confirmed': return 'default'; // primary color
+      case 'Confirmed': return 'default';
       case 'Pending': return 'secondary';
-      case 'Completed': return 'outline'; // Using outline for completed, could be success if we add it
+      case 'Completed': return 'outline';
       case 'Cancelled': return 'destructive';
       default: return 'secondary';
     }
   };
 
+  if (!user) return <p>Loading...</p>; // Or some other loading indicator
+
   return (
     <div className="space-y-8">
       <PageHeader
-        title="All Bookings"
-        description="View and manage all scheduled appointments."
+        title={pageTitle}
+        description={pageDescription}
         icon={ClipboardList}
         actions={
           <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -136,19 +170,32 @@ export default function BookingsPage() {
           setIsFormOpen(isOpen);
           if (!isOpen) setEditingBooking(null);
         }}>
-        <DialogContent className="sm:max-w-2xl font-body"> {/* Increased width for booking form */}
+        <DialogContent className="sm:max-w-2xl font-body">
           <DialogHeader>
             <DialogTitle className="font-headline text-2xl">
               {editingBooking ? "Edit Booking" : "New Booking"}
             </DialogTitle>
           </DialogHeader>
-          {/* Render BookingForm only when editingBooking or isFormOpen for new is true */}
           {(editingBooking || (isFormOpen && !editingBooking)) && (
             <BookingForm
               initialData={editingBooking}
               salons={salons}
               allHairdressers={hairdressers}
-              onSubmit={editingBooking ? handleUpdateBooking : async (data) => { /* handle new here if needed, or rely on /new */ }}
+              onSubmit={editingBooking ? handleUpdateBooking : async (data) => {
+                // This part is for creating a new booking directly from this page's dialog,
+                // which might not be the primary flow if /bookings/new is used.
+                // For now, this requires a create action.
+                // Let's assume create is handled by /new and this dialog is only for edits.
+                // If a new booking needs to be created here, we need a createBookingAction similar to updateBookingAction.
+                // For simplicity, we can disable "New Booking" from this dialog if editingBooking is null.
+                // Or, more robustly, fetch and setBookings again.
+                // For now, let's keep it focused on editing. If it's a new booking from dialog, user should go to /bookings/new
+                if(editingBooking) {
+                    await handleUpdateBooking(data);
+                } else {
+                    toast({title: "Action Not Configured", description: "Please use the 'New Booking' page to create appointments.", variant: "destructive"});
+                }
+              }}
             />
           )}
         </DialogContent>
@@ -158,11 +205,11 @@ export default function BookingsPage() {
          <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader>
             <CalendarDays className="mx-auto h-16 w-16 text-muted-foreground" />
-            <CardTitle className="mt-4 text-2xl font-headline">No Bookings Yet</CardTitle>
+            <CardTitle className="mt-4 text-2xl font-headline">No Bookings Found</CardTitle>
           </CardHeader>
           <CardContent>
             <CardDescription className="font-body text-lg">
-              There are no appointments scheduled. Create a new booking to get started.
+              There are no appointments scheduled that match your current view.
             </CardDescription>
           </CardContent>
            <CardFooter className="justify-center">
@@ -176,8 +223,8 @@ export default function BookingsPage() {
       ) : (
       <Card className="shadow-lg rounded-lg">
         <CardHeader>
-          <CardTitle className="font-headline">Upcoming Appointments</CardTitle>
-           <CardDescription className="font-body">A list of all appointments in the system.</CardDescription>
+          <CardTitle className="font-headline">Appointments</CardTitle>
+           <CardDescription className="font-body">A list of appointments based on your role and filters.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -186,14 +233,14 @@ export default function BookingsPage() {
                 <TableHead className="font-headline">Client</TableHead>
                 <TableHead className="font-headline">Date & Time</TableHead>
                 <TableHead className="font-headline">Service</TableHead>
-                <TableHead className="font-headline">Hairdresser</TableHead>
+                {user.role === 'admin' && <TableHead className="font-headline">Hairdresser</TableHead>}
                 <TableHead className="font-headline">Salon</TableHead>
                 <TableHead className="font-headline">Status</TableHead>
                 <TableHead className="text-right font-headline">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bookings.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()).map((booking) => (
+              {bookings.map((booking) => (
                 <TableRow key={booking.id} className="font-body">
                   <TableCell>
                     <div className="font-medium text-foreground">{booking.clientName}</div>
@@ -204,7 +251,7 @@ export default function BookingsPage() {
                     <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                   </TableCell>
                   <TableCell>{booking.service}</TableCell>
-                  <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>
+                  {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge>

@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { LocationForm } from "@/components/forms/LocationForm";
 import type { Salon } from "@/lib/types";
-import { Store, PlusCircle, Edit3, Trash2, Phone, Clock } from "lucide-react";
+import { Store, PlusCircle, Edit3, Trash2, Phone, Clock, ShieldAlert } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,14 +18,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 
 // Mock server action (replace with actual API calls)
 async function addSalonAction(data: Omit<Salon, 'id'>): Promise<Salon> {
   console.log("Adding salon:", data);
-  // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 500));
   const newSalon = { ...data, id: Math.random().toString(36).substr(2, 9) };
   toast({ title: "Salon Added", description: `${data.name} has been successfully added.` });
@@ -52,9 +52,47 @@ const mockSalons: Salon[] = [
 ];
 
 export default function LocationsPage() {
+  const { user } = useAuth();
+  const router = useRouter();
   const [salons, setSalons] = useState<Salon[]>(mockSalons);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSalon, setEditingSalon] = useState<Salon | null>(null);
+
+  useEffect(() => {
+    if (user && user.role !== 'admin') {
+      // Redirect or show access denied for non-admins
+      // For this pass, we'll just show an access denied message within the page content.
+      // router.replace('/dashboard'); 
+      // toast({ title: "Access Denied", description: "You do not have permission to view this page.", variant: "destructive" });
+    }
+  }, [user, router]);
+
+
+  if (!user) return <p>Loading...</p>;
+
+  if (user.role !== 'admin') {
+    return (
+      <div className="space-y-8 flex flex-col items-center justify-center h-full">
+        <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
+          <CardHeader>
+            <ShieldAlert className="mx-auto h-16 w-16 text-destructive" />
+            <CardTitle className="mt-4 text-2xl font-headline">Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription className="font-body text-lg">
+              You do not have permission to manage salon locations.
+            </CardDescription>
+          </CardContent>
+           <CardFooter className="justify-center">
+             <Button onClick={() => router.push('/dashboard')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                Go to Dashboard
+              </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
 
   const handleAddSalon = async (data: Omit<Salon, 'id'>) => {
     const newSalon = await addSalonAction(data);
