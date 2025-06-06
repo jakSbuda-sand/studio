@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Booking, Salon, Hairdresser, User } from "@/lib/types";
+import type { Booking, Salon, Hairdresser } from "@/lib/types"; // Removed User import as it's not directly used here
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -84,33 +84,39 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
     const initialSalon = initialData?.salonId || initialDataPreselected?.salonId;
     if (initialSalon) {
         setSelectedSalonId(initialSalon);
-        form.setValue("salonId", initialSalon); // Ensure form state is also updated
+        form.setValue("salonId", initialSalon, { shouldValidate: true, shouldDirty: true });
     }
     // If initialData or initialDataPreselected provides hairdresserId, set it.
     const initialHairdresser = initialData?.hairdresserId || initialDataPreselected?.hairdresserId;
     if (initialHairdresser) {
-        form.setValue("hairdresserId", initialHairdresser);
+        form.setValue("hairdresserId", initialHairdresser, { shouldValidate: true, shouldDirty: true });
     }
-  }, [initialData, initialDataPreselected, form.setValue]);
+  }, [initialData, initialDataPreselected, form]); // form.setValue was form, check if this is intended
 
 
   useEffect(() => {
     if (selectedSalonId) {
       const filteredHairdressers = allHairdressers.filter(h => h.salonId === selectedSalonId);
       setAvailableHairdressers(filteredHairdressers);
-      // Reset hairdresser if selected salon changes and current hairdresser is not in new salon
-      if (!filteredHairdressers.find(h => h.id === form.getValues("hairdresserId"))) {
-        // If current user is a hairdresser and this is their salon, keep them selected.
-        // Otherwise, clear.
-        if (user?.role === 'hairdresser' && user.hairdresserProfileId && filteredHairdressers.find(h => h.id === user.hairdresserProfileId)) {
-          // No need to reset if their profile is in the new list. Form will retain value.
-        } else {
-          form.setValue("hairdresserId", "");
+      
+      const currentHairdresserId = form.getValues("hairdresserId");
+      const isCurrentHairdresserInFilteredList = filteredHairdressers.some(h => h.id === currentHairdresserId);
+
+      if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
+        // If user is a hairdresser and their profile ID matches the selected salon, ensure they are selected.
+        if (filteredHairdressers.some(h => h.id === user.hairdresserProfileId)) {
+          form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
+        } else if (!isCurrentHairdresserInFilteredList) {
+          // If their profile ID is not in the list (e.g. different salon selected), clear selection.
+          form.setValue("hairdresserId", "", { shouldDirty: true });
         }
+      } else if (!isCurrentHairdresserInFilteredList) {
+        // For admin, or if current hairdresser is not in new list, clear selection.
+        form.setValue("hairdresserId", "", { shouldDirty: true });
       }
     } else {
       setAvailableHairdressers([]);
-      form.setValue("hairdresserId", "");
+      form.setValue("hairdresserId", "", { shouldDirty: true });
     }
   }, [selectedSalonId, allHairdressers, form, user]);
   
@@ -121,7 +127,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
       }
     });
     return () => subscription.unsubscribe();
-  }, [form.watch, setSelectedSalonId]);
+  }, [form, setSelectedSalonId]); // form.watch was form
 
 
   const handleSubmit = async (data: BookingFormValues) => {
@@ -130,6 +136,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
     combinedDateTime.setHours(hours, minutes, 0, 0);
     
     await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
+    form.reset(); // Reset form after successful submission if needed
   };
 
   const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => { // 8:00 AM to 7:00 PM, 30 min intervals
@@ -181,7 +188,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                   <FormLabel>Salon Location</FormLabel>
                   <Select 
                     onValueChange={(value) => { field.onChange(value); setSelectedSalonId(value); }} 
-                    defaultValue={field.value}
+                    value={field.value} // Ensure value is controlled
                     disabled={isHairdresserRole && !!initialDataPreselected?.salonId} // Disable if hairdresser and preselected
                   >
                     <FormControl><SelectTrigger><SelectValue placeholder="Select a salon" /></SelectTrigger></FormControl>
@@ -195,28 +202,37 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                   <FormLabel>Hairdresser</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
-                    defaultValue={field.value} 
+                    value={field.value} // Ensure value is controlled
                     disabled={
                         (!selectedSalonId || availableHairdressers.length === 0) || 
-                        (isHairdresserRole && !!hairdresserProfileId) // Disable if hairdresser and their profile ID is set
+                        (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId)) // Disable if hairdresser is creating for self and is in list
                     }
                   >
                     <FormControl><SelectTrigger><SelectValue placeholder="Select a hairdresser" /></SelectTrigger></FormControl>
                     <SelectContent>
-                        {isHairdresserRole && hairdresserProfileId && availableHairdressers.find(h => h.id === hairdresserProfileId) ? (
-                             <SelectItem key={hairdresserProfileId} value={hairdresserProfileId}>
-                                {availableHairdressers.find(h => h.id === hairdresserProfileId)?.name} (You)
-                            </SelectItem>
-                        ) : (
-                            availableHairdressers.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)
-                        )}
-                        {/* Ensure admin can still see all options if not pre-filled by hairdresser context */}
-                        {!isHairdresserRole && availableHairdressers.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                      {isHairdresserRole && hairdresserProfileId && availableHairdressers.find(h => h.id === hairdresserProfileId) ? (
+                        // If hairdresser is logged in, their profile ID is known, AND they are in the list for the selected salon,
+                        // show them as the primary (and potentially only, if disabled) option.
+                        <SelectItem key={hairdresserProfileId} value={hairdresserProfileId}>
+                          {availableHairdressers.find(h => h.id === hairdresserProfileId)?.name} (You)
+                        </SelectItem>
+                      ) : (
+                        // For admins, or if the logged-in hairdresser is not in the current salon's list (e.g. selected a different salon)
+                        // or if no specific hairdresser is pre-selected for a hairdresser role.
+                        availableHairdressers.map(h => (
+                          <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                        ))
+                      )}
+                       {/* This additional map was causing duplicates. The logic above should handle both cases.
+                           If an admin is viewing, the first part of the ternary (isHairdresserRole && ...) will be false,
+                           leading to the map of availableHairdressers.
+                           If availableHairdressers is empty in that case, nothing is rendered, which is correct.
+                       */}
                     </SelectContent>
                   </Select>
                   {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
-                  {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No hairdressers available for this salon.</FormDescription>}
-                  {isHairdresserRole && !!hairdresserProfileId && <FormDescription>Booking for yourself.</FormDescription>}
+                  {selectedSalonId && availableHairdressers.length === 0 && (!isHairdresserRole || !hairdresserProfileId || !availableHairdressers.find(h => h.id === hairdresserProfileId)) && <FormDescription>No hairdressers available for this salon.</FormDescription>}
+                  {isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId) && <FormDescription>Booking for yourself.</FormDescription>}
                   <FormMessage />
                 </FormItem>
               )}/>
@@ -253,7 +269,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
               <FormField control={form.control} name="appointmentTime" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Appointment Time</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                   <Select onValueChange={field.onChange} value={field.value}> {/* Ensure value is controlled */}
                     <FormControl>
                       <SelectTrigger>
                         <Clock className="mr-2 h-4 w-4 opacity-50" />
@@ -293,3 +309,4 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
     </Card>
   );
 }
+
