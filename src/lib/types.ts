@@ -7,6 +7,8 @@ export interface Salon {
   address: string;
   phone?: string;
   operatingHours?: string; // e.g., "Mon-Fri: 9am-7pm, Sat: 10am-5pm"
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface Hairdresser {
@@ -65,9 +67,13 @@ export type HairdresserAvailability = Partial<Record<DayOfWeek, AvailabilitySlot
 
 // --- Firestore Document Types ---
 
-export interface LocationDoc {
+export interface LocationDoc { // This can represent the structure in Firestore for a Salon
   name: string;
-  active: boolean;
+  address: string;
+  phone?: string;
+  operatingHours?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface HairdresserDoc {
@@ -81,6 +87,8 @@ export interface HairdresserDoc {
   specialties?: string[];
   availability_schedule?: HairdresserAvailability;
   profilePictureUrl?: string;
+  createdAt: Timestamp; // Added for consistency
+  updatedAt: Timestamp; // Added for consistency
 }
 
 export interface StyleDoc {
@@ -103,9 +111,9 @@ export interface BookingDoc {
     [key: string]: any;
   };
   price: number;
-  date: Timestamp;
-  start_time: string;
-  end_time: string;
+  date: Timestamp; // Should be the primary field for querying by date
+  start_time: string; // e.g., "14:30"
+  end_time: string; // e.g., "15:30"
   duration_minutes: number;
   deposit_paid: boolean;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no-show';

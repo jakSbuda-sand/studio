@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { LocationForm } from "@/components/forms/LocationForm";
-import type { Salon } from "@/lib/types";
-import { Store, PlusCircle, Edit3, Trash2, Phone, Clock, ShieldAlert } from "lucide-react";
+import type { Salon, LocationDoc } from "@/lib/types"; // LocationDoc for Firestore data
+import { Store, PlusCircle, Edit3, Trash2, Phone, Clock, ShieldAlert, Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,58 +18,65 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-
-// Mock server action (replace with actual API calls)
-async function addSalonAction(data: Omit<Salon, 'id'>): Promise<Salon> {
-  console.log("Adding salon:", data);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  const newSalon = { ...data, id: Math.random().toString(36).substr(2, 9) };
-  toast({ title: "Salon Added", description: `${data.name} has been successfully added.` });
-  return newSalon;
-}
-
-async function updateSalonAction(id: string, data: Partial<Salon>): Promise<Salon> {
-  console.log("Updating salon:", id, data);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  toast({ title: "Salon Updated", description: `${data.name || 'Salon'} has been successfully updated.` });
-  return { ...mockSalons.find(s => s.id === id)!, ...data } as Salon;
-}
-
-async function deleteSalonAction(id: string): Promise<void> {
-  console.log("Deleting salon:", id);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  toast({ title: "Salon Deleted", description: `Salon has been successfully deleted.`, variant: "destructive" });
-}
-
-
-const mockSalons: Salon[] = [
-  { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand", phone: "011 555 1234", operatingHours: "Mon-Fri: 9am-6pm, Sat: 9am-4pm" },
-  { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
-];
+import { db } from "@/lib/firebase";
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  doc, 
+  updateDoc, 
+  deleteDoc, 
+  serverTimestamp, 
+  Timestamp 
+} from "firebase/firestore";
 
 export default function LocationsPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [salons, setSalons] = useState<Salon[]>(mockSalons);
+  const [salons, setSalons] = useState<Salon[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSalon, setEditingSalon] = useState<Salon | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // For initial data loading
+  const [isSubmitting, setIsSubmitting] = useState(false); // For form submissions
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      // Redirect or show access denied for non-admins
-      // For this pass, we'll just show an access denied message within the page content.
-      // router.replace('/dashboard'); 
-      // toast({ title: "Access Denied", description: "You do not have permission to view this page.", variant: "destructive" });
+      // router.replace('/dashboard');
+      // No need to fetch data if not admin
+      setIsLoading(false);
+      return;
     }
-  }, [user, router]);
+
+    const fetchSalons = async () => {
+      setIsLoading(true);
+      try {
+        const locationsCol = collection(db, "locations");
+        const locationSnapshot = await getDocs(locationsCol);
+        const locationsList = locationSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...(doc.data() as LocationDoc)
+        } as Salon)); // Cast to Salon, ensuring Timestamps are handled if needed by UI
+        setSalons(locationsList.sort((a,b) => a.name.localeCompare(b.name)));
+      } catch (error) {
+        console.error("Error fetching salons: ", error);
+        toast({ title: "Error Fetching Salons", description: "Could not load salon locations from the database.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (user && user.role === 'admin') {
+      fetchSalons();
+    }
+  }, [user]);
 
 
-  if (!user) return <p>Loading...</p>;
+  if (!user) return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading user...</span></div>;
 
   if (user.role !== 'admin') {
     return (
@@ -94,24 +101,58 @@ export default function LocationsPage() {
     );
   }
 
-
-  const handleAddSalon = async (data: Omit<Salon, 'id'>) => {
-    const newSalon = await addSalonAction(data);
-    setSalons(prev => [...prev, newSalon]);
-    setIsFormOpen(false);
+  const handleAddSalon = async (data: Omit<Salon, 'id' | 'createdAt' | 'updatedAt'>) => {
+    setIsSubmitting(true);
+    try {
+      const docData: LocationDoc = {
+        ...data,
+        createdAt: serverTimestamp() as Timestamp, // Firestore will convert this
+        updatedAt: serverTimestamp() as Timestamp,
+      };
+      const docRef = await addDoc(collection(db, "locations"), docData);
+      setSalons(prev => [...prev, { ...data, id: docRef.id, createdAt: Timestamp.now(), updatedAt: Timestamp.now() }].sort((a,b) => a.name.localeCompare(b.name)));
+      toast({ title: "Salon Added", description: `${data.name} has been successfully added.` });
+      setIsFormOpen(false);
+    } catch (error) {
+      console.error("Error adding salon: ", error);
+      toast({ title: "Error Adding Salon", description: "Could not add salon to the database.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleUpdateSalon = async (data: Partial<Salon>) => {
+  const handleUpdateSalon = async (data: Partial<Omit<Salon, 'id' | 'createdAt' | 'updatedAt'>>) => {
     if (!editingSalon) return;
-    const updatedSalon = await updateSalonAction(editingSalon.id, data);
-    setSalons(prev => prev.map(s => s.id === editingSalon.id ? updatedSalon : s));
-    setIsFormOpen(false);
-    setEditingSalon(null);
+    setIsSubmitting(true);
+    try {
+      const salonRef = doc(db, "locations", editingSalon.id);
+      const updateData = { ...data, updatedAt: serverTimestamp() };
+      await updateDoc(salonRef, updateData);
+      
+      setSalons(prev => prev.map(s => s.id === editingSalon.id ? { ...s, ...data, updatedAt: Timestamp.now() } as Salon : s).sort((a,b) => a.name.localeCompare(b.name)));
+      toast({ title: "Salon Updated", description: `${data.name || editingSalon.name} has been successfully updated.` });
+      setIsFormOpen(false);
+      setEditingSalon(null);
+    } catch (error) {
+      console.error("Error updating salon: ", error);
+      toast({ title: "Error Updating Salon", description: "Could not update salon in the database.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteSalon = async (id: string) => {
-    await deleteSalonAction(id);
-    setSalons(prev => prev.filter(s => s.id !== id));
+  const handleDeleteSalon = async (id: string, name: string) => {
+    setIsSubmitting(true); // Use isSubmitting to disable buttons during delete
+    try {
+      await deleteDoc(doc(db, "locations", id));
+      setSalons(prev => prev.filter(s => s.id !== id));
+      toast({ title: "Salon Deleted", description: `Salon "${name}" has been successfully deleted.`, variant: "destructive" });
+    } catch (error) {
+      console.error("Error deleting salon: ", error);
+      toast({ title: "Error Deleting Salon", description: "Could not delete salon from the database.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const openEditForm = (salon: Salon) => {
@@ -131,7 +172,7 @@ export default function LocationsPage() {
             if (!isOpen) setEditingSalon(null);
           }}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Location
               </Button>
             </DialogTrigger>
@@ -143,14 +184,19 @@ export default function LocationsPage() {
               </DialogHeader>
               <LocationForm
                 initialData={editingSalon}
-                onSubmit={editingSalon ? handleUpdateSalon : handleAddSalon}
+                onSubmit={editingSalon ? (data) => handleUpdateSalon(data as Partial<Omit<Salon, 'id' | 'createdAt' | 'updatedAt'>>) : (data) => handleAddSalon(data as Omit<Salon, 'id' | 'createdAt' | 'updatedAt'>)}
+                isSubmitting={isSubmitting}
               />
             </DialogContent>
           </Dialog>
         }
       />
 
-      {salons.length === 0 ? (
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" /> <span className="ml-3 text-lg font-body">Loading Salons...</span>
+        </div>
+      ) : salons.length === 0 ? (
          <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader>
             <Store className="mx-auto h-16 w-16 text-muted-foreground" />
@@ -162,7 +208,7 @@ export default function LocationsPage() {
             </CardDescription>
           </CardContent>
           <CardFooter className="justify-center">
-             <Button onClick={() => setIsFormOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+             <Button onClick={() => setIsFormOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add First Location
               </Button>
           </CardFooter>
@@ -188,14 +234,19 @@ export default function LocationsPage() {
                     <span>{salon.operatingHours}</span>
                   </div>
                 )}
+                 {salon.createdAt && (
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Added: {(salon.createdAt as Timestamp).toDate().toLocaleDateString()}
+                  </p>
+                )}
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                <Button variant="outline" size="sm" onClick={() => openEditForm(salon)} className="font-body">
+                <Button variant="outline" size="sm" onClick={() => openEditForm(salon)} className="font-body" disabled={isSubmitting}>
                   <Edit3 className="mr-2 h-4 w-4" /> Edit
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" className="font-body">
+                    <Button variant="destructive" size="sm" className="font-body" disabled={isSubmitting}>
                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                     </Button>
                   </AlertDialogTrigger>
@@ -207,9 +258,9 @@ export default function LocationsPage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel className="font-body">Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDeleteSalon(salon.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body">
-                        Delete
+                      <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteSalon(salon.id, salon.name)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete"}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -222,4 +273,3 @@ export default function LocationsPage() {
     </div>
   );
 }
-

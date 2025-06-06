@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,8 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { Salon } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Store } from "lucide-react";
+import { Store, Loader2 } from "lucide-react";
 
+// Form values will not include id, createdAt, updatedAt
 const salonFormSchema = z.object({
   name: z.string().min(2, { message: "Salon name must be at least 2 characters." }),
   address: z.string().min(10, { message: "Address must be at least 10 characters." }),
@@ -29,14 +31,20 @@ const salonFormSchema = z.object({
 type SalonFormValues = z.infer<typeof salonFormSchema>;
 
 interface LocationFormProps {
-  initialData?: Salon | null;
+  initialData?: Salon | null; // This is the full Salon type including id, Timestamps
   onSubmit: (data: SalonFormValues) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
-export function LocationForm({ initialData, onSubmit }: LocationFormProps) {
+export function LocationForm({ initialData, onSubmit, isSubmitting = false }: LocationFormProps) {
   const form = useForm<SalonFormValues>({
     resolver: zodResolver(salonFormSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+      name: initialData.name,
+      address: initialData.address,
+      phone: initialData.phone || "",
+      operatingHours: initialData.operatingHours || "",
+    } : {
       name: "",
       address: "",
       phone: "",
@@ -46,19 +54,21 @@ export function LocationForm({ initialData, onSubmit }: LocationFormProps) {
 
   const handleSubmit = async (data: SalonFormValues) => {
     await onSubmit(data);
-    // Optionally reset form or show success message
-    // form.reset(); // if it's a create form
+    if (!initialData) { // If it's an add form, reset after successful submission.
+      form.reset();
+    }
   };
 
   return (
-    <Card className="shadow-lg rounded-lg">
-      <CardHeader>
+    <Card className="shadow-none border-0">
+      {/* CardHeader was removed as DialogTitle serves as header. Kept for structure if needed later. */}
+      {/* <CardHeader>
         <CardTitle className="font-headline text-xl flex items-center gap-2">
             <Store className="h-6 w-6 text-primary" />
             {initialData ? "Edit Salon Location" : "Add New Salon Location"}
         </CardTitle>
-      </CardHeader>
-      <CardContent>
+      </CardHeader> */}
+      <CardContent className="pt-2"> {/* Adjusted padding if CardHeader is fully removed */}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 font-body">
             <FormField
@@ -117,8 +127,9 @@ export function LocationForm({ initialData, onSubmit }: LocationFormProps) {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground">
-              {initialData ? "Save Changes" : "Add Location"}
+            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting ? (initialData ? "Saving..." : "Adding...") : (initialData ? "Save Changes" : "Add Location")}
             </Button>
           </form>
         </Form>
