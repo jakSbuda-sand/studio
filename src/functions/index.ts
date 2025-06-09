@@ -5,25 +5,23 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore"; // Modular import
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
 const db = admin.firestore();
-const FieldValue = admin.firestore.FieldValue; // Get FieldValue more directly
 
 interface CreateHairdresserData {
   email: string;
   password?: string;
   displayName: string;
   assigned_locations: string[];
-  // working_days: string[]; // This might be derived or simplified if 'availability' string is primary
-  availability: string; // Text description of availability, e.g., "Mon-Fri 9am-5pm"
+  availability: string; 
   specialties?: string[];
   profilePictureUrl?: string;
-  // working_days might be parsed from availability string if needed
-  working_days: string[]; // Keep if form sends it, or parse from availability
+  working_days: string[]; 
 }
 
 export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context) => {
@@ -53,10 +51,10 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     );
   }
 
-  if (!data.email || !data.displayName || !data.assigned_locations || !data.availability) { // Removed working_days from this direct check if it's derived
+  if (!data.email || !data.displayName || !data.assigned_locations || !data.availability || !data.working_days) {
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "Missing required fields: email, displayName, assigned_locations, availability."
+      "Missing required fields: email, displayName, assigned_locations, availability, working_days."
     );
   }
 
@@ -68,7 +66,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false, // Consider sending a verification email
+      emailVerified: false, 
       photoURL: data.profilePictureUrl || undefined,
     });
     functions.logger.log("Successfully created new auth user:", newUserRecord.uid);
@@ -90,7 +88,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     name: data.displayName,
     email: data.email,
     role: "hairdresser",
-    created_at: FieldValue.serverTimestamp(),
+    created_at: FieldValue.serverTimestamp(), // Use imported FieldValue
   });
 
   const newHairdresserDocRef = db.collection("hairdressers").doc(newUserRecord.uid);
@@ -99,13 +97,13 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     name: data.displayName,
     email: data.email,
     assigned_locations: data.assigned_locations,
-    working_days: data.working_days || [], // Ensure it's an array, even if empty
+    working_days: data.working_days || [], 
     availability: data.availability,
     specialties: data.specialties || [],
     profilePictureUrl: data.profilePictureUrl || "",
     must_reset_password: true,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(), // Use imported FieldValue
+    updatedAt: FieldValue.serverTimestamp(), // Use imported FieldValue
   });
 
   try {
@@ -126,7 +124,6 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     );
   }
 });
-
 
 // TODO: Implement a secure deleteHairdresser function
 // This function needs to:
