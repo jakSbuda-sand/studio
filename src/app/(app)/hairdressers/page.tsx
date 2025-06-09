@@ -50,7 +50,7 @@ export default function HairdressersPage() {
         // Fetch Salons
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
-        const salonsList = locationSnapshot.docs.map(sDoc => ({ // Renamed doc to sDoc
+        const salonsList = locationSnapshot.docs.map(sDoc => ({ 
           id: sDoc.id,
           ...(sDoc.data() as LocationDoc)
         } as Salon));
@@ -59,11 +59,11 @@ export default function HairdressersPage() {
         // Fetch Hairdressers
         const hairdressersCol = collection(db, "hairdressers");
         const hairdresserSnapshot = await getDocs(hairdressersCol);
-        const hairdressersList = hairdresserSnapshot.docs.map(hDoc => { // Renamed doc to hDoc
+        const hairdressersList = hairdresserSnapshot.docs.map(hDoc => { 
           const data = hDoc.data() as HairdresserDoc;
           return {
-            id: hDoc.id, // Firestore doc ID
-            userId: data.user_id, // Auth UID
+            id: hDoc.id, 
+            userId: data.user_id, 
             name: data.name,
             email: data.email,
             assigned_locations: data.assigned_locations || [],
@@ -72,7 +72,7 @@ export default function HairdressersPage() {
             working_days: data.working_days || [],
             profilePictureUrl: data.profilePictureUrl || "",
             must_reset_password: data.must_reset_password || false,
-            createdAt: data.createdAt, // Keep as Timestamp or convert if needed
+            createdAt: data.createdAt, 
             updatedAt: data.updatedAt,
           } as Hairdresser;
         });
@@ -110,11 +110,15 @@ export default function HairdressersPage() {
     setIsSubmitting(true);
     
     // Simple parsing of working_days from availability string for consistency with creation.
+    // This is a basic example; you might want more robust parsing based on your 'availability' format.
     const parsedWorkingDays: DayOfWeek[] = [];
     if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
     if (data.availability.toLowerCase().includes("tue")) parsedWorkingDays.push("Tuesday");
-    // ... add other days ...
+    if (data.availability.toLowerCase().includes("wed")) parsedWorkingDays.push("Wednesday");
+    if (data.availability.toLowerCase().includes("thu")) parsedWorkingDays.push("Thursday");
     if (data.availability.toLowerCase().includes("fri")) parsedWorkingDays.push("Friday");
+    if (data.availability.toLowerCase().includes("sat")) parsedWorkingDays.push("Saturday");
+    if (data.availability.toLowerCase().includes("sun")) parsedWorkingDays.push("Sunday");
 
 
     const hairdresserRef = doc(db, "hairdressers", editingHairdresser.id);
@@ -126,13 +130,22 @@ export default function HairdressersPage() {
       availability: data.availability,
       working_days: parsedWorkingDays, // Update working_days based on availability string
       profilePictureUrl: data.profilePictureUrl || "",
-      updatedAt: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp, // Use serverTimestamp for updates
     };
 
     try {
       await updateDoc(hairdresserRef, updateData);
       setHairdressers(prev => prev.map(h => 
-        h.id === editingHairdresser.id ? { ...h, ...updateData, updatedAt: Timestamp.now() } : h // Update local state
+        h.id === editingHairdresser.id ? { 
+            ...h, 
+            name: data.name,
+            assigned_locations: data.assigned_locations,
+            specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
+            availability: data.availability,
+            working_days: parsedWorkingDays,
+            profilePictureUrl: data.profilePictureUrl || "",
+            updatedAt: Timestamp.now() // For optimistic UI update, actual value is server-generated
+        } : h 
       ).sort((a,b) => a.name.localeCompare(b.name)));
       toast({ title: "Hairdresser Updated", description: `${data.name} has been updated.` });
       setIsEditFormOpen(false);
@@ -150,9 +163,21 @@ export default function HairdressersPage() {
     try {
       // TODO: This only deletes the Firestore doc from 'hairdressers'.
       // A full deletion requires a Firebase Function to delete the Auth user and 'users' doc.
+      // For now, we only delete the hairdresser profile document.
       await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id));
+      
+      // Also attempt to delete the user document from 'users' collection if the ID matches.
+      // This is still not a full cleanup but better than just deleting the hairdresser profile.
+      try {
+        await deleteDoc(doc(db, "users", hairdresserToDelete.userId)); // userId is the Auth UID
+        toast({ title: "Hairdresser Record Deleted", description: `Firestore records for ${hairdresserToDelete.name} deleted. Full Firebase Auth user deletion requires a Cloud Function.`, variant: "default" });
+      } catch (userDocError) {
+         toast({ title: "Hairdresser Profile Deleted", description: `Profile for ${hairdresserToDelete.name} deleted. Could not delete 'users' record. Full Firebase Auth user deletion needs a Cloud Function.`, variant: "destructive" });
+        console.error("Error deleting user document from 'users' collection:", userDocError);
+      }
+
       setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
-      toast({ title: "Hairdresser Record Deleted", description: `Firestore record for ${hairdresserToDelete.name} deleted. Full user deletion requires a Cloud Function.`, variant: "destructive" });
+
     } catch (error) {
         console.error("Error deleting hairdresser Firestore record:", error);
         toast({ title: "Deletion Failed", description: "Could not delete hairdresser record.", variant: "destructive" });
@@ -167,6 +192,7 @@ export default function HairdressersPage() {
   };
   
   const getSalonBadges = (locationIds: string[]) => {
+    if (!locationIds || locationIds.length === 0) return <Badge variant="outline" className="font-body">Not Assigned</Badge>;
     return locationIds.map(id => {
         const salon = salons.find(s => s.id === id);
         return salon ? <Badge key={id} variant="secondary" className="mr-1 mb-1 font-body">{salon.name}</Badge> : null;
@@ -262,7 +288,7 @@ export default function HairdressersPage() {
                     <AlertDialogFooter> 
                         <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel> 
                         <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}> 
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Record"}
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Records"}
                         </AlertDialogAction> 
                     </AlertDialogFooter>
                   </AlertDialogContent>

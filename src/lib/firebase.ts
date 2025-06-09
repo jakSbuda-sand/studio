@@ -27,7 +27,8 @@ import {
   getDocs,
   Timestamp,
   deleteDoc,
-  writeBatch
+  writeBatch,
+  serverTimestamp // Import serverTimestamp here
 } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 // import { getStorage, connectStorageEmulator } from "firebase/storage"; // Uncomment if you use Storage
@@ -112,7 +113,6 @@ export {
   Timestamp,
   deleteDoc,
   writeBatch,
-  httpsCallable
+  httpsCallable,
+  serverTimestamp // Export serverTimestamp here
 };
-
-    
