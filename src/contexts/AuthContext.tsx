@@ -42,57 +42,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       if (fbUser) {
         setFirebaseUser(fbUser);
-        // Fetch user role and other details from Firestore 'users' collection
+        let appUser: User | null = null;
+
+        // 1. Check 'users' collection (typically for admins)
         const userDocRef = doc(db, "users", fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userDocData = userDocSnap.data() as UserDoc;
-          const appUser: User = {
+          appUser = {
             uid: fbUser.uid,
-            name: fbUser.displayName || userDocData.name,
-            email: fbUser.email,
+            name: userDocData.name || fbUser.displayName, // Prioritize UserDoc name
+            email: userDocData.email || fbUser.email,     // Prioritize UserDoc email
             role: userDocData.role,
-            avatarUrl: fbUser.photoURL || undefined, // You might store this in UserDoc too
+            avatarUrl: fbUser.photoURL || undefined,
           };
+        } else {
+          // 2. If not in 'users', check 'hairdressers' collection
+          const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid);
+          const hairdresserDocSnap = await getDoc(hairdresserDocRef);
 
-          if (appUser.role === 'hairdresser') {
-            // Fetch hairdresser-specific details, like must_reset_password
-            const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid); // Assuming hairdresser doc ID is Auth UID
-            const hairdresserDocSnap = await getDoc(hairdresserDocRef);
-            if (hairdresserDocSnap.exists()) {
-              const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
-              appUser.must_reset_password = hairdresserData.must_reset_password;
-              appUser.hairdresserDocId = hairdresserDocSnap.id; // Store doc ID for convenience
-            } else {
-              console.warn(`Hairdresser profile not found in Firestore for UID: ${fbUser.uid}`);
-              appUser.role = 'unknown'; // Or handle as an error
-            }
+          if (hairdresserDocSnap.exists()) {
+            const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
+            appUser = {
+              uid: fbUser.uid,
+              name: hairdresserData.name || fbUser.displayName, // Prioritize HairdresserDoc name
+              email: hairdresserData.email || fbUser.email,   // Prioritize HairdresserDoc email
+              role: 'hairdresser',
+              avatarUrl: hairdresserData.profilePictureUrl || fbUser.photoURL || undefined,
+              must_reset_password: hairdresserData.must_reset_password,
+              hairdresserDocId: hairdresserDocSnap.id,
+              hairdresserProfileId: fbUser.uid, // Redundant, same as uid
+            };
           }
+        }
+
+        if (appUser) {
           setUser(appUser);
-          
           // Handle redirection for password reset
           if (appUser.role === 'hairdresser' && appUser.must_reset_password) {
             if (pathname !== '/auth/force-password-reset') {
               router.replace('/auth/force-password-reset');
             }
-          } else if (pathname === '/login' || pathname === '/') {
+          } else if (pathname === '/login' || pathname === '/' || pathname === '/auth/force-password-reset') {
+            // if password reset page is visited by user who does not need to reset, redirect to dashboard
              router.replace('/dashboard');
           }
-
         } else {
-          console.warn(`User document not found in Firestore for UID: ${fbUser.uid}. Logging out.`);
-          // This user exists in Auth but not in our 'users' collection, potential issue
+          console.warn(`User document not found in Firestore for UID: ${fbUser.uid} in 'users' or 'hairdressers' collections. Logging out.`);
           await firebaseSignOut(auth);
           setUser(null);
           setFirebaseUser(null);
           if (pathname !== '/login') router.replace('/login');
         }
-      } else {
+
+      } else { // No Firebase user (logged out)
         setUser(null);
         setFirebaseUser(null);
-        if (!pathname.startsWith('/login') && !pathname.startsWith('/auth/force-password-reset') && pathname !== '/') {
-           // Don't redirect from public pages if any are added later
+        const allowedGuestPaths = ['/login', '/auth/force-password-reset', '/'];
+        if (!allowedGuestPaths.includes(pathname) && !pathname.startsWith('/_next/')) { // Avoid redirect loops from dev server requests
+           // Only redirect if not on an allowed guest path
+           // router.replace('/login'); // Consider if automatic redirect is always desired
         }
       }
       setLoading(false);
@@ -106,9 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await firebaseSignInWithEmailAndPassword(auth, email, password_param);
       // onAuthStateChanged will handle setting user state and redirection
-      // The role check and must_reset_password check happens in onAuthStateChanged
       setLoading(false);
-      return true; // Indicates Auth was successful, redirection logic is in useEffect
+      return true; 
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid credentials.", variant: "destructive"});
@@ -121,7 +130,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      // onAuthStateChanged will clear user state
+      setUser(null); // Clear user state immediately
+      setFirebaseUser(null);
       router.push('/login');
     } catch (error) {
       console.error("Firebase logout error:", error);
@@ -172,5 +182,3 @@ export function useAuth() {
   }
   return context;
 }
-
-    
