@@ -6,23 +6,25 @@ export interface Salon {
   name: string;
   address: string;
   phone?: string;
-  operatingHours?: string; // e.g., "Mon-Fri: 9am-7pm, Sat: 10am-5pm"
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
+  operatingHours?: string;
+  createdAt?: Timestamp; // Should be Timestamp from Firestore
+  updatedAt?: Timestamp; // Should be Timestamp from Firestore
 }
 
 export interface Hairdresser {
-  id: string; // Firestore document ID from 'hairdressers' collection
+  id: string; // Firestore document ID from 'hairdressers' collection (should be same as userId)
   userId: string; // Firebase Auth UID
   name: string;
   email: string;
-  assigned_locations: string[]; // Array of location IDs (references to 'locations' collection) - Primary field
+  assigned_locations: string[]; // Array of location IDs
   specialties: string[];
-  availability: string; // Simplified for form
-  working_days: DayOfWeek[];
+  availability: string; // Text description of availability
+  working_days: DayOfWeek[]; // This might become redundant if 'availability' string is comprehensive
   profilePictureUrl?: string;
-  // color_code: string; // Hex color for calendar - Temporarily removed due to parsing issues
   must_reset_password?: boolean;
+  // Firestore timestamps, converted to Date or string for UI if needed
+  createdAt?: Timestamp | Date | string;
+  updatedAt?: Timestamp | Date | string;
 }
 
 export interface Booking {
@@ -50,8 +52,8 @@ export interface User {
   email: string | null;
   role: 'admin' | 'hairdresser' | 'unknown';
   avatarUrl?: string;
-  hairdresserDocId?: string;
-  hairdresserProfileId?: string; // Added for consistency with current usage in BookingForm/Calendar
+  hairdresserDocId?: string; // Firestore doc ID for the hairdresser profile (same as uid for hairdressers)
+  hairdresserProfileId?: string; // Auth UID, used for linking (same as uid for hairdressers)
   must_reset_password?: boolean;
 }
 
@@ -67,7 +69,7 @@ export type HairdresserAvailability = Partial<Record<DayOfWeek, AvailabilitySlot
 
 // --- Firestore Document Types ---
 
-export interface LocationDoc { // This can represent the structure in Firestore for a Salon
+export interface LocationDoc {
   name: string;
   address: string;
   phone?: string;
@@ -79,16 +81,16 @@ export interface LocationDoc { // This can represent the structure in Firestore 
 export interface HairdresserDoc {
   name: string;
   email: string;
-  user_id: string;
+  user_id: string; // Auth UID
   assigned_locations: string[];
-  working_days: DayOfWeek[];
-  // color_code: string; // Temporarily removed
+  working_days: DayOfWeek[]; // Consider if this is still primary or if 'availability' string is enough
+  availability: string; // Text description like "Mon-Fri 9am-5pm"
   must_reset_password: boolean;
   specialties?: string[];
-  availability_schedule?: HairdresserAvailability;
+  // availability_schedule?: HairdresserAvailability; // Complex schedule object, if needed in future
   profilePictureUrl?: string;
-  createdAt: Timestamp; // Added for consistency
-  updatedAt: Timestamp; // Added for consistency
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface StyleDoc {
@@ -111,9 +113,9 @@ export interface BookingDoc {
     [key: string]: any;
   };
   price: number;
-  date: Timestamp; // Should be the primary field for querying by date
-  start_time: string; // e.g., "14:30"
-  end_time: string; // e.g., "15:30"
+  date: Timestamp;
+  start_time: string;
+  end_time: string;
   duration_minutes: number;
   deposit_paid: boolean;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no-show';

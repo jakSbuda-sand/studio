@@ -9,8 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
-import type { Hairdresser, Salon, DayOfWeek, User } from "@/lib/types";
-import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail } from "lucide-react";
+import type { Hairdresser, Salon, DayOfWeek, User, LocationDoc, HairdresserDoc } from "@/lib/types";
+import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail, Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,28 +26,72 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-
-const mockSalonsData: Salon[] = [
-  { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand", phone: "011 555 1234", operatingHours: "Mon-Fri: 9am-6pm, Sat: 9am-4pm" },
-  { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg", phone: "011 555 5678", operatingHours: "Tue-Sat: 8am-7pm, Sun: 10am-3pm" },
-];
-
-const initialMockHairdressers: Hairdresser[] = [
-  { id: "mock-h1", userId: "mock-uid1", name: "Alice Smith (Mock)", assigned_locations: ["1"], specialties: ["Cutting", "Coloring"], availability: "Mon-Fri 9am-5pm", working_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], profilePictureUrl: "https://placehold.co/100x100.png?text=AS", email: "alice.mock@salonverse.com", must_reset_password: false },
-  { id: "mock-h2", userId: "mock-uid2", name: "Bob Johnson (Mock)", assigned_locations: ["2", "1"], specialties: ["Styling", "Men's Cuts"], availability: "Tue-Sat 10am-6pm", working_days: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], profilePictureUrl: "https://placehold.co/100x100.png?text=BJ", email: "bob.mock@salonverse.com", must_reset_password: false },
-];
-
+import { db, collection, getDocs, doc, updateDoc, deleteDoc, Timestamp, serverTimestamp } from "@/lib/firebase";
 
 export default function HairdressersPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [hairdressers, setHairdressers] = useState<Hairdresser[]>(initialMockHairdressers);
-  const [salons] = useState<Salon[]>(mockSalonsData);
+  const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
+  const [salons, setSalons] = useState<Salon[]>([]);
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [editingHairdresser, setEditingHairdresser] = useState<Hairdresser | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // For initial data loading
+  const [isSubmitting, setIsSubmitting] = useState(false); // For form submissions and deletions
 
-  if (!user || user.role === 'unknown') return <p>Loading...</p>;
+  useEffect(() => {
+    if (user && user.role !== 'admin') {
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch Salons
+        const locationsCol = collection(db, "locations");
+        const locationSnapshot = await getDocs(locationsCol);
+        const salonsList = locationSnapshot.docs.map(sDoc => ({ // Renamed doc to sDoc
+          id: sDoc.id,
+          ...(sDoc.data() as LocationDoc)
+        } as Salon));
+        setSalons(salonsList);
+
+        // Fetch Hairdressers
+        const hairdressersCol = collection(db, "hairdressers");
+        const hairdresserSnapshot = await getDocs(hairdressersCol);
+        const hairdressersList = hairdresserSnapshot.docs.map(hDoc => { // Renamed doc to hDoc
+          const data = hDoc.data() as HairdresserDoc;
+          return {
+            id: hDoc.id, // Firestore doc ID
+            userId: data.user_id, // Auth UID
+            name: data.name,
+            email: data.email,
+            assigned_locations: data.assigned_locations || [],
+            specialties: data.specialties || [],
+            availability: data.availability || "",
+            working_days: data.working_days || [],
+            profilePictureUrl: data.profilePictureUrl || "",
+            must_reset_password: data.must_reset_password || false,
+            createdAt: data.createdAt, // Keep as Timestamp or convert if needed
+            updatedAt: data.updatedAt,
+          } as Hairdresser;
+        });
+        setHairdressers(hairdressersList.sort((a,b) => a.name.localeCompare(b.name)));
+
+      } catch (error) {
+        console.error("Error fetching data: ", error);
+        toast({ title: "Error Fetching Data", description: "Could not load hairdressers or salons.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (user && user.role === 'admin') {
+      fetchData();
+    }
+  }, [user]);
+
+  if (!user || user.role === 'unknown') return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading user...</span></div>;
 
   if (user.role !== 'admin') {
     return (
@@ -63,34 +107,58 @@ export default function HairdressersPage() {
 
   const handleUpdateHairdresser = async (data: HairdresserFormValues) => {
     if (!editingHairdresser) return;
-    setIsLoading(true);
-    console.log("Updating hairdresser (mock):", editingHairdresser.id, data);
+    setIsSubmitting(true);
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const updatedMockHairdresser: Hairdresser = {
-      ...editingHairdresser,
+    // Simple parsing of working_days from availability string for consistency with creation.
+    const parsedWorkingDays: DayOfWeek[] = [];
+    if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
+    if (data.availability.toLowerCase().includes("tue")) parsedWorkingDays.push("Tuesday");
+    // ... add other days ...
+    if (data.availability.toLowerCase().includes("fri")) parsedWorkingDays.push("Friday");
+
+
+    const hairdresserRef = doc(db, "hairdressers", editingHairdresser.id);
+    const updateData: Partial<HairdresserDoc> = {
       name: data.name,
+      // email: data.email, // Email change is complex, typically not done here
       assigned_locations: data.assigned_locations,
-      specialties: data.specialties.split(",").map(s => s.trim()),
-      availability: data.availability, 
-      working_days: data.availability.split(',').map(d => d.trim() as DayOfWeek),
-      profilePictureUrl: data.profilePictureUrl || editingHairdresser.profilePictureUrl,
+      specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
+      availability: data.availability,
+      working_days: parsedWorkingDays, // Update working_days based on availability string
+      profilePictureUrl: data.profilePictureUrl || "",
+      updatedAt: serverTimestamp() as Timestamp,
     };
-    setHairdressers(prev => prev.map(h => h.id === editingHairdresser.id ? updatedMockHairdresser : h));
-    toast({ title: "Hairdresser Updated (Simulation)", description: `${data.name} has been updated.` });
-    setIsEditFormOpen(false);
-    setEditingHairdresser(null);
-    setIsLoading(false);
+
+    try {
+      await updateDoc(hairdresserRef, updateData);
+      setHairdressers(prev => prev.map(h => 
+        h.id === editingHairdresser.id ? { ...h, ...updateData, updatedAt: Timestamp.now() } : h // Update local state
+      ).sort((a,b) => a.name.localeCompare(b.name)));
+      toast({ title: "Hairdresser Updated", description: `${data.name} has been updated.` });
+      setIsEditFormOpen(false);
+      setEditingHairdresser(null);
+    } catch (error) {
+      console.error("Error updating hairdresser:", error);
+      toast({ title: "Update Failed", description: "Could not update hairdresser.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDeleteHairdresser = async (hairdresserToDelete: Hairdresser) => {
-    setIsLoading(true);
-    console.log("Deleting hairdresser (mock):", hairdresserToDelete.id, hairdresserToDelete.userId);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
-    toast({ title: "Hairdresser Deleted (Simulation)", description: `Hairdresser ${hairdresserToDelete.name} has been removed.`, variant: "destructive" });
-    setIsLoading(false);
+    setIsSubmitting(true);
+    try {
+      // TODO: This only deletes the Firestore doc from 'hairdressers'.
+      // A full deletion requires a Firebase Function to delete the Auth user and 'users' doc.
+      await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id));
+      setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
+      toast({ title: "Hairdresser Record Deleted", description: `Firestore record for ${hairdresserToDelete.name} deleted. Full user deletion requires a Cloud Function.`, variant: "destructive" });
+    } catch (error) {
+        console.error("Error deleting hairdresser Firestore record:", error);
+        toast({ title: "Deletion Failed", description: "Could not delete hairdresser record.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   const openEditForm = (hairdresserToEdit: Hairdresser) => {
@@ -98,16 +166,21 @@ export default function HairdressersPage() {
     setIsEditFormOpen(true);
   };
   
-  const getSalonNames = (locationIds: string[]) => {
-    return locationIds.map(id => salons.find(s => s.id === id)?.name || "Unknown Salon").join(", ");
-  };
-  
   const getSalonBadges = (locationIds: string[]) => {
     return locationIds.map(id => {
         const salon = salons.find(s => s.id === id);
-        return salon ? <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon.name}</Badge> : null;
+        return salon ? <Badge key={id} variant="secondary" className="mr-1 mb-1 font-body">{salon.name}</Badge> : null;
     }).filter(Boolean);
   };
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-full">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading hairdressers...</span>
+        </div>
+      );
+  }
 
 
   return (
@@ -134,7 +207,7 @@ export default function HairdressersPage() {
               salons={salons} 
               onSubmit={handleUpdateHairdresser}
               isEditing={true}
-              isLoading={isLoading}
+              isLoading={isSubmitting}
             />
           )}
         </DialogContent>
@@ -158,7 +231,7 @@ export default function HairdressersPage() {
             <Card key={hairdresser.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg overflow-hidden">
               <CardHeader className="flex flex-row items-start gap-4 bg-secondary/30 p-4">
                 <Avatar className="h-16 w-16 border-2 border-primary shrink-0">
-                  <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait" />
+                  <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait"/>
                   <AvatarFallback className="bg-primary/30 text-primary font-headline"> {hairdresser.name.split(" ").map(n => n[0]).join("").toUpperCase()} </AvatarFallback>
                 </Avatar>
                 <div className="flex-grow">
@@ -171,17 +244,27 @@ export default function HairdressersPage() {
               </CardHeader>
               <CardContent className="pt-4 space-y-2 font-body flex-grow p-4">
                  {hairdresser.email && ( <div className="flex items-start text-sm"> <Mail className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Email: </strong> {hairdresser.email} </div> </div> )}
-                 {hairdresser.must_reset_password && <p className="text-xs text-destructive">User must reset password on next login.</p>}
+                 {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs mt-1">Password Reset Required</Badge>}
                 <div className="flex items-start text-sm"> <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Specialties: </strong> {hairdresser.specialties.join(", ")} </div> </div>
                 <div className="flex items-start text-sm"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability: </strong> {hairdresser.availability} </div> </div>
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isLoading}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
+                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isSubmitting}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
                  <AlertDialog>
-                  <AlertDialogTrigger asChild><Button variant="destructive" size="sm" className="font-body" disabled={isLoading}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button></AlertDialogTrigger>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" className="font-body" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
+                        Delete
+                    </Button>
+                  </AlertDialogTrigger>
                   <AlertDialogContent>
-                    <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action cannot be undone. This will permanently delete the hairdresser "{hairdresser.name}". Real deletion requires a Cloud Function. </AlertDialogDescription> </AlertDialogHeader>
-                    <AlertDialogFooter> <AlertDialogCancel className="font-body">Cancel</AlertDialogCancel> <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body"> Delete (Simulated) </AlertDialogAction> </AlertDialogFooter>
+                    <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action will delete the Firestore record for "{hairdresser.name}". Full user deletion (Auth & 'users' record) requires a separate Cloud Function. </AlertDialogDescription> </AlertDialogHeader>
+                    <AlertDialogFooter> 
+                        <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel> 
+                        <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}> 
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Record"}
+                        </AlertDialogAction> 
+                    </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
               </CardFooter>

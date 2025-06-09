@@ -19,8 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Hairdresser, Salon } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card"; // CardHeader, CardTitle removed as not used directly
-import { Users, Lock } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Lock, Loader2 } from "lucide-react"; // Added Loader2
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
@@ -28,7 +28,7 @@ const hairdresserFormSchema = z.object({
   initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
   assigned_locations: z.array(z.string()).nonempty({ message: "Please select at least one salon." }),
   specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
-  availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}),
+  availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}), // Text description
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
 });
 
@@ -55,20 +55,20 @@ export function HairdresserForm({
       return {
         name: initialData.name || "",
         email: initialData.email || "",
-        initialPassword: "", 
+        initialPassword: "", // Not used for editing
         assigned_locations: initialData.assigned_locations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
-        availability: initialData.availability || "",
+        availability: initialData.availability || "", // Use the string field
         profilePictureUrl: initialData.profilePictureUrl || "",
       };
     }
-    return {
+    return { // Defaults for adding a new hairdresser
       name: "",
       email: "",
       initialPassword: "",
       assigned_locations: [],
       specialties: "",
-      availability: "",
+      availability: "Mon-Fri 9am-5pm, Sat 10am-3pm", // Example default
       profilePictureUrl: "",
     };
   }, [initialData, isEditing]);
@@ -80,10 +80,14 @@ export function HairdresserForm({
 
   useEffect(() => {
     form.reset(getInitialFormValues());
-  }, [initialData, getInitialFormValues, form]); // form.reset simplified to just 'form'
+  }, [initialData, getInitialFormValues, form]);
 
   const handleSubmitInternal = async (data: HairdresserFormValues) => {
     await onSubmit(data);
+    // Reset form only if it's for adding a new hairdresser and not editing
+    // if (!isEditing) {
+    //   form.reset(getInitialFormValues()); // This might be better handled by parent page navigation
+    // }
   };
 
   return (
@@ -109,7 +113,7 @@ export function HairdresserForm({
                     <FormItem>
                     <FormLabel>Email Address</FormLabel>
                     <FormControl><Input type="email" placeholder="jane.doe@example.com" {...field} disabled={isEditing} /></FormControl>
-                    {isEditing && <FormDescription>Email cannot be changed after creation.</FormDescription>}
+                    {isEditing && <FormDescription>Email cannot be changed after creation through this form.</FormDescription>}
                     <FormMessage />
                     </FormItem>
                 )}
@@ -197,12 +201,12 @@ export function HairdresserForm({
                 />
                 <FormField
                 control={form.control}
-                name="availability"
+                name="availability" // This is the text description
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Working Schedule / Availability</FormLabel>
                     <FormControl><Textarea placeholder="e.g., Mon-Fri 9am-5pm, Sat 10am-3pm (flexible)" {...field} /></FormControl>
-                    <FormDescription>Describe their general working days and hours.</FormDescription>
+                    <FormDescription>Describe their general working days and hours (text format).</FormDescription>
                     <FormMessage />
                     </FormItem>
                 )}
@@ -213,14 +217,15 @@ export function HairdresserForm({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Profile Picture URL (Optional)</FormLabel>
-                    <FormControl><Input placeholder="https://example.com/image.png" {...field} /></FormControl>
+                    <FormControl><Input placeholder="https://placehold.co/100x100.png" {...field} /></FormControl>
                     <FormDescription>A direct link to an image for their profile.</FormDescription>
                     <FormMessage />
                     </FormItem>
                 )}
                 />
                 <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-                {isLoading ? (isEditing ? "Saving Changes..." : "Adding Hairdresser...") : (isEditing ? "Save Changes" : "Add Hairdresser")}
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isLoading ? (isEditing ? "Saving Changes..." : "Adding Hairdresser...") : (isEditing ? "Save Changes" : "Add Hairdresser")}
                 </Button>
             </form>
             </Form>
