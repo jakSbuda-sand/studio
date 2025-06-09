@@ -11,16 +11,19 @@ if (admin.apps.length === 0) {
 }
 
 const db = admin.firestore();
+const FieldValue = admin.firestore.FieldValue; // Get FieldValue more directly
 
 interface CreateHairdresserData {
   email: string;
   password?: string;
   displayName: string;
   assigned_locations: string[];
-  working_days: string[]; // This might be derived or simplified if 'availability' string is primary
+  // working_days: string[]; // This might be derived or simplified if 'availability' string is primary
   availability: string; // Text description of availability, e.g., "Mon-Fri 9am-5pm"
   specialties?: string[];
   profilePictureUrl?: string;
+  // working_days might be parsed from availability string if needed
+  working_days: string[]; // Keep if form sends it, or parse from availability
 }
 
 export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context) => {
@@ -43,17 +46,17 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       );
     }
   } catch (error) {
-    console.error("Error checking admin role:", error);
+    functions.logger.error("Error checking admin role:", error);
     throw new functions.https.HttpsError(
         "internal",
         "Failed to verify admin privileges."
     );
   }
 
-  if (!data.email || !data.displayName || !data.assigned_locations || !data.working_days || !data.availability) {
+  if (!data.email || !data.displayName || !data.assigned_locations || !data.availability) { // Removed working_days from this direct check if it's derived
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "Missing required fields: email, displayName, assigned_locations, working_days, availability."
+      "Missing required fields: email, displayName, assigned_locations, availability."
     );
   }
 
@@ -65,7 +68,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false,
+      emailVerified: false, // Consider sending a verification email
       photoURL: data.profilePictureUrl || undefined,
     });
     functions.logger.log("Successfully created new auth user:", newUserRecord.uid);
@@ -87,7 +90,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     name: data.displayName,
     email: data.email,
     role: "hairdresser",
-    created_at: admin.firestore.FieldValue.serverTimestamp(),
+    created_at: FieldValue.serverTimestamp(),
   });
 
   const newHairdresserDocRef = db.collection("hairdressers").doc(newUserRecord.uid);
@@ -96,13 +99,13 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     name: data.displayName,
     email: data.email,
     assigned_locations: data.assigned_locations,
-    working_days: data.working_days, // Consider how this relates to 'availability' string
-    availability: data.availability, // Storing the descriptive string
+    working_days: data.working_days || [], // Ensure it's an array, even if empty
+    availability: data.availability,
     specialties: data.specialties || [],
     profilePictureUrl: data.profilePictureUrl || "",
     must_reset_password: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   try {
@@ -111,7 +114,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     return { 
         status: "success", 
         userId: newUserRecord.uid, 
-        message: `Hairdresser ${data.displayName} created successfully. Temporary password: ${temporaryPassword}` 
+        message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.` 
     };
   } catch (error: any) {
     functions.logger.error("Error committing batch for Firestore documents:", error);
