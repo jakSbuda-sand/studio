@@ -5,7 +5,7 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore"; // Modular import
+// Removed: import { FieldValue } from "firebase-admin/firestore"; 
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -88,7 +88,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     name: data.displayName,
     email: data.email,
     role: "hairdresser",
-    created_at: FieldValue.serverTimestamp(), // Use imported FieldValue
+    created_at: admin.firestore.FieldValue.serverTimestamp(), // Use fully qualified path
   });
 
   const newHairdresserDocRef = db.collection("hairdressers").doc(newUserRecord.uid);
@@ -102,8 +102,8 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     specialties: data.specialties || [],
     profilePictureUrl: data.profilePictureUrl || "",
     must_reset_password: true,
-    createdAt: FieldValue.serverTimestamp(), // Use imported FieldValue
-    updatedAt: FieldValue.serverTimestamp(), // Use imported FieldValue
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), // Use fully qualified path
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(), // Use fully qualified path
   });
 
   try {
@@ -137,3 +137,4 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
 //   // Implementation
 //   // ...
 // });
+
