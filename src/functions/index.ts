@@ -65,7 +65,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false,
+      emailVerified: false, // Consider setting to true if you have an email verification flow
       photoURL: data.profilePictureUrl || undefined,
     });
     functions.logger.log("Successfully created new auth user:", newUserRecord.uid);
@@ -80,32 +80,36 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     );
   }
 
-  // Only create a document in the 'hairdressers' collection
+  // Create a document in the 'hairdressers' collection
   const newHairdresserDocRef = db.collection("hairdressers").doc(newUserRecord.uid);
   try {
     await newHairdresserDocRef.set({
-      user_id: newUserRecord.uid,
+      user_id: newUserRecord.uid, // Storing Auth UID
       name: data.displayName,
       email: data.email,
-      assigned_locations: data.assigned_locations,
+      assigned_locations: data.assigned_locations || [],
       working_days: data.working_days || [],
       availability: data.availability,
       specialties: data.specialties || [],
       profilePictureUrl: data.profilePictureUrl || "",
-      must_reset_password: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      must_reset_password: true, // User must reset their password on first login
+      createdAt: admin.firestore.Timestamp.now(), // Using Timestamp.now()
+      updatedAt: admin.firestore.Timestamp.now(), // Using Timestamp.now()
     });
     functions.logger.log("Successfully created Firestore document for hairdresser:", newUserRecord.uid);
+
     return {
         status: "success",
         userId: newUserRecord.uid,
         message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.`
     };
+
   } catch (error: any) {
     functions.logger.error("Error creating Firestore document for hairdresser:", error);
-    // Consider deleting the Auth user if Firestore write fails
-    // await admin.auth().deleteUser(newUserRecord.uid);
+    // Best practice: If Firestore write fails, delete the created Auth user to avoid orphans
+    await admin.auth().deleteUser(newUserRecord.uid).catch(deleteError => {
+        functions.logger.error("Error deleting auth user after Firestore failure:", deleteError);
+    });
     throw new functions.https.HttpsError(
       "internal",
       `Error creating Firestore document for hairdresser: ${error.message}`
@@ -117,11 +121,11 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
 // This function needs to:
 // 1. Delete the Firebase Auth user.
 // 2. Delete the hairdresser document from 'hairdressers' collection.
-// 3. Delete the user document from 'users' collection (if it exists for admins, or if old hairdressers have one).
-// 4. Handle any related data cleanup (e.g., bookings).
+// 3. Handle any related data cleanup (e.g., reassigning bookings or notifying clients).
 // export const deleteHairdresserUser = functions.https.onCall(async (data: { userIdToDelete: string }, context) => {
 //   // Authentication & Admin Check
 //   // ...
 //   // Implementation
 //   // ...
 // });
+
