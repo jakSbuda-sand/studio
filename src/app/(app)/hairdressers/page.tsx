@@ -35,8 +35,8 @@ export default function HairdressersPage() {
   const [salons, setSalons] = useState<Salon[]>([]);
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [editingHairdresser, setEditingHairdresser] = useState<Hairdresser | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // For initial data loading
-  const [isSubmitting, setIsSubmitting] = useState(false); // For form submissions and deletions
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
@@ -47,7 +47,6 @@ export default function HairdressersPage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch Salons
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
         const salonsList = locationSnapshot.docs.map(sDoc => ({ 
@@ -56,16 +55,17 @@ export default function HairdressersPage() {
         } as Salon));
         setSalons(salonsList);
 
-        // Fetch Hairdressers
         const hairdressersCol = collection(db, "hairdressers");
         const hairdresserSnapshot = await getDocs(hairdressersCol);
-        const hairdressersList = hairdresserSnapshot.docs.map(hDoc => { 
+        const hairdressersListPromises = hairdresserSnapshot.docs.map(async hDoc => { 
           const data = hDoc.data() as HairdresserDoc;
+          // Fetch user document from 'users' to get additional details if needed or to verify consistency.
+          // For now, email is assumed to be in HairdresserDoc.
           return {
             id: hDoc.id, 
             userId: data.user_id, 
             name: data.name,
-            email: data.email,
+            email: data.email, // Assuming email is stored in HairdresserDoc
             assigned_locations: data.assigned_locations || [],
             specialties: data.specialties || [],
             availability: data.availability || "",
@@ -76,11 +76,12 @@ export default function HairdressersPage() {
             updatedAt: data.updatedAt,
           } as Hairdresser;
         });
+        const hairdressersList = await Promise.all(hairdressersListPromises);
         setHairdressers(hairdressersList.sort((a,b) => a.name.localeCompare(b.name)));
 
-      } catch (error) {
-        console.error("Error fetching data: ", error);
-        toast({ title: "Error Fetching Data", description: "Could not load hairdressers or salons.", variant: "destructive" });
+      } catch (error: any) {
+        console.error("Detailed error fetching data: ", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        toast({ title: "Error Fetching Data", description: "Could not load hairdressers or salons. " + error.message, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
@@ -93,7 +94,7 @@ export default function HairdressersPage() {
 
   if (!user || user.role === 'unknown') return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading user...</span></div>;
 
-  if (user.role !== 'admin') {
+  if (user.role !== 'admin' && !isLoading) { // Ensure isLoading is false before showing access denied
     return (
       <div className="space-y-8 flex flex-col items-center justify-center h-full">
         <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
@@ -109,8 +110,6 @@ export default function HairdressersPage() {
     if (!editingHairdresser) return;
     setIsSubmitting(true);
     
-    // Simple parsing of working_days from availability string for consistency with creation.
-    // This is a basic example; you might want more robust parsing based on your 'availability' format.
     const parsedWorkingDays: DayOfWeek[] = [];
     if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
     if (data.availability.toLowerCase().includes("tue")) parsedWorkingDays.push("Tuesday");
@@ -120,17 +119,15 @@ export default function HairdressersPage() {
     if (data.availability.toLowerCase().includes("sat")) parsedWorkingDays.push("Saturday");
     if (data.availability.toLowerCase().includes("sun")) parsedWorkingDays.push("Sunday");
 
-
     const hairdresserRef = doc(db, "hairdressers", editingHairdresser.id);
     const updateData: Partial<HairdresserDoc> = {
       name: data.name,
-      // email: data.email, // Email change is complex, typically not done here
       assigned_locations: data.assigned_locations,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
       availability: data.availability,
-      working_days: parsedWorkingDays, // Update working_days based on availability string
+      working_days: parsedWorkingDays,
       profilePictureUrl: data.profilePictureUrl || "",
-      updatedAt: serverTimestamp() as Timestamp, // Use serverTimestamp for updates
+      updatedAt: serverTimestamp() as Timestamp,
     };
 
     try {
@@ -138,21 +135,16 @@ export default function HairdressersPage() {
       setHairdressers(prev => prev.map(h => 
         h.id === editingHairdresser.id ? { 
             ...h, 
-            name: data.name,
-            assigned_locations: data.assigned_locations,
-            specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
-            availability: data.availability,
-            working_days: parsedWorkingDays,
-            profilePictureUrl: data.profilePictureUrl || "",
-            updatedAt: Timestamp.now() // For optimistic UI update, actual value is server-generated
+            ...updateData, // Spread the updateData
+            updatedAt: Timestamp.now() // For optimistic UI update
         } : h 
       ).sort((a,b) => a.name.localeCompare(b.name)));
       toast({ title: "Hairdresser Updated", description: `${data.name} has been updated.` });
       setIsEditFormOpen(false);
       setEditingHairdresser(null);
-    } catch (error) {
-      console.error("Error updating hairdresser:", error);
-      toast({ title: "Update Failed", description: "Could not update hairdresser.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("Detailed error updating hairdresser:", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      toast({ title: "Update Failed", description: "Could not update hairdresser. " + error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -161,26 +153,21 @@ export default function HairdressersPage() {
   const handleDeleteHairdresser = async (hairdresserToDelete: Hairdresser) => {
     setIsSubmitting(true);
     try {
-      // TODO: This only deletes the Firestore doc from 'hairdressers'.
-      // A full deletion requires a Firebase Function to delete the Auth user and 'users' doc.
-      // For now, we only delete the hairdresser profile document.
       await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id));
       
-      // Also attempt to delete the user document from 'users' collection if the ID matches.
-      // This is still not a full cleanup but better than just deleting the hairdresser profile.
       try {
-        await deleteDoc(doc(db, "users", hairdresserToDelete.userId)); // userId is the Auth UID
+        await deleteDoc(doc(db, "users", hairdresserToDelete.userId));
         toast({ title: "Hairdresser Record Deleted", description: `Firestore records for ${hairdresserToDelete.name} deleted. Full Firebase Auth user deletion requires a Cloud Function.`, variant: "default" });
-      } catch (userDocError) {
-         toast({ title: "Hairdresser Profile Deleted", description: `Profile for ${hairdresserToDelete.name} deleted. Could not delete 'users' record. Full Firebase Auth user deletion needs a Cloud Function.`, variant: "destructive" });
-        console.error("Error deleting user document from 'users' collection:", userDocError);
+      } catch (userDocError: any) {
+         toast({ title: "Hairdresser Profile Deleted", description: `Profile for ${hairdresserToDelete.name} deleted. Could not delete 'users' record: ${userDocError.message}. Full Firebase Auth user deletion needs a Cloud Function.`, variant: "destructive" });
+        console.error("Detailed error deleting user document from 'users' collection:", userDocError, JSON.stringify(userDocError, Object.getOwnPropertyNames(userDocError)));
       }
 
       setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
 
-    } catch (error) {
-        console.error("Error deleting hairdresser Firestore record:", error);
-        toast({ title: "Deletion Failed", description: "Could not delete hairdresser record.", variant: "destructive" });
+    } catch (error: any) {
+        console.error("Detailed error deleting hairdresser Firestore record:", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        toast({ title: "Deletion Failed", description: "Could not delete hairdresser record. " + error.message, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
     }
@@ -275,20 +262,20 @@ export default function HairdressersPage() {
                 <div className="flex items-start text-sm"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability: </strong> {hairdresser.availability} </div> </div>
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isSubmitting}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
+                 <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isSubmitting}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
                  <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" className="font-body" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
+                        {isSubmitting && hairdresser.id === editingHairdresser?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
                         Delete
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action will delete the Firestore record for "{hairdresser.name}". Full user deletion (Auth & 'users' record) requires a separate Cloud Function. </AlertDialogDescription> </AlertDialogHeader>
                     <AlertDialogFooter> 
-                        <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel> 
-                        <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}> 
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Records"}
+                        <AlertDialogCancel className="font-body" disabled={isSubmitting && hairdresser.id === editingHairdresser?.id}>Cancel</AlertDialogCancel> 
+                        <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting && hairdresser.id === editingHairdresser?.id}> 
+                            {(isSubmitting && hairdresser.id === editingHairdresser?.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Records"}
                         </AlertDialogAction> 
                     </AlertDialogFooter>
                   </AlertDialogContent>

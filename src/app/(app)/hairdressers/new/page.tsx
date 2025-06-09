@@ -5,10 +5,11 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
-import type { Salon, DayOfWeek, HairdresserDoc, LocationDoc } from "@/lib/types";
+import type { Salon, DayOfWeek, HairdresserDoc, LocationDoc, User } from "@/lib/types"; // Added User
 import { UserPlus, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { functions, db, httpsCallable, collection, getDocs, Timestamp } from "@/lib/firebase"; // Import Timestamp
+import { functions, db, httpsCallable, collection, getDocs, Timestamp } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
 
 // Function to generate a temporary password if not provided by user
 const generateTemporaryPassword = (length = 10) => {
@@ -27,46 +28,62 @@ interface CreateHairdresserFunctionData {
   displayName: string;
   assigned_locations: string[];
   working_days: DayOfWeek[];
-  availability: string; // Ensure this matches the function's expected input
+  availability: string;
   specialties?: string[];
   profilePictureUrl?: string;
 }
 
 
 export default function NewHairdresserPage() {
+  const { user } = useAuth(); // Get current user for role check
   const router = useRouter();
   const [salons, setSalons] = useState<Salon[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingSalons, setIsFetchingSalons] = useState(true);
 
   useEffect(() => {
+    if (user && user.role !== 'admin') {
+      toast({ title: "Access Denied", description: "You don't have permission to add hairdressers.", variant: "destructive" });
+      router.replace('/dashboard');
+      return;
+    }
+
     const fetchSalons = async () => {
       setIsFetchingSalons(true);
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
-        const locationsList = locationSnapshot.docs.map(docSnapshot => ({ // Renamed doc to docSnapshot
+        const locationsList = locationSnapshot.docs.map(docSnapshot => ({
           id: docSnapshot.id,
           ...(docSnapshot.data() as LocationDoc)
         } as Salon));
         setSalons(locationsList);
-      } catch (error) {
-        console.error("Error fetching salons: ", error);
-        toast({ title: "Error Fetching Salons", description: "Could not load salon data.", variant: "destructive" });
+      } catch (error: any) {
+        console.error("Detailed error fetching salons: ", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        toast({ title: "Error Fetching Salons", description: "Could not load salon data. " + error.message, variant: "destructive" });
       } finally {
         setIsFetchingSalons(false);
       }
     };
-    fetchSalons();
-  }, []);
+    if (user && user.role === 'admin'){ // Only fetch if admin
+        fetchSalons();
+    } else if (!user) {
+        // Still loading user, or user not logged in. Handled by AuthContext or AppLayout.
+        // If not admin and user is loaded, previous check handles it.
+    }
+  }, [user, router]);
 
   const handleAddHairdresser = async (data: HairdresserFormValues) => {
+    if (user?.role !== 'admin') {
+        toast({ title: "Permission Denied", description: "You are not authorized to perform this action.", variant: "destructive" });
+        return;
+    }
     setIsLoading(true);
     const tempPassword = data.initialPassword || generateTemporaryPassword();
     
     // Simple parsing of working_days from availability string.
-    // This is a basic example; you might want more robust parsing based on your 'availability' format.
-    const parsedWorkingDays = data.availability.toLowerCase().includes("mon") ? ["Monday"] : [];
+    const parsedWorkingDays: DayOfWeek[] = [];
+    if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
     if (data.availability.toLowerCase().includes("tue")) parsedWorkingDays.push("Tuesday");
     if (data.availability.toLowerCase().includes("wed")) parsedWorkingDays.push("Wednesday");
     if (data.availability.toLowerCase().includes("thu")) parsedWorkingDays.push("Thursday");
@@ -74,13 +91,14 @@ export default function NewHairdresserPage() {
     if (data.availability.toLowerCase().includes("sat")) parsedWorkingDays.push("Saturday");
     if (data.availability.toLowerCase().includes("sun")) parsedWorkingDays.push("Sunday");
 
+
     const hairdresserDataForFunction: CreateHairdresserFunctionData = {
       email: data.email,
       password: tempPassword,
       displayName: data.name,
       assigned_locations: data.assigned_locations,
-      availability: data.availability, // Pass the descriptive string
-      working_days: parsedWorkingDays as DayOfWeek[], // Basic parsing for now
+      availability: data.availability,
+      working_days: parsedWorkingDays,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
       profilePictureUrl: data.profilePictureUrl || undefined,
     };
@@ -93,18 +111,29 @@ export default function NewHairdresserPage() {
       router.push("/hairdressers");
 
     } catch (error: any) {
-      console.error("Error calling createHairdresserUser function:", error);
+      console.error("Detailed error calling createHairdresserUser function:", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
       toast({ title: "Error Adding Hairdresser", description: error.message || "Could not add hairdresser.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isFetchingSalons) {
+  if (!user && !isFetchingSalons) { // If user is null and not fetching salons, means auth check completed.
+    // This case might be covered by AppLayout redirect, but as a fallback:
+    return <p>Loading or redirecting...</p>;
+  }
+  
+  if (user && user.role !== 'admin' && !isFetchingSalons) {
+    // Already handled by useEffect, but good for clarity if rendering proceeds
+    return <p>Access Denied. Redirecting...</p>;
+  }
+
+
+  if (isFetchingSalons || (user === null && user?.role !== 'admin')) { // if fetching or user is not loaded/not admin
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Loading salon data...</span>
+        <span className="ml-2">Loading...</span>
       </div>
     );
   }
