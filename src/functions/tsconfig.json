@@ -11,12 +11,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "rootDir": ".", // Source files are in the same directory as this tsconfig (src/functions)
+    "rootDir": "src", // Source files are in the same directory as this tsconfig (src/functions)
     "baseUrl": "." // Important for module resolution within functions if you have nested imports
   },
   "compileOnSave": true,
   "include": [
-    "index.ts" // Or "./**/*.ts" if you have multiple .ts files for functions
+    "src","index.ts" // Or "./**/*.ts" if you have multiple .ts files for functions
   ],
   "exclude": [
     "node_modules",
