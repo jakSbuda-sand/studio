@@ -1,4 +1,3 @@
-
 /**
  * @fileOverview Firebase Cloud Functions for SalonVerse App.
  */
@@ -6,8 +5,10 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
+// Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
   admin.initializeApp();
+  functions.logger.log("Firebase Admin SDK initialized.");
 }
 
 const db = admin.firestore();
@@ -20,11 +21,11 @@ interface CreateHairdresserData {
   availability: string;
   specialties?: string[];
   profilePictureUrl?: string;
-  working_days: string[];
+  working_days: string[]; // Added this from your type definition
 }
 
 export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context) => {
-  functions.logger.log("createHairdresserUser function started. Caller UID:", context.auth?.uid);
+  functions.logger.log("createHairdresserUser v3 started. Caller UID:", context.auth?.uid);
   functions.logger.log("Received data:", JSON.stringify(data));
 
   if (!context.auth) {
@@ -36,13 +37,13 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
   }
 
   const callerUid = context.auth.uid;
-  const userDocRef = db.collection("users").doc(callerUid);
+  const adminUserDocRef = db.collection("users").doc(callerUid);
 
   try {
-    functions.logger.log("Checking admin role for UID:", callerUid);
-    const userDoc = await userDocRef.get();
-    if (!userDoc.exists || userDoc.data()?.role !== "admin") {
-      functions.logger.error("Caller is not an admin or user document does not exist. Role:", userDoc.data()?.role);
+    functions.logger.log("Verifying admin role for UID:", callerUid);
+    const adminUserDoc = await adminUserDocRef.get();
+    if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
+      functions.logger.error("Caller is not an admin. Role:", adminUserDoc.data()?.role);
       throw new functions.https.HttpsError(
         "permission-denied",
         "Caller does not have admin privileges."
@@ -50,10 +51,10 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     }
     functions.logger.log("Admin role verified for UID:", callerUid);
   } catch (error: any) {
-    functions.logger.error("Error checking admin role:", error.message, error.stack);
+    functions.logger.error("Error verifying admin role:", error.message, error.stack);
     throw new functions.https.HttpsError(
-        "internal",
-        `Failed to verify admin privileges: ${error.message}`
+      "internal",
+      `Failed to verify admin privileges: ${error.message}`
     );
   }
 
@@ -66,7 +67,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
   }
 
   const temporaryPassword = data.password || Math.random().toString(36).slice(-10);
-  functions.logger.log("Temporary password generated/selected.");
+  functions.logger.log("Temporary password selected/generated.");
 
   let newUserRecord;
   try {
@@ -75,14 +76,14 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false,
+      emailVerified: false, // You might want to implement an email verification flow
       photoURL: data.profilePictureUrl || undefined,
     });
-    functions.logger.log("Successfully created new auth user with UID:", newUserRecord.uid);
+    functions.logger.log("Successfully created Firebase Auth user with UID:", newUserRecord.uid);
   } catch (error: any) {
-    functions.logger.error("Error creating new auth user:", error.message, error.stack);
+    functions.logger.error("Error creating Firebase Auth user:", error.message, error.stack);
     if (error.code === 'auth/email-already-exists') {
-        throw new functions.https.HttpsError('already-exists', 'The email address is already in use by another account.');
+      throw new functions.https.HttpsError('already-exists', 'The email address is already in use by another account.');
     }
     throw new functions.https.HttpsError(
       "internal",
@@ -94,38 +95,39 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
   try {
     functions.logger.log("Attempting to create Firestore document for hairdresser UID:", newUserRecord.uid);
     const hairdresserDocData = {
-      user_id: newUserRecord.uid,
+      user_id: newUserRecord.uid, // Storing Auth UID for reference
       name: data.displayName,
-      email: data.email,
+      email: data.email, // Storing email for easier querying if needed, and for AuthContext
       assigned_locations: data.assigned_locations || [],
       working_days: data.working_days || [],
       availability: data.availability,
       specialties: data.specialties || [],
       profilePictureUrl: data.profilePictureUrl || "",
       must_reset_password: true,
-      // Timestamps temporarily removed for diagnostics
-      // createdAt: admin.firestore.Timestamp.now(), // Or admin.firestore.FieldValue.serverTimestamp()
-      // updatedAt: admin.firestore.Timestamp.now(), // Or admin.firestore.FieldValue.serverTimestamp()
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    functions.logger.log("Hairdresser document data (without timestamps):", JSON.stringify(hairdresserDocData));
+    functions.logger.log("Hairdresser document data to be written:", JSON.stringify(hairdresserDocData));
     await newHairdresserDocRef.set(hairdresserDocData);
     functions.logger.log("Successfully created Firestore document for hairdresser:", newUserRecord.uid);
 
     return {
-        status: "success",
-        userId: newUserRecord.uid,
-        message: `Hairdresser ${data.displayName} created successfully (timestamps omitted for diagnostics). Initial password has been set; user will be prompted to change it.`
+      status: "success",
+      userId: newUserRecord.uid,
+      message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.`
     };
 
   } catch (error: any) {
     functions.logger.error("Error creating Firestore document for hairdresser:", error.message, error.stack);
+    // Attempt to delete the orphaned Firebase Auth user if Firestore write fails
     functions.logger.log("Attempting to delete orphaned auth user UID:", newUserRecord.uid);
     await admin.auth().deleteUser(newUserRecord.uid).catch(deleteError => {
-        functions.logger.error("Error deleting auth user after Firestore failure:", deleteError.message, deleteError.stack);
+      functions.logger.error("CRITICAL: Error deleting orphaned auth user after Firestore failure:", deleteError.message, deleteError.stack);
+      // This situation (Auth user created, Firestore doc failed, Auth user deletion failed) needs manual intervention.
     });
     throw new functions.https.HttpsError(
       "internal",
-      `Error creating Firestore document for hairdresser: ${error.message}`
+      `Error creating Firestore document for hairdresser: ${error.message}. Associated Auth user cleanup attempted.`
     );
   }
 });

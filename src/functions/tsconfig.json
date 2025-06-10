@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "outDir": "lib",
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2020",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "." // Source files are in the same directory as this tsconfig
+  },
+  "compileOnSave": true,
+  "include": [
+    "index.ts" // Or "./**/*.ts" if you have multiple .ts files for functions
+  ],
+  "exclude": [
+    "node_modules",
+    "lib"
+  ]
+}
