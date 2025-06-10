@@ -8,7 +8,7 @@ import * as admin from "firebase-admin";
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
   admin.initializeApp();
-  functions.logger.log("Firebase Admin SDK initialized.");
+  functions.logger.log("Firebase Admin SDK initialized in createHairdresserUser function.");
 }
 
 const db = admin.firestore();
@@ -21,11 +21,11 @@ interface CreateHairdresserData {
   availability: string;
   specialties?: string[];
   profilePictureUrl?: string;
-  working_days: string[]; // Added this from your type definition
+  working_days: string[];
 }
 
 export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context) => {
-  functions.logger.log("createHairdresserUser v3 started. Caller UID:", context.auth?.uid);
+  functions.logger.log("createHairdresserUser function started. Caller UID:", context.auth?.uid);
   functions.logger.log("Received data:", JSON.stringify(data));
 
   if (!context.auth) {
@@ -51,7 +51,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     }
     functions.logger.log("Admin role verified for UID:", callerUid);
   } catch (error: any) {
-    functions.logger.error("Error verifying admin role:", error.message, error.stack);
+    functions.logger.error("Error verifying admin role:", error.message, error.stack, JSON.stringify(error));
     throw new functions.https.HttpsError(
       "internal",
       `Failed to verify admin privileges: ${error.message}`
@@ -76,12 +76,12 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false, // You might want to implement an email verification flow
+      emailVerified: false,
       photoURL: data.profilePictureUrl || undefined,
     });
     functions.logger.log("Successfully created Firebase Auth user with UID:", newUserRecord.uid);
   } catch (error: any) {
-    functions.logger.error("Error creating Firebase Auth user:", error.message, error.stack);
+    functions.logger.error("Error creating Firebase Auth user:", error.message, error.stack, JSON.stringify(error));
     if (error.code === 'auth/email-already-exists') {
       throw new functions.https.HttpsError('already-exists', 'The email address is already in use by another account.');
     }
@@ -95,15 +95,15 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
   try {
     functions.logger.log("Attempting to create Firestore document for hairdresser UID:", newUserRecord.uid);
     const hairdresserDocData = {
-      user_id: newUserRecord.uid, // Storing Auth UID for reference
+      user_id: newUserRecord.uid,
       name: data.displayName,
-      email: data.email, // Storing email for easier querying if needed, and for AuthContext
+      email: data.email,
       assigned_locations: data.assigned_locations || [],
       working_days: data.working_days || [],
       availability: data.availability,
+      must_reset_password: true,
       specialties: data.specialties || [],
       profilePictureUrl: data.profilePictureUrl || "",
-      must_reset_password: true,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -118,12 +118,10 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     };
 
   } catch (error: any) {
-    functions.logger.error("Error creating Firestore document for hairdresser:", error.message, error.stack);
-    // Attempt to delete the orphaned Firebase Auth user if Firestore write fails
+    functions.logger.error("Error creating Firestore document for hairdresser:", error.message, error.stack, JSON.stringify(error));
     functions.logger.log("Attempting to delete orphaned auth user UID:", newUserRecord.uid);
     await admin.auth().deleteUser(newUserRecord.uid).catch(deleteError => {
-      functions.logger.error("CRITICAL: Error deleting orphaned auth user after Firestore failure:", deleteError.message, deleteError.stack);
-      // This situation (Auth user created, Firestore doc failed, Auth user deletion failed) needs manual intervention.
+      functions.logger.error("CRITICAL: Error deleting orphaned auth user after Firestore failure:", deleteError.message, deleteError.stack, JSON.stringify(deleteError));
     });
     throw new functions.https.HttpsError(
       "internal",

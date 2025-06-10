@@ -3,15 +3,16 @@
     "module": "commonjs",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "outDir": "lib",
+    "outDir": "lib", // Output built JS files to a 'lib' directory within src/functions
     "sourceMap": true,
     "strict": true,
-    "target": "es2020",
+    "target": "es2020", // Node.js 18 supports ES2020 features
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "rootDir": "." // Source files are in the same directory as this tsconfig
+    "rootDir": ".", // Source files are in the same directory as this tsconfig (src/functions)
+    "baseUrl": "." // Important for module resolution within functions if you have nested imports
   },
   "compileOnSave": true,
   "include": [
@@ -19,6 +20,6 @@
   ],
   "exclude": [
     "node_modules",
-    "lib"
+    "lib" // Exclude the output directory from being re-compiled
   ]
 }
