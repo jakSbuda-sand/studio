@@ -5,8 +5,6 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-// Import CallableContext if needed for onCall functions, or use v1 style directly
-// For v1 onCall, context type is functions.https.CallableContext
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
@@ -24,15 +22,15 @@ interface CreateHairdresserData {
   availability: string;
   specialties?: string[];
   profilePictureUrl?: string;
-  working_days: string[]; // Added from previous definition
+  working_days: string[];
 }
 
-// Correctly typed onCall function
-export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context: functions.https.CallableContext) => {
-  functions.logger.log("createHairdresserUser function started. Caller UID:", context.auth?.uid);
-  functions.logger.log("Received data:", JSON.stringify(data));
+// Using v2 onCall signature: (request: CallableRequest<T>) => any | Promise<any>
+export const createHairdresserUser = functions.https.onCall(async (request: functions.https.CallableRequest<CreateHairdresserData>) => {
+  functions.logger.log("createHairdresserUser function started. Caller UID:", request.auth?.uid);
+  functions.logger.log("Received data:", JSON.stringify(request.data));
 
-  if (!context.auth) {
+  if (!request.auth) {
     functions.logger.error("Function called while unauthenticated.");
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -40,7 +38,7 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     );
   }
 
-  const callerUid = context.auth.uid;
+  const callerUid = request.auth.uid;
   const adminUserDocRef = db.collection("users").doc(callerUid);
 
   try {
@@ -62,6 +60,8 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     );
   }
 
+  const data = request.data; // Extract data from the request object
+
   if (!data.email || !data.displayName || !data.assigned_locations || !data.availability || !data.working_days) {
     functions.logger.error("Missing required fields in input data.", data);
     throw new functions.https.HttpsError(
@@ -80,8 +80,8 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false, // Typically false for initial creation, can be changed later
-      photoURL: data.profilePictureUrl || undefined, // Use undefined if not provided
+      emailVerified: false, 
+      photoURL: data.profilePictureUrl || undefined, 
     });
     functions.logger.log("Successfully created Firebase Auth user with UID:", newUserRecord.uid);
   } catch (error: any) {
@@ -99,17 +99,17 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
   try {
     functions.logger.log("Attempting to create Firestore document for hairdresser UID:", newUserRecord.uid);
     const hairdresserDocData = {
-      user_id: newUserRecord.uid, // Storing the Auth UID
+      user_id: newUserRecord.uid, 
       name: data.displayName,
       email: data.email,
       assigned_locations: data.assigned_locations || [],
       working_days: data.working_days || [],
-      availability: data.availability, // Storing the text description
-      must_reset_password: true, // New hairdressers should reset their password
+      availability: data.availability, 
+      must_reset_password: true, 
       specialties: data.specialties || [],
       profilePictureUrl: data.profilePictureUrl || "",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(), // Use server timestamp
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(), // Use server timestamp
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), 
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(), 
     };
     functions.logger.log("Hairdresser document data to be written:", JSON.stringify(hairdresserDocData));
     await newHairdresserDocRef.set(hairdresserDocData);
@@ -122,11 +122,9 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     };
   } catch (error: any) {
     functions.logger.error("Error creating Firestore document for hairdresser:", error.message, error.stack, JSON.stringify(error));
-    // Attempt to delete the orphaned Firebase Auth user
     functions.logger.log("Attempting to delete orphaned auth user UID:", newUserRecord.uid);
     await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError) => {
       functions.logger.error("CRITICAL: Error deleting orphaned auth user after Firestore failure:", deleteError.message, deleteError.stack, JSON.stringify(deleteError));
-      // Log this critical failure, but still throw the original Firestore error to the client
     });
     throw new functions.https.HttpsError(
       "internal",
