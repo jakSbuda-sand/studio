@@ -52,7 +52,7 @@ if (!getApps().length) {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-const functions = getFunctions(app); // Initialize Functions
+const functions = getFunctions(app, "us-central1"); // Explicitly set region
 // const storage = getStorage(app); // Uncomment if you use Storage
 
 if (process.env.NODE_ENV === 'development') {
@@ -116,3 +116,4 @@ export {
   httpsCallable,
   serverTimestamp // Export serverTimestamp here
 };
+
