@@ -17,7 +17,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
   console.log("==> [NEW_PAGE_Firestore] Current user:", currentUser ? JSON.stringify(currentUser, null, 2) : "NULL");
 
   if (!currentUser) {
-    console.error("==> [NEW_PAGE_Firestore] No current user available. Aborting.");
+    console.error("==> [NEW_PAGE_Firestore] No current user available. Aborting!"); // Added exclamation
     toast({
       title: "Authentication Error",
       description: "You must be logged in to create a booking. Please refresh and log in again.",
@@ -210,4 +210,3 @@ export default function NewBookingPage() {
     </div>
   );
 }
-
