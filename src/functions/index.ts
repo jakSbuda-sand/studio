@@ -1,14 +1,17 @@
+
 /**
  * @fileOverview Firebase Cloud Functions for SalonVerse App.
  */
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+// Import CallableContext if needed for onCall functions, or use v1 style directly
+// For v1 onCall, context type is functions.https.CallableContext
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
   admin.initializeApp();
-  functions.logger.log("Firebase Admin SDK initialized in createHairdresserUser function.");
+  functions.logger.log("Firebase Admin SDK initialized.");
 }
 
 const db = admin.firestore();
@@ -21,10 +24,11 @@ interface CreateHairdresserData {
   availability: string;
   specialties?: string[];
   profilePictureUrl?: string;
-  working_days: string[];
+  working_days: string[]; // Added from previous definition
 }
 
-export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context) => {
+// Correctly typed onCall function
+export const createHairdresserUser = functions.https.onCall(async (data: CreateHairdresserData, context: functions.https.CallableContext) => {
   functions.logger.log("createHairdresserUser function started. Caller UID:", context.auth?.uid);
   functions.logger.log("Received data:", JSON.stringify(data));
 
@@ -76,8 +80,8 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
       email: data.email,
       password: temporaryPassword,
       displayName: data.displayName,
-      emailVerified: false,
-      photoURL: data.profilePictureUrl || undefined,
+      emailVerified: false, // Typically false for initial creation, can be changed later
+      photoURL: data.profilePictureUrl || undefined, // Use undefined if not provided
     });
     functions.logger.log("Successfully created Firebase Auth user with UID:", newUserRecord.uid);
   } catch (error: any) {
@@ -95,17 +99,17 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
   try {
     functions.logger.log("Attempting to create Firestore document for hairdresser UID:", newUserRecord.uid);
     const hairdresserDocData = {
-      user_id: newUserRecord.uid,
+      user_id: newUserRecord.uid, // Storing the Auth UID
       name: data.displayName,
       email: data.email,
       assigned_locations: data.assigned_locations || [],
       working_days: data.working_days || [],
-      availability: data.availability,
-      must_reset_password: true,
+      availability: data.availability, // Storing the text description
+      must_reset_password: true, // New hairdressers should reset their password
       specialties: data.specialties || [],
       profilePictureUrl: data.profilePictureUrl || "",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), // Use server timestamp
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(), // Use server timestamp
     };
     functions.logger.log("Hairdresser document data to be written:", JSON.stringify(hairdresserDocData));
     await newHairdresserDocRef.set(hairdresserDocData);
@@ -118,13 +122,21 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     };
   } catch (error: any) {
     functions.logger.error("Error creating Firestore document for hairdresser:", error.message, error.stack, JSON.stringify(error));
+    // Attempt to delete the orphaned Firebase Auth user
     functions.logger.log("Attempting to delete orphaned auth user UID:", newUserRecord.uid);
     await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError) => {
       functions.logger.error("CRITICAL: Error deleting orphaned auth user after Firestore failure:", deleteError.message, deleteError.stack, JSON.stringify(deleteError));
+      // Log this critical failure, but still throw the original Firestore error to the client
     });
     throw new functions.https.HttpsError(
       "internal",
       `Error creating Firestore document for hairdresser: ${error.message}. Associated Auth user cleanup attempted.`
     );
   }
+});
+
+// Example of another function if you have one (like the default helloWorld)
+export const helloWorld = functions.https.onRequest((request, response) => {
+  functions.logger.info("Hello logs!", {structuredData: true});
+  response.send("Hello from Firebase!");
 });
