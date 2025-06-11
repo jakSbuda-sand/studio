@@ -17,7 +17,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
   console.log("==> [NEW_PAGE_Firestore] Current user:", currentUser ? JSON.stringify(currentUser, null, 2) : "NULL");
 
   if (!currentUser) {
-    console.error("==> [NEW_PAGE_Firestore] No current user available. Aborting!"); // Added exclamation
+    console.error("==> [NEW_PAGE_Firestore] No current user available. Aborting!");
     toast({
       title: "Authentication Error",
       description: "You must be logged in to create a booking. Please refresh and log in again.",
@@ -41,7 +41,6 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     durationMinutes: data.durationMinutes,
     status: 'Confirmed', // Default status for a new booking
     notes: data.notes || "",
-    // color is optional in BookingDoc, will be omitted if not present in data
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
   };
@@ -49,13 +48,16 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
 
   try {
     console.log("==> [NEW_PAGE_Firestore] Calling addDoc to 'bookings' collection with db instance:", db ? "DB INSTANCE OK" : "DB INSTANCE NULL/UNDEFINED");
+    if (!db) {
+        console.error("==> [NEW_PAGE_Firestore] Firestore DB instance is not available. Aborting addDoc call.");
+        throw new Error("Firestore DB instance not available.");
+    }
     const docRef = await addDoc(collection(db, "bookings"), newBookingDoc);
     console.log("==> [NEW_PAGE_Firestore] Successfully created booking with Firestore ID:", docRef.id);
     toast({ title: "Booking Created", description: `Appointment for ${data.clientName} has been successfully scheduled.` });
     return docRef.id;
   } catch (error: any) {
     console.error("==> [NEW_PAGE_Firestore] Error writing document to Firestore:", error);
-    // Attempt to stringify the error to get more details, but be cautious with large objects
     try {
       console.error("==> [NEW_PAGE_Firestore] Full error object stringified:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
     } catch (stringifyError) {
@@ -66,7 +68,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       description: `Could not save booking to database. Error: ${error.message || 'Unknown error'}. Please check browser console for more details.`,
       variant: "destructive"
     });
-    throw error; // Re-throw the error so the calling function knows it failed
+    throw error;
   }
 }
 
@@ -76,47 +78,58 @@ export default function NewBookingPage() {
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false); // Used to disable form button
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const [initialFormValues, setInitialFormValues] = useState<Partial<BookingFormValues>>({});
 
 
   useEffect(() => {
-    console.log("==> [NEW_PAGE_Effect] useEffect triggered. Auth User object:", user ? JSON.stringify(user, null, 2) : "NULL");
+    console.log("==> [NEW_PAGE_Effect] useEffect triggered. Auth User object:", user ? JSON.stringify(user, null, 2).substring(0,300) + "..." : "NULL");
     if (!user) {
-      console.log("==> [NEW_PAGE_Effect] No user authenticated, data fetching will be skipped by form logic or this effect if guarded.");
-      setIsLoading(false); // Allow form to render, it might handle no user appropriately or AppLayout will redirect
+      console.log("==> [NEW_PAGE_Effect] No user authenticated, data fetching will be skipped.");
+      setIsLoading(false);
       return;
     }
 
     const fetchData = async () => {
       console.log("==> [NEW_PAGE_Effect_FetchData] fetchData started.");
+      console.log("==> [NEW_PAGE_Effect_FetchData] Checking Firestore db instance:", db ? "DB INSTANCE OK" : "DB INSTANCE NULL/UNDEFINED");
+      if (!db) {
+        console.error("==> [NEW_PAGE_Effect_FetchData] Firestore DB instance is not available. Cannot fetch data.");
+        toast({ title: "Configuration Error", description: "Firestore database is not configured. Please contact support.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       try {
-        console.log("==> [NEW_PAGE_Effect_FetchData] Fetching salons...");
+        console.log("==> [NEW_PAGE_Effect_FetchData] Fetching salons from 'locations' collection...");
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
         const salonsList = locationSnapshot.docs.map(sDoc => ({
           id: sDoc.id,
           ...(sDoc.data() as LocationDoc)
         } as Salon));
-        console.log(`==> [NEW_PAGE_Effect_FetchData] Fetched ${salonsList.length} salons:`, JSON.stringify(salonsList, null, 2));
+        console.log(`==> [NEW_PAGE_Effect_FetchData] Fetched ${salonsList.length} salons:`, JSON.stringify(salonsList, null, 2).substring(0, 200) + "...");
         setSalons(salonsList);
 
-        console.log("==> [NEW_PAGE_Effect_FetchData] Fetching hairdressers...");
+        console.log("==> [NEW_PAGE_Effect_FetchData] Fetching hairdressers from 'hairdressers' collection...");
         const hairdressersCol = collection(db, "hairdressers");
         const hairdresserSnapshot = await getDocs(hairdressersCol);
         console.log(`==> [NEW_PAGE_Effect_FetchData] Hairdresser snapshot has ${hairdresserSnapshot.docs.length} documents.`);
 
+        if (hairdresserSnapshot.empty) {
+            console.warn("==> [NEW_PAGE_Effect_FetchData] No documents found in the 'hairdressers' collection.");
+        }
+
         const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
           const data = hDoc.data() as HairdresserDoc;
-          console.log(`==> [NEW_PAGE_Effect_FetchData] Mapping hairdresser doc ${hDoc.id}:`, JSON.stringify(data, null, 2).substring(0, 100) + "..."); // Log snippet
-          return {
+          console.log(`==> [NEW_PAGE_Effect_FetchData] Raw data for hairdresser doc ${hDoc.id}:`, JSON.stringify(data, null, 2).substring(0, 200) + "...");
+          const mappedHairdresser: Hairdresser = {
             id: hDoc.id,
             userId: data.user_id,
             name: data.name,
             email: data.email,
-            assigned_locations: data.assigned_locations || [],
+            assigned_locations: data.assigned_locations || [], // CRITICAL for form filtering
             specialties: data.specialties || [],
             availability: data.availability || "",
             working_days: data.working_days || [],
@@ -124,9 +137,11 @@ export default function NewBookingPage() {
             must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
-          } as Hairdresser;
+          };
+          console.log(`==> [NEW_PAGE_Effect_FetchData] Mapped hairdresser ${hDoc.id}: Name: ${mappedHairdresser.name}, Assigned Locations: ${JSON.stringify(mappedHairdresser.assigned_locations)}`);
+          return mappedHairdresser;
         });
-        console.log(`==> [NEW_PAGE_Effect_FetchData] Mapped ${hairdressersList.length} hairdressers:`, JSON.stringify(hairdressersList, null, 2).substring(0, 200) + "..."); // Log snippet
+        console.log(`==> [NEW_PAGE_Effect_FetchData] Mapped ${hairdressersList.length} hairdressers. Full list (first 200 chars):`, JSON.stringify(hairdressersList, null, 2).substring(0, 200) + "...");
         setHairdressers(hairdressersList);
 
         const prefillValues: Partial<BookingFormValues> = {};
@@ -137,6 +152,10 @@ export default function NewBookingPage() {
             if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
                 prefillValues.salonId = hairdresserDetails.assigned_locations[0];
                 console.log("==> [NEW_PAGE_Effect_FetchData] Prefilling salonId:", hairdresserDetails.assigned_locations[0]);
+            } else if (hairdresserDetails) {
+                 console.warn("==> [NEW_PAGE_Effect_FetchData] Hairdresser has no assigned locations, salonId will not be prefilled.");
+            } else {
+                 console.warn("==> [NEW_PAGE_Effect_FetchData] Could not find hairdresser details for prefill with ID:", user.hairdresserProfileId);
             }
             console.log("==> [NEW_PAGE_Effect_FetchData] Prefill values for hairdresser:", JSON.stringify(prefillValues, null, 2));
         }
@@ -156,7 +175,7 @@ export default function NewBookingPage() {
 
   const handleCreateBooking = async (data: BookingFormValues) => {
     console.log("==> [NEW_PAGE_HandleSubmit] Starting booking creation process. Form data:", JSON.stringify(data, null, 2));
-    console.log("==> [NEW_PAGE_HandleSubmit] Current auth user from useAuth():", user ? JSON.stringify(user, null, 2) : "NULL");
+    console.log("==> [NEW_PAGE_HandleSubmit] Current auth user from useAuth():", user ? JSON.stringify(user, null, 2).substring(0,300) + "..." : "NULL");
 
     if (!user) {
         console.error("==> [NEW_PAGE_HandleSubmit] Critical: No user object available from useAuth() hook. Cannot proceed with booking creation.");
@@ -165,19 +184,17 @@ export default function NewBookingPage() {
             description: "Cannot create booking: User is not authenticated. Please log in again.",
             variant: "destructive",
         });
-        setIsSubmitting(false); // Ensure submission state is reset
+        setIsSubmitting(false);
         return;
     }
 
     setIsSubmitting(true);
     try {
-      // THIS IS THE CRITICAL CALL - it calls the Firestore saving function defined above.
       await createBookingInFirestore(data, user);
       console.log("==> [NEW_PAGE_HandleSubmit] Booking creation reported as successful, navigating...");
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error) {
       console.error("==> [NEW_PAGE_HandleSubmit] Failed to create booking (error caught from createBookingInFirestore):", error);
-      // Toast for error is handled by createBookingInFirestore, but good to log here too.
     } finally {
       console.log("==> [NEW_PAGE_HandleSubmit] Booking creation process finished.");
       setIsSubmitting(false);
@@ -203,9 +220,9 @@ export default function NewBookingPage() {
       <BookingForm
         salons={salons}
         allHairdressers={hairdressers}
-        onSubmit={handleCreateBooking} // This passes our handleCreateBooking to the form
+        onSubmit={handleCreateBooking}
         initialDataPreselected={initialFormValues}
-        isSubmitting={isSubmitting} // Pass the isSubmitting state to the form
+        isSubmitting={isSubmitting}
       />
     </div>
   );
