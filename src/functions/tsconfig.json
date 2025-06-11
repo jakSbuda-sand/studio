@@ -11,9 +11,16 @@
     "target": "es2017"
   },
   "compileOnSave": true,
+<<<<<<< HEAD
   "include": [
     "src",
     "index.ts",
     "index.js"
+=======
+  "include": ["src"], // Or "./**/*.ts" if you have multiple .ts files for functions
+  "exclude": [
+    "node_modules",
+    "lib" // Exclude the output directory from being re-compiled
+>>>>>>> 53cbcb1169566580327358be05de69ef735d7352
   ]
 }
