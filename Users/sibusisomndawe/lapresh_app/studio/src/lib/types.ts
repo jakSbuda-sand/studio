@@ -39,8 +39,8 @@ export interface Booking {
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
   color?: string; // For calendar event coloring
-  createdAt?: Timestamp; // Raw Firestore timestamp, for reference or sorting
-  updatedAt?: Timestamp; // Raw Firestore timestamp, for reference or sorting
+  createdAt?: Timestamp; 
+  updatedAt?: Timestamp; 
 }
 
 export interface User {

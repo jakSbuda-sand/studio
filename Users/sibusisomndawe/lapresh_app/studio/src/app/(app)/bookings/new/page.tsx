@@ -14,9 +14,8 @@ import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp } from "@/l
 async function createBookingInFirestore(data: BookingFormValues, currentUser: User | null): Promise<string> {
   console.log("Creating booking in Firestore (NewBookingPage):", data);
   
-  const [hours, minutes] = data.appointmentTime.split(':').map(Number);
-  const combinedDateTime = new Date(data.appointmentDateTime);
-  combinedDateTime.setHours(hours, minutes, 0, 0);
+  // data.appointmentDateTime from BookingForm is already the combined Date object
+  const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
 
   const newBookingDoc: Omit<BookingDoc, 'id'> = {
     clientName: data.clientName,
@@ -25,7 +24,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     salonId: data.salonId,
     hairdresserId: data.hairdresserId,
     service: data.service,
-    appointmentDateTime: Timestamp.fromDate(combinedDateTime),
+    appointmentDateTime: appointmentDateForFirestore,
     durationMinutes: data.durationMinutes,
     status: 'Confirmed', 
     notes: data.notes || "",
@@ -172,9 +171,8 @@ export default function NewBookingPage() {
         allHairdressers={hairdressers}
         onSubmit={handleCreateBooking}
         initialDataPreselected={initialFormValues}
-        isSubmitting={isSubmitting} // Pass submission state to form
+        isSubmitting={isSubmitting} 
       />
     </div>
   );
 }
-
