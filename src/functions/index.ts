@@ -82,8 +82,8 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     functions.logger.log("Successfully created Firebase Auth user with UID:", newUserRecord.uid);
   } catch (error: any) {
     functions.logger.error("Error creating Firebase Auth user:", error.message, error.stack, JSON.stringify(error));
-    if (error.code === 'auth/email-already-exists') {
-      throw new functions.https.HttpsError('already-exists', 'The email address is already in use by another account.');
+    if (error.code === "auth/email-already-exists") {
+      throw new functions.https.HttpsError("already-exists", "The email address is already in use by another account.");
     }
     throw new functions.https.HttpsError(
       "internal",
@@ -114,13 +114,12 @@ export const createHairdresserUser = functions.https.onCall(async (data: CreateH
     return {
       status: "success",
       userId: newUserRecord.uid,
-      message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.`
+      message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.`,
     };
-
   } catch (error: any) {
     functions.logger.error("Error creating Firestore document for hairdresser:", error.message, error.stack, JSON.stringify(error));
     functions.logger.log("Attempting to delete orphaned auth user UID:", newUserRecord.uid);
-    await admin.auth().deleteUser(newUserRecord.uid).catch(deleteError => {
+    await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError) => {
       functions.logger.error("CRITICAL: Error deleting orphaned auth user after Firestore failure:", deleteError.message, deleteError.stack, JSON.stringify(deleteError));
     });
     throw new functions.https.HttpsError(

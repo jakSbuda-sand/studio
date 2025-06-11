@@ -1,25 +1,19 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "NodeNext",
+    "esModuleInterop": true,
+    "moduleResolution": "nodenext",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "outDir": "lib", // Output built JS files to a 'lib' directory within src/functions
+    "outDir": "lib",
     "sourceMap": true,
     "strict": true,
-    "target": "es2020", // Node.js 18 supports ES2020 features
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "rootDir": ".", // Source files are in the same directory as this tsconfig (src/functions)
-    "baseUrl": "." // Important for module resolution within functions if you have nested imports
+    "target": "es2017"
   },
   "compileOnSave": true,
   "include": [
-    "index.ts" // Or "./**/*.ts" if you have multiple .ts files for functions
-  ],
-  "exclude": [
-    "node_modules",
-    "lib" // Exclude the output directory from being re-compiled
+    "src",
+    "index.ts",
+    "index.js"
   ]
 }
