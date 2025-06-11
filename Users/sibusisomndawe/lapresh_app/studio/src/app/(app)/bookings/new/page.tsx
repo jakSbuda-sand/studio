@@ -195,6 +195,7 @@ export default function NewBookingPage() {
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error) {
       console.error("==> [NEW_PAGE_HandleSubmit] Failed to create booking (error caught from createBookingInFirestore):", error);
+      // Toast for error is handled within createBookingInFirestore
     } finally {
       console.log("==> [NEW_PAGE_HandleSubmit] Booking creation process finished.");
       setIsSubmitting(false);
@@ -222,8 +223,10 @@ export default function NewBookingPage() {
         allHairdressers={hairdressers}
         onSubmit={handleCreateBooking}
         initialDataPreselected={initialFormValues}
-        isSubmitting={isSubmitting}
+        isSubmitting={isSubmitting} // Pass the isSubmitting state here
       />
     </div>
   );
 }
+
+    
