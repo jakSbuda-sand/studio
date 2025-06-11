@@ -45,22 +45,28 @@ export default function BookingsPage() {
   const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
 
   useEffect(() => {
+    console.log("==> [BookingsPage_Effect] useEffect triggered. User:", user ? user.uid : "NULL", "ViewMode:", viewMode);
     if (!user) {
+      console.log("==> [BookingsPage_Effect] No user, skipping data fetch.");
       setIsLoading(false);
       return;
     }
 
     const fetchData = async () => {
+      console.log("==> [BookingsPage_Effect_FetchData] fetchData started.");
       setIsLoading(true);
       try {
+        console.log("==> [BookingsPage_Effect_FetchData] Fetching salons from 'locations'...");
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
         const salonsList = locationSnapshot.docs.map(sDoc => ({ 
           id: sDoc.id,
           ...(sDoc.data() as LocationDoc)
         } as Salon));
+        console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${salonsList.length} salons.`);
         setSalons(salonsList);
 
+        console.log("==> [BookingsPage_Effect_FetchData] Fetching hairdressers from 'hairdressers'...");
         const hairdressersCol = collection(db, "hairdressers");
         const hairdresserSnapshot = await getDocs(hairdressersCol);
         const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
@@ -80,28 +86,38 @@ export default function BookingsPage() {
             updatedAt: data.updatedAt,
           } as Hairdresser;
         });
+        console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${hairdressersList.length} hairdressers.`);
         setHairdressers(hairdressersList);
 
+        console.log("==> [BookingsPage_Effect_FetchData] Constructing bookings query...");
         let bookingsQuery = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
         
         let currentViewTitle = "All Bookings";
         let currentViewDescription = "View and manage all scheduled appointments.";
 
-        if (user.role === 'hairdresser' && user.hairdresserProfileId && viewMode === 'mine') {
+        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+          console.log("==> [BookingsPage_Effect_FetchData] User is hairdresser. Filtering bookings for hairdresserId:", user.hairdresserProfileId);
+          // Hairdressers always see their own bookings regardless of viewMode param for safety,
+          // but title can change based on explicit 'view=mine'.
           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
-          currentViewTitle = "My Bookings";
-          currentViewDescription = "View and manage your scheduled appointments.";
-        } else if (user.role === 'hairdresser' && user.hairdresserProfileId && viewMode !== 'mine') {
-           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
-          currentViewTitle = "My Bookings";
-          currentViewDescription = "View and manage your scheduled appointments.";
+          if (viewMode === 'mine') {
+            currentViewTitle = "My Bookings";
+            currentViewDescription = "View and manage your scheduled appointments.";
+          } else {
+            // Default to "My Bookings" if no viewMode or other viewMode specified for hairdresser
+            currentViewTitle = "My Bookings";
+            currentViewDescription = "View and manage your scheduled appointments.";
+          }
+        } else if (user.role === 'admin') {
+          console.log("==> [BookingsPage_Effect_FetchData] User is admin. Fetching all bookings.");
         }
         setPageTitle(currentViewTitle);
         setPageDescription(currentViewDescription);
         
+        console.log("==> [BookingsPage_Effect_FetchData] Executing bookings query...");
         const bookingSnapshot = await getDocs(bookingsQuery);
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
-          const data = bDoc.data() as BookingDoc; // Uses the updated BookingDoc
+          const data = bDoc.data() as BookingDoc;
           return {
             id: bDoc.id,
             clientName: data.clientName,
@@ -114,17 +130,19 @@ export default function BookingsPage() {
             durationMinutes: data.durationMinutes,
             status: data.status,
             notes: data.notes,
-            color: data.color,
+            color: data.color, // Assuming color might be part of BookingDoc
             createdAt: data.createdAt, 
             updatedAt: data.updatedAt,
           } as Booking;
         });
+        console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${bookingsList.length} bookings.`);
         setBookings(bookingsList);
 
       } catch (error: any) {
-        console.error("Error fetching data:", error);
-        toast({ title: "Error Fetching Data", description: `Could not load data: ${error.message}`, variant: "destructive" });
+        console.error("==> [BookingsPage_Effect_FetchData] Error fetching data:", error);
+        toast({ title: "Error Fetching Data", description: `Could not load data: ${error.message}. Check console.`, variant: "destructive" });
       } finally {
+        console.log("==> [BookingsPage_Effect_FetchData] fetchData finished.");
         setIsLoading(false);
       }
     };
@@ -135,14 +153,14 @@ export default function BookingsPage() {
 
   const handleUpdateBooking = async (data: BookingFormValues) => {
     if (!editingBooking) return;
+    console.log("==> [BookingsPage_HandleUpdate] Attempting to update booking ID:", editingBooking.id, "with data:", data);
     setIsSubmitting(true);
     try {
       const bookingRef = doc(db, "bookings", editingBooking.id);
       
-      // data.appointmentDateTime is already combined by BookingForm
       const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
+      console.log("==> [BookingsPage_HandleUpdate] Converted appointmentDateTime to Firestore Timestamp:", appointmentDateForFirestore);
 
-      // Construct updateData with camelCase fields matching BookingDoc
       const updateData: Partial<BookingDoc> = {
         clientName: data.clientName,
         clientEmail: data.clientEmail || "",
@@ -154,23 +172,24 @@ export default function BookingsPage() {
         durationMinutes: data.durationMinutes,
         notes: data.notes || "",
         updatedAt: serverTimestamp() as Timestamp,
-        // status is not typically updated from the edit form, but could be added if needed
       };
+      console.log("==> [BookingsPage_HandleUpdate] Prepared Firestore update data:", updateData);
 
       await updateDoc(bookingRef, updateData);
+      console.log("==> [BookingsPage_HandleUpdate] Firestore document updated successfully.");
       
       const updatedBookingForState: Booking = {
-        ...editingBooking, // Spread existing booking to retain fields like id, status, createdAt
+        ...editingBooking,
         clientName: data.clientName,
         clientEmail: data.clientEmail,
         clientPhone: data.clientPhone,
         salonId: data.salonId,
         hairdresserId: data.hairdresserId,
         service: data.service,
-        appointmentDateTime: data.appointmentDateTime, // Use the Date object from form for UI
+        appointmentDateTime: data.appointmentDateTime,
         durationMinutes: data.durationMinutes,
         notes: data.notes,
-        updatedAt: Timestamp.now(), // Optimistic UI update for updatedAt
+        updatedAt: Timestamp.now(), 
       };
 
       setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
@@ -178,29 +197,32 @@ export default function BookingsPage() {
       setIsFormOpen(false);
       setEditingBooking(null);
     } catch (error: any) {
-      console.error("Error updating booking:", error);
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+      console.error("==> [BookingsPage_HandleUpdate] Error updating booking:", error);
+      toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
     } finally {
+      console.log("==> [BookingsPage_HandleUpdate] Update process finished.");
       setIsSubmitting(false);
     }
   };
 
-  const handleCancelBooking = async (id: string) => {
+  const handleCancelBooking = async (bookingToCancel: Booking) => {
+    console.log("==> [BookingsPage_HandleCancel] Attempting to cancel booking ID:", bookingToCancel.id);
     setIsSubmitting(true);
     try {
-      const bookingRef = doc(db, "bookings", id);
+      const bookingRef = doc(db, "bookings", bookingToCancel.id);
       await updateDoc(bookingRef, {
         status: 'Cancelled',
         updatedAt: serverTimestamp()
       });
+      console.log("==> [BookingsPage_HandleCancel] Firestore document status updated to Cancelled.");
       
-      const clientName = bookings.find(b => b.id === id)?.clientName || "the client";
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'Cancelled' as 'Cancelled', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
-      toast({ title: "Booking Cancelled", description: `Booking for ${clientName} has been cancelled.`, variant: "default" });
+      setBookings(prev => prev.map(b => b.id === bookingToCancel.id ? { ...b, status: 'Cancelled' as 'Cancelled', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      toast({ title: "Booking Cancelled", description: `Booking for ${bookingToCancel.clientName} has been cancelled.`, variant: "default" });
     } catch (error: any) {
-      console.error("Error cancelling booking:", error);
-      toast({ title: "Cancellation Failed", description: error.message, variant: "destructive" });
+      console.error("==> [BookingsPage_HandleCancel] Error cancelling booking:", error);
+      toast({ title: "Cancellation Failed", description: `Could not cancel booking: ${error.message}`, variant: "destructive" });
     } finally {
+      console.log("==> [BookingsPage_HandleCancel] Cancellation process finished.");
       setIsSubmitting(false);
     }
   };
@@ -232,7 +254,7 @@ export default function BookingsPage() {
     );
   }
 
-  if (!user) return <p>Please log in to view bookings.</p>;
+  if (!user) return <p className="text-center mt-10 font-body">Please log in to view bookings.</p>;
 
   return (
     <div className="space-y-8">
@@ -263,11 +285,11 @@ export default function BookingsPage() {
             <BookingForm
               initialData={editingBooking} 
               salons={salons}
-              allHairdressers={hairdressers}
+              allHairdressers={hairdressers} // Pass all hairdressers, form will filter
               onSubmit={editingBooking ? handleUpdateBooking : async (data) => {
                   toast({title: "Action Not Configured", description: "Please use the 'New Booking' page to create appointments from scratch.", variant: "destructive"});
               }}
-              isSubmitting={isSubmitting}
+              isSubmitting={isSubmitting} // Pass submission state
             />
           )}
         </DialogContent>
@@ -351,7 +373,7 @@ export default function BookingsPage() {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel className="font-body" disabled={isSubmitting}>Keep Booking</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleCancelBooking(booking.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
+                            <AlertDialogAction onClick={() => handleCancelBooking(booking)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
                               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Confirm Cancellation"}
                             </AlertDialogAction>
                           </AlertDialogFooter>
