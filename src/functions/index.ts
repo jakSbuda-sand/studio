@@ -3,8 +3,8 @@
  * @fileOverview Firebase Cloud Functions for SalonVerse App (v2 Signatures).
  */
 
-import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { onRequest } from "firebase-functions/v2/https";
+import {onCall, HttpsError, type CallableRequest} from "firebase-functions/v2/https";
+import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 
@@ -28,7 +28,7 @@ interface CreateHairdresserData {
 }
 
 export const createHairdresserUser = onCall(
-  { region: "us-central1" }, // You can specify options like region here
+  {region: "us-central1"}, // You can specify options like region here
   async (request: CallableRequest<CreateHairdresserData>) => {
     logger.log("createHairdresserUser (v2) function started. Caller UID:", request.auth?.uid);
     logger.log("Received data (v2):", JSON.stringify(request.data));
@@ -139,9 +139,9 @@ export const createHairdresserUser = onCall(
 );
 
 export const helloWorld = onRequest(
-  { region: "us-central1" }, // You can specify options like region here
+  {region: "us-central1"}, // You can specify options like region here
   (request, response) => {
-    logger.info("Hello logs! (v2)", { structuredData: true });
+    logger.info("Hello logs! (v2)", {structuredData: true});
     response.send("Hello from Firebase! (v2)");
   }
 );
