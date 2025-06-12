@@ -165,6 +165,7 @@ export default function BookingsPage() {
         service: data.service,
         appointmentDateTime: appointmentDateForFirestore,
         durationMinutes: data.durationMinutes,
+        status: data.status, // Add status to the update
         notes: data.notes || "",
         updatedAt: serverTimestamp() as Timestamp,
       };
@@ -183,6 +184,7 @@ export default function BookingsPage() {
         service: data.service,
         appointmentDateTime: data.appointmentDateTime, 
         durationMinutes: data.durationMinutes,
+        status: data.status, // Reflect status change in local state
         notes: data.notes,
         updatedAt: Timestamp.now(), 
       };
@@ -282,7 +284,7 @@ export default function BookingsPage() {
               {editingBooking ? "Edit Booking" : "New Booking"}
             </DialogTitle>
           </DialogHeader>
-          {(editingBooking || (isFormOpen && !editingBooking)) && (
+          {(editingBooking || (isFormOpen && !editingBooking))) && (
             <BookingForm
               initialData={editingBooking} 
               salons={salons}
@@ -393,3 +395,4 @@ export default function BookingsPage() {
     </div>
   );
 }
+

@@ -22,8 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Booking, Salon, Hairdresser } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { CalendarIcon, ClipboardList, Clock, Loader2 } from "lucide-react";
+import { format, isSameDay } from "date-fns";
+import { CalendarIcon, ClipboardList, Clock, Loader2, Info } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -37,6 +37,7 @@ const bookingFormSchema = z.object({
   appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
   appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
   durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
+  status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled'], { required_error: "Booking status is required."}),
   notes: z.string().optional(),
 });
 
@@ -57,7 +58,7 @@ export function BookingForm({
   salons, 
   allHairdressers, 
   onSubmit,
-  isSubmitting = false // Default to false if not provided
+  isSubmitting = false
 }: BookingFormProps) {
   const { user } = useAuth();
   const [selectedSalonId, setSelectedSalonId] = useState<string | undefined>(
@@ -65,10 +66,11 @@ export function BookingForm({
   );
   const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
 
-  const defaultValues = initialData ? {
+  const defaultValues: BookingFormValues = initialData ? {
     ...initialData,
     appointmentDateTime: new Date(initialData.appointmentDateTime),
     appointmentTime: format(new Date(initialData.appointmentDateTime), "HH:mm"),
+    status: initialData.status, // Ensure status is included
   } : {
     clientName: "",
     clientPhone: "",
@@ -79,8 +81,9 @@ export function BookingForm({
     appointmentDateTime: new Date(),
     appointmentTime: format(new Date(), "HH:mm"), 
     durationMinutes: 60,
+    status: 'Confirmed', // Default status for new bookings in the form
     notes: "",
-    ...initialDataPreselected, 
+    ...initialDataPreselected,
   };
 
   const form = useForm<BookingFormValues>({
@@ -135,8 +138,32 @@ export function BookingForm({
       if (name === "salonId") {
         setSelectedSalonId(value.salonId);
       }
+      if (name === "appointmentDateTime") {
+        const newSelectedDate = value.appointmentDateTime || new Date();
+        const now = new Date();
+        const isSelectedDateToday = isSameDay(newSelectedDate, now);
+        const currentAppointmentTime = form.getValues("appointmentTime");
+        const [currentHours, currentMinutes] = currentAppointmentTime.split(':').map(Number);
+        
+        if (isSelectedDateToday) {
+          const slotDateTimeForCurrentSelection = new Date(newSelectedDate);
+          slotDateTimeForCurrentSelection.setHours(currentHours, currentMinutes, 0, 0);
+          if (slotDateTimeForCurrentSelection < now) {
+            const firstAvailableSlot = timeSlots.find(slot => {
+                const [slotH, slotM] = slot.split(':').map(Number);
+                const tempSlotDate = new Date(newSelectedDate);
+                tempSlotDate.setHours(slotH, slotM, 0, 0);
+                return tempSlotDate >= now;
+            });
+            if(firstAvailableSlot) {
+                form.setValue("appointmentTime", firstAvailableSlot);
+            }
+          }
+        }
+      }
     });
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
 
 
@@ -148,7 +175,7 @@ export function BookingForm({
     await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
   };
 
-  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => { // 8 AM to 7 PM (19:00)
+  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => {
     const hour = Math.floor(i / 2) + 8;
     const minute = (i % 2) * 30;
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
@@ -165,6 +192,12 @@ export function BookingForm({
   const isHairdresserSelectDisabled = 
     (!selectedSalonId || availableHairdressers.length === 0) || 
     (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
+
+  const selectedDateFromForm = form.watch("appointmentDateTime"); 
+  const nowForTimeCheck = new Date();
+  const isSelectedDateTodayForTimeCheck = selectedDateFromForm ? isSameDay(selectedDateFromForm, nowForTimeCheck) : false;
+
+  const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
   return (
     <Card className="shadow-lg rounded-lg">
@@ -280,9 +313,22 @@ export function BookingForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {timeSlots.map(slot => (
-                        <SelectItem key={slot} value={slot}>{slot}</SelectItem>
-                      ))}
+                      {timeSlots.map(slot => {
+                        let isPastTime = false;
+                        if (isSelectedDateTodayForTimeCheck && selectedDateFromForm) {
+                            const [slotHours, slotMinutes] = slot.split(':').map(Number);
+                            const slotDateTimeOnSelectedDate = new Date(selectedDateFromForm);
+                            slotDateTimeOnSelectedDate.setHours(slotHours, slotMinutes, 0, 0);
+                            if (slotDateTimeOnSelectedDate < nowForTimeCheck) {
+                                isPastTime = true;
+                            }
+                        }
+                        return (
+                          <SelectItem key={slot} value={slot} disabled={isPastTime}>
+                            {slot}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -296,6 +342,35 @@ export function BookingForm({
                 </FormItem>
               )}/>
             </div>
+
+            {initialData && ( // Only show status dropdown if editing an existing booking
+                <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Booking Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <Info className="mr-2 h-4 w-4 opacity-50" />
+                            <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                        {bookingStatusOptions.map(statusValue => (
+                            <SelectItem key={statusValue} value={statusValue}>
+                            {statusValue}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+            )}
+
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>
                 <FormLabel>Notes (Optional)</FormLabel>
