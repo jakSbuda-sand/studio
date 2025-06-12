@@ -98,15 +98,11 @@ export default function BookingsPage() {
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           console.log("==> [BookingsPage_Effect_FetchData] User is hairdresser. Filtering bookings for hairdresserId:", user.hairdresserProfileId);
           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
-          if (viewMode === 'mine') {
-            currentViewTitle = "My Bookings";
-            currentViewDescription = "View and manage your scheduled appointments.";
-          } else {
-            currentViewTitle = "My Bookings"; // Default for hairdresser if no specific view mode
-            currentViewDescription = "View and manage your scheduled appointments.";
-          }
+          currentViewTitle = "My Bookings";
+          currentViewDescription = "View and manage your scheduled appointments.";
         } else if (user.role === 'admin') {
           console.log("==> [BookingsPage_Effect_FetchData] User is admin. Fetching all bookings.");
+          // Default title and description are already set for admin
         }
         setPageTitle(currentViewTitle);
         setPageDescription(currentViewDescription);
@@ -128,7 +124,7 @@ export default function BookingsPage() {
             durationMinutes: data.durationMinutes,
             status: data.status,
             notes: data.notes,
-            color: data.color, 
+            // color: data.color, // Assuming color is not part of BookingDoc currently
             createdAt: data.createdAt, // Timestamp
             updatedAt: data.updatedAt, // Timestamp
           } as Booking;
@@ -159,7 +155,6 @@ export default function BookingsPage() {
     try {
       const bookingRef = doc(db, "bookings", editingBooking.id);
       
-      // Ensure appointmentDateTime is converted back to Firestore Timestamp for storage
       const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
       console.log("==> [BookingsPage_HandleUpdate] Converted appointmentDateTime to Firestore Timestamp:", appointmentDateForFirestore);
 
@@ -173,26 +168,25 @@ export default function BookingsPage() {
         appointmentDateTime: appointmentDateForFirestore,
         durationMinutes: data.durationMinutes,
         notes: data.notes || "",
-        updatedAt: serverTimestamp() as Timestamp, // Use serverTimestamp for updates
+        updatedAt: serverTimestamp() as Timestamp,
       };
       console.log("==> [BookingsPage_HandleUpdate] Prepared Firestore update data:", JSON.stringify(updateData, null, 2));
 
       await updateDoc(bookingRef, updateData);
       console.log("==> [BookingsPage_HandleUpdate] Firestore document updated successfully.");
       
-      // Optimistically update local state
       const updatedBookingForState: Booking = {
-        ...editingBooking, // Spread existing booking to retain fields not in form (like status, createdAt)
+        ...editingBooking,
         clientName: data.clientName,
         clientEmail: data.clientEmail,
         clientPhone: data.clientPhone,
         salonId: data.salonId,
         hairdresserId: data.hairdresserId,
         service: data.service,
-        appointmentDateTime: data.appointmentDateTime, // This is already a Date object from the form
+        appointmentDateTime: data.appointmentDateTime, 
         durationMinutes: data.durationMinutes,
         notes: data.notes,
-        updatedAt: Timestamp.now(), // Use a client-side Timestamp for optimistic UI, Firestore will set the true server one
+        updatedAt: Timestamp.now(), 
       };
 
       setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
@@ -215,11 +209,10 @@ export default function BookingsPage() {
       const bookingRef = doc(db, "bookings", bookingToCancel.id);
       await updateDoc(bookingRef, {
         status: 'Cancelled',
-        updatedAt: serverTimestamp() // Use serverTimestamp for updates
+        updatedAt: serverTimestamp() as Timestamp
       });
       console.log("==> [BookingsPage_HandleCancel] Firestore document status updated to Cancelled.");
       
-      // Optimistically update local state
       setBookings(prev => prev.map(b => b.id === bookingToCancel.id ? { ...b, status: 'Cancelled' as 'Cancelled', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
       toast({ title: "Booking Cancelled", description: `Booking for ${bookingToCancel.clientName} has been cancelled.`, variant: "default" });
     } catch (error: any) {
@@ -289,16 +282,16 @@ export default function BookingsPage() {
               {editingBooking ? "Edit Booking" : "New Booking"}
             </DialogTitle>
           </DialogHeader>
-          {(editingBooking || (isFormOpen && !editingBooking))) && ( // Ensure form renders if dialog is open for a new booking intent OR if editing
+          {(editingBooking || (isFormOpen && !editingBooking))) && (
             <BookingForm
-              initialData={editingBooking} // This will be null if it's not an edit
+              initialData={editingBooking} 
               salons={salons}
               allHairdressers={hairdressers}
               onSubmit={editingBooking ? handleUpdateBooking : async (data) => {
                   console.warn("==> [BookingsPage_DialogSubmit] New booking submission from dialog is not standard flow. Use /bookings/new.");
-                  toast({title: "Action Not Configured", description: "Please use the 'New Booking' page to create appointments from scratch.", variant: "destructive"});
+                  toast({title: "Action Not Configured", description: "Please use the 'New Booking' page to create appointments.", variant: "destructive"});
               }}
-              isSubmitting={isSubmitting} // Pass submission state
+              isSubmitting={isSubmitting}
             />
           )}
         </DialogContent>
@@ -400,5 +393,3 @@ export default function BookingsPage() {
     </div>
   );
 }
-
-    
