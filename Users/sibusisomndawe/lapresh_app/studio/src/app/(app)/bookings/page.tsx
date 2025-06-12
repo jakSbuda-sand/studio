@@ -82,8 +82,8 @@ export default function BookingsPage() {
             working_days: data.working_days || [],
             profilePictureUrl: data.profilePictureUrl || "",
             must_reset_password: data.must_reset_password || false,
-            createdAt: data.createdAt, // This will be a Timestamp
-            updatedAt: data.updatedAt, // This will be a Timestamp
+            createdAt: data.createdAt, 
+            updatedAt: data.updatedAt, 
           } as Hairdresser;
         });
         console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${hairdressersList.length} hairdressers.`);
@@ -102,7 +102,6 @@ export default function BookingsPage() {
           currentViewDescription = "View and manage your scheduled appointments.";
         } else if (user.role === 'admin') {
           console.log("==> [BookingsPage_Effect_FetchData] User is admin. Fetching all bookings.");
-          // Default title and description are already set for admin
         }
         setPageTitle(currentViewTitle);
         setPageDescription(currentViewDescription);
@@ -120,13 +119,12 @@ export default function BookingsPage() {
             salonId: data.salonId,
             hairdresserId: data.hairdresserId,
             service: data.service,
-            appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(), // Convert Timestamp to Date
+            appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
             durationMinutes: data.durationMinutes,
             status: data.status,
             notes: data.notes,
-            // color: data.color, // Assuming color is not part of BookingDoc currently
-            createdAt: data.createdAt, // Timestamp
-            updatedAt: data.updatedAt, // Timestamp
+            createdAt: data.createdAt, 
+            updatedAt: data.updatedAt, 
           } as Booking;
         });
         console.log(`==> [BookingsPage_Effect_FetchData] Fetched and mapped ${bookingsList.length} bookings.`);
@@ -252,7 +250,9 @@ export default function BookingsPage() {
     );
   }
 
-  if (!user) return <p className="text-center mt-10 font-body">Please log in to view bookings.</p>;
+  if (!user) {
+    return <p className="text-center mt-10 font-body">Please log in to view bookings.</p>;
+  }
 
   return (
     <div className="space-y-8">
