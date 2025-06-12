@@ -96,19 +96,28 @@ export interface StyleDoc {
 }
 
 export interface BookingDoc {
-  clientName: string;
-  clientEmail?: string;
-  clientPhone: string;
-  salonId: string;
-  hairdresserId: string;
-  service: string;
-  appointmentDateTime: Timestamp; // Firestore representation
-  durationMinutes: number;
-  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
+  clientName: string; // Changed from client_name
+  clientEmail?: string; // Changed from client_email
+  clientPhone: string; // Changed from client_phone
+  salonId: string; // Changed from location_id
+  hairdresserId: string; // Changed from hairdresser_id
+  service: string; // Added field to match BookingForm/NewBookingPage
+  // style_id?: string; // Kept optional if still used elsewhere
+  // extras?: { // Kept optional if still used elsewhere
+  //   length?: string;
+  //   curls?: boolean;
+  //   beads?: boolean;
+  //   [key: string]: any;
+  // };
+  // price?: number; // Kept optional
+  appointmentDateTime: Timestamp; // Changed from date (and start_time/end_time implicitly)
+  durationMinutes: number; // Changed from duration_minutes
+  // deposit_paid?: boolean; // Kept optional
+  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled'; // Simplified statuses
   notes?: string;
   color?: string; 
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Timestamp; // Changed from created_at
+  updatedAt: Timestamp; // Changed from updated_at
 }
 
 export interface UserDoc {
@@ -128,3 +137,5 @@ export interface NotificationDoc {
   created_at: Timestamp;
   template_id?: string;
 }
+
+    

@@ -40,7 +40,7 @@ export default function BookingsPage() {
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const [pageTitle, setPageTitle] = useState("All Bookings");
   const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
 
@@ -59,7 +59,7 @@ export default function BookingsPage() {
         console.log("==> [BookingsPage_Effect_FetchData] Fetching salons from 'locations'...");
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
-        const salonsList = locationSnapshot.docs.map(sDoc => ({ 
+        const salonsList = locationSnapshot.docs.map(sDoc => ({
           id: sDoc.id,
           ...(sDoc.data() as LocationDoc)
         } as Salon));
@@ -82,22 +82,22 @@ export default function BookingsPage() {
             working_days: data.working_days || [],
             profilePictureUrl: data.profilePictureUrl || "",
             must_reset_password: data.must_reset_password || false,
-            createdAt: data.createdAt, 
-            updatedAt: data.updatedAt, 
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
           } as Hairdresser;
         });
         console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${hairdressersList.length} hairdressers.`);
         setHairdressers(hairdressersList);
 
         console.log("==> [BookingsPage_Effect_FetchData] Constructing bookings query...");
-        let bookingsQuery = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
-        
+        let bookingsQueryBuilder = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
+
         let currentViewTitle = "All Bookings";
         let currentViewDescription = "View and manage all scheduled appointments.";
 
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           console.log("==> [BookingsPage_Effect_FetchData] User is hairdresser. Filtering bookings for hairdresserId:", user.hairdresserProfileId);
-          bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
+          bookingsQueryBuilder = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
           currentViewTitle = "My Bookings";
           currentViewDescription = "View and manage your scheduled appointments.";
         } else if (user.role === 'admin') {
@@ -105,12 +105,22 @@ export default function BookingsPage() {
         }
         setPageTitle(currentViewTitle);
         setPageDescription(currentViewDescription);
-        
+
         console.log("==> [BookingsPage_Effect_FetchData] Executing bookings query...");
-        const bookingSnapshot = await getDocs(bookingsQuery);
+        const bookingSnapshot = await getDocs(bookingsQueryBuilder);
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
           console.log(`==> [BookingsPage_Effect_FetchData] Raw booking data for ${bDoc.id}:`, JSON.stringify(data).substring(0,200)+"...");
+
+          let appointmentDateTimeJS: Date;
+          if (data.appointmentDateTime instanceof Timestamp) {
+            appointmentDateTimeJS = data.appointmentDateTime.toDate();
+          } else if (typeof data.appointmentDateTime === 'string') {
+            appointmentDateTimeJS = new Date(data.appointmentDateTime);
+          } else {
+            appointmentDateTimeJS = data.appointmentDateTime;
+          }
+
           return {
             id: bDoc.id,
             clientName: data.clientName,
@@ -119,16 +129,17 @@ export default function BookingsPage() {
             salonId: data.salonId,
             hairdresserId: data.hairdresserId,
             service: data.service,
-            appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
+            appointmentDateTime: appointmentDateTimeJS,
             durationMinutes: data.durationMinutes,
             status: data.status,
             notes: data.notes,
-            createdAt: data.createdAt, 
-            updatedAt: data.updatedAt, 
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
           } as Booking;
         });
         console.log(`==> [BookingsPage_Effect_FetchData] Fetched and mapped ${bookingsList.length} bookings.`);
-        setBookings(bookingsList);
+        const sortedBookingsList = bookingsList.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
+        setBookings(sortedBookingsList);
 
       } catch (error: any) {
         console.error("==> [BookingsPage_Effect_FetchData] Error fetching data:", error);
@@ -142,7 +153,6 @@ export default function BookingsPage() {
     fetchData();
   }, [user, viewMode]);
 
-
   const handleUpdateBooking = async (data: BookingFormValues) => {
     if (!editingBooking) {
         console.error("==> [BookingsPage_HandleUpdate] No editingBooking set. Aborting.");
@@ -152,7 +162,7 @@ export default function BookingsPage() {
     setIsSubmitting(true);
     try {
       const bookingRef = doc(db, "bookings", editingBooking.id);
-      
+
       const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
       console.log("==> [BookingsPage_HandleUpdate] Converted appointmentDateTime to Firestore Timestamp:", appointmentDateForFirestore);
 
@@ -165,28 +175,29 @@ export default function BookingsPage() {
         service: data.service,
         appointmentDateTime: appointmentDateForFirestore,
         durationMinutes: data.durationMinutes,
-        status: data.status, // Add status to the update
+        status: data.status,
         notes: data.notes || "",
         updatedAt: serverTimestamp() as Timestamp,
       };
       console.log("==> [BookingsPage_HandleUpdate] Prepared Firestore update data:", JSON.stringify(updateData, null, 2));
 
-      await updateDoc(bookingRef, updateData);
+      await updateDoc(bookingRef, updateData as { [x: string]: any });
       console.log("==> [BookingsPage_HandleUpdate] Firestore document updated successfully.");
-      
+
       const updatedBookingForState: Booking = {
-        ...editingBooking,
+        id: editingBooking.id, // Keep existing ID
+        createdAt: editingBooking.createdAt, // Keep existing createdAt
         clientName: data.clientName,
-        clientEmail: data.clientEmail,
+        clientEmail: data.clientEmail || "",
         clientPhone: data.clientPhone,
         salonId: data.salonId,
         hairdresserId: data.hairdresserId,
         service: data.service,
-        appointmentDateTime: data.appointmentDateTime, 
+        appointmentDateTime: data.appointmentDateTime, // This is already a JS Date from the form
         durationMinutes: data.durationMinutes,
-        status: data.status, // Reflect status change in local state
-        notes: data.notes,
-        updatedAt: Timestamp.now(), 
+        status: data.status,
+        notes: data.notes || "",
+        updatedAt: Timestamp.now(), // For UI quick update
       };
 
       setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
@@ -212,7 +223,7 @@ export default function BookingsPage() {
         updatedAt: serverTimestamp() as Timestamp
       });
       console.log("==> [BookingsPage_HandleCancel] Firestore document status updated to Cancelled.");
-      
+
       setBookings(prev => prev.map(b => b.id === bookingToCancel.id ? { ...b, status: 'Cancelled' as 'Cancelled', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
       toast({ title: "Booking Cancelled", description: `Booking for ${bookingToCancel.clientName} has been cancelled.`, variant: "default" });
     } catch (error: any) {
@@ -223,7 +234,7 @@ export default function BookingsPage() {
       setIsSubmitting(false);
     }
   };
-  
+
   const openEditForm = (booking: Booking) => {
     console.log("==> [BookingsPage_OpenEditForm] Opening edit form for booking:", JSON.stringify(booking, null, 2).substring(0,300)+"...");
     setEditingBooking(booking);
@@ -284,14 +295,15 @@ export default function BookingsPage() {
               {editingBooking ? "Edit Booking" : "New Booking"}
             </DialogTitle>
           </DialogHeader>
-          {(editingBooking || (isFormOpen && !editingBooking))) && (
+          {(editingBooking || (isFormOpen && !editingBooking)) && (
             <BookingForm
-              initialData={editingBooking} 
+              initialData={editingBooking}
               salons={salons}
               allHairdressers={hairdressers}
               onSubmit={editingBooking ? handleUpdateBooking : async (data) => {
                   console.warn("==> [BookingsPage_DialogSubmit] New booking submission from dialog is not standard flow. Use /bookings/new.");
                   toast({title: "Action Not Configured", description: "Please use the 'New Booking' page to create appointments.", variant: "destructive"});
+                  setIsFormOpen(false);
               }}
               isSubmitting={isSubmitting}
             />
@@ -396,3 +408,4 @@ export default function BookingsPage() {
   );
 }
 
+    
