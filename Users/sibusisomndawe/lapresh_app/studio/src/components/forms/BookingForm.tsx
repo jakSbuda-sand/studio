@@ -23,7 +23,7 @@ import type { Booking, Salon, Hairdresser } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format, isSameDay } from "date-fns";
-import { CalendarIcon, ClipboardList, Clock, Loader2 } from "lucide-react";
+import { CalendarIcon, ClipboardList, Clock, Loader2, Info } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -37,6 +37,7 @@ const bookingFormSchema = z.object({
   appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
   appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
   durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
+  status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled'], { required_error: "Booking status is required."}),
   notes: z.string().optional(),
 });
 
@@ -65,10 +66,11 @@ export function BookingForm({
   );
   const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
 
-  const defaultValues = initialData ? {
+  const defaultValues: BookingFormValues = initialData ? {
     ...initialData,
     appointmentDateTime: new Date(initialData.appointmentDateTime),
     appointmentTime: format(new Date(initialData.appointmentDateTime), "HH:mm"),
+    status: initialData.status, // Ensure status is included
   } : {
     clientName: "",
     clientPhone: "",
@@ -79,8 +81,9 @@ export function BookingForm({
     appointmentDateTime: new Date(),
     appointmentTime: format(new Date(), "HH:mm"), 
     durationMinutes: 60,
+    status: 'Confirmed', // Default status for new bookings in the form
     notes: "",
-    ...initialDataPreselected, 
+    ...initialDataPreselected,
   };
 
   const form = useForm<BookingFormValues>({
@@ -136,9 +139,6 @@ export function BookingForm({
         setSelectedSalonId(value.salonId);
       }
       if (name === "appointmentDateTime") {
-        // When date changes, we might need to reset appointmentTime if the current one becomes invalid
-        // or re-evaluate available slots. For now, we'll let the disable logic handle it.
-        // We could also proactively find the next available slot if the current time is past.
         const newSelectedDate = value.appointmentDateTime || new Date();
         const now = new Date();
         const isSelectedDateToday = isSameDay(newSelectedDate, now);
@@ -149,7 +149,6 @@ export function BookingForm({
           const slotDateTimeForCurrentSelection = new Date(newSelectedDate);
           slotDateTimeForCurrentSelection.setHours(currentHours, currentMinutes, 0, 0);
           if (slotDateTimeForCurrentSelection < now) {
-            // Current selected time is in the past for today, find next available
             const firstAvailableSlot = timeSlots.find(slot => {
                 const [slotH, slotM] = slot.split(':').map(Number);
                 const tempSlotDate = new Date(newSelectedDate);
@@ -158,16 +157,13 @@ export function BookingForm({
             });
             if(firstAvailableSlot) {
                 form.setValue("appointmentTime", firstAvailableSlot);
-            } else {
-                // No slots available today, perhaps clear or set to a default.
-                // For now, this case implies all slots are past.
-                // The disabled logic will show all as disabled.
             }
           }
         }
       }
     });
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
 
 
@@ -200,6 +196,8 @@ export function BookingForm({
   const selectedDateFromForm = form.watch("appointmentDateTime"); 
   const nowForTimeCheck = new Date();
   const isSelectedDateTodayForTimeCheck = selectedDateFromForm ? isSameDay(selectedDateFromForm, nowForTimeCheck) : false;
+
+  const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
   return (
     <Card className="shadow-lg rounded-lg">
@@ -344,6 +342,35 @@ export function BookingForm({
                 </FormItem>
               )}/>
             </div>
+
+            {initialData && ( // Only show status dropdown if editing an existing booking
+                <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Booking Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <Info className="mr-2 h-4 w-4 opacity-50" />
+                            <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                        {bookingStatusOptions.map(statusValue => (
+                            <SelectItem key={statusValue} value={statusValue}>
+                            {statusValue}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+            )}
+
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>
                 <FormLabel>Notes (Optional)</FormLabel>
@@ -361,4 +388,3 @@ export function BookingForm({
     </Card>
   );
 }
-
