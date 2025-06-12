@@ -24,11 +24,12 @@ import {
   addDoc,
   query,
   where,
+  orderBy, // Ensure orderBy is imported here
   getDocs,
   Timestamp,
   deleteDoc,
   writeBatch,
-  serverTimestamp // Import serverTimestamp here
+  serverTimestamp 
 } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 // import { getStorage, connectStorageEmulator } from "firebase/storage"; // Uncomment if you use Storage
@@ -109,11 +110,11 @@ export {
   addDoc,
   query,
   where,
+  orderBy, // Add orderBy to the export list
   getDocs,
   Timestamp,
   deleteDoc,
   writeBatch,
   httpsCallable,
-  serverTimestamp // Export serverTimestamp here
+  serverTimestamp 
 };
-
