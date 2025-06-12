@@ -23,7 +23,7 @@ import type { Booking, Salon, Hairdresser } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon, ClipboardList, Clock } from "lucide-react";
+import { CalendarIcon, ClipboardList, Clock, Loader2 } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -31,7 +31,7 @@ const bookingFormSchema = z.object({
   clientName: z.string().min(2, "Client name is required."),
   clientPhone: z.string().min(10, "A valid phone number is required."),
   clientEmail: z.string().email("Invalid email address.").optional().or(z.literal('')),
-  salonId: z.string({ required_error: "Please select a salon." }), // Salon where booking is made
+  salonId: z.string({ required_error: "Please select a salon." }),
   hairdresserId: z.string({ required_error: "Please select a hairdresser." }),
   service: z.string().min(3, "Service description is required."),
   appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
@@ -46,13 +46,23 @@ interface BookingFormProps {
   initialData?: Booking | null;
   initialDataPreselected?: Partial<BookingFormValues>;
   salons: Salon[];
-  allHairdressers: Hairdresser[]; // All hairdressers in the system
+  allHairdressers: Hairdresser[];
   onSubmit: (data: BookingFormValues) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
-export function BookingForm({ initialData, initialDataPreselected, salons, allHairdressers, onSubmit }: BookingFormProps) {
+export function BookingForm({ 
+  initialData, 
+  initialDataPreselected, 
+  salons, 
+  allHairdressers, 
+  onSubmit,
+  isSubmitting = false // Default to false if not provided
+}: BookingFormProps) {
   const { user } = useAuth();
-  const [selectedSalonId, setSelectedSalonId] = useState<string | undefined>(initialData?.salonId || initialDataPreselected?.salonId);
+  const [selectedSalonId, setSelectedSalonId] = useState<string | undefined>(
+    initialData?.salonId || initialDataPreselected?.salonId
+  );
   const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
 
   const defaultValues = initialData ? {
@@ -67,12 +77,11 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
     hairdresserId: initialDataPreselected?.hairdresserId || "",
     service: "",
     appointmentDateTime: new Date(),
-    appointmentTime: format(new Date(), "HH:mm"),
+    appointmentTime: format(new Date(), "HH:mm"), 
     durationMinutes: 60,
     notes: "",
-    ...initialDataPreselected,
+    ...initialDataPreselected, 
   };
-
 
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(bookingFormSchema),
@@ -80,33 +89,22 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
   });
   
   useEffect(() => {
-    const initialSalon = initialData?.salonId || initialDataPreselected?.salonId;
-    if (initialSalon) {
-        setSelectedSalonId(initialSalon);
-        form.setValue("salonId", initialSalon, { shouldValidate: true, shouldDirty: true });
+    form.reset(defaultValues); 
 
-        // Filter hairdressers based on this initial salon
-        const filtered = allHairdressers.filter(h => h.assigned_locations.includes(initialSalon));
-        setAvailableHairdressers(filtered);
+    const initialSalonToSet = initialData?.salonId || initialDataPreselected?.salonId;
+    if (initialSalonToSet) {
+      setSelectedSalonId(initialSalonToSet); 
+      form.setValue("salonId", initialSalonToSet, { shouldDirty: !!initialDataPreselected?.salonId });
 
-        // Pre-select hairdresser if applicable
-        const initialHairdresser = initialData?.hairdresserId || initialDataPreselected?.hairdresserId;
-        if (initialHairdresser && filtered.some(h => h.id === initialHairdresser)) {
-            form.setValue("hairdresserId", initialHairdresser, { shouldValidate: true, shouldDirty: true });
-        } else if (user?.role === 'hairdresser' && user.hairdresserProfileId && filtered.some(h => h.id === user.hairdresserProfileId)) {
-            form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
-        }
-
+      const initialHairdresserToSet = initialData?.hairdresserId || initialDataPreselected?.hairdresserId;
+      if (initialHairdresserToSet) {
+         form.setValue("hairdresserId", initialHairdresserToSet, { shouldDirty: !!initialDataPreselected?.hairdresserId });
+      }
     } else {
-        // No initial salon, show all hairdressers or based on current selection if any
-        if(selectedSalonId) {
-            setAvailableHairdressers(allHairdressers.filter(h => h.assigned_locations.includes(selectedSalonId)));
-        } else {
-            setAvailableHairdressers([]); // Or allHairdressers if you want to show all before salon selection
-        }
+      setSelectedSalonId(undefined); 
     }
-  }, [initialData, initialDataPreselected, form, allHairdressers, user, selectedSalonId]);
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData, initialDataPreselected, form.reset]); 
 
   useEffect(() => {
     if (selectedSalonId) {
@@ -114,23 +112,24 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
       setAvailableHairdressers(filtered);
       
       const currentHairdresserId = form.getValues("hairdresserId");
-      const isCurrentHairdresserInFilteredList = filtered.some(h => h.id === currentHairdresserId);
+      const isCurrentHairdresserValidForSalon = filtered.some(h => h.id === currentHairdresserId);
 
-      if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
-        if (filtered.some(h => h.id === user.hairdresserProfileId)) {
-          form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
-        } else if (!isCurrentHairdresserInFilteredList) {
-          form.setValue("hairdresserId", "", { shouldDirty: true });
+      if (user?.role === 'hairdresser' && user.hairdresserProfileId && filtered.some(h => h.id === user.hairdresserProfileId)) {
+        if (form.getValues("hairdresserId") !== user.hairdresserProfileId) { 
+            form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
         }
-      } else if (!isCurrentHairdresserInFilteredList) {
+      } else if (currentHairdresserId && !isCurrentHairdresserValidForSalon) {
         form.setValue("hairdresserId", "", { shouldDirty: true });
       }
     } else {
       setAvailableHairdressers([]);
-      form.setValue("hairdresserId", "", { shouldDirty: true });
+      if (form.getValues("hairdresserId") !== "") { 
+        form.setValue("hairdresserId", "", { shouldDirty: true });
+      }
     }
-  }, [selectedSalonId, allHairdressers, form, user]);
-  
+  }, [selectedSalonId, allHairdressers, user, form]);
+
+
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "salonId") {
@@ -147,10 +146,9 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
     combinedDateTime.setHours(hours, minutes, 0, 0);
     
     await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
-    // form.reset(); // Reset form after successful submission if needed by parent
   };
 
-  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => {
+  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => { // 8 AM to 7 PM (19:00)
     const hour = Math.floor(i / 2) + 8;
     const minute = (i % 2) * 30;
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
@@ -159,12 +157,14 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
   const isHairdresserRole = user?.role === 'hairdresser';
   const hairdresserProfileId = user?.hairdresserProfileId;
 
-  // Determine if the salon select should be disabled
   const isSalonSelectDisabled = isHairdresserRole && 
                                 !!initialDataPreselected?.salonId && 
-                                !!user.hairdresserProfileId &&
-                                allHairdressers.find(h => h.id === user.hairdresserProfileId)?.assigned_locations.includes(initialDataPreselected.salonId);
+                                !!hairdresserProfileId && 
+                                allHairdressers.find(h => h.id === hairdresserProfileId)?.assigned_locations.includes(initialDataPreselected.salonId);
 
+  const isHairdresserSelectDisabled = 
+    (!selectedSalonId || availableHairdressers.length === 0) || 
+    (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
 
   return (
     <Card className="shadow-lg rounded-lg">
@@ -205,7 +205,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                 <FormItem>
                   <FormLabel>Salon Location</FormLabel>
                   <Select 
-                    onValueChange={(value) => { field.onChange(value); setSelectedSalonId(value); }} 
+                    onValueChange={(value) => { field.onChange(value); }} 
                     value={field.value}
                     disabled={isSalonSelectDisabled}
                   >
@@ -221,10 +221,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                   <Select 
                     onValueChange={field.onChange} 
                     value={field.value}
-                    disabled={
-                        (!selectedSalonId || availableHairdressers.length === 0) || 
-                        (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId))
-                    }
+                    disabled={isHairdresserSelectDisabled}
                   >
                     <FormControl><SelectTrigger><SelectValue placeholder="Select a hairdresser" /></SelectTrigger></FormControl>
                     <SelectContent>
@@ -238,7 +235,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                   </Select>
                   {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
                   {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No hairdressers available for this salon.</FormDescription>}
-                  {isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId) && <FormDescription>Booking for yourself.</FormDescription>}
+                  {isHairdresserRole && !!hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId && <FormDescription>Booking for yourself.</FormDescription>}
                   <FormMessage />
                 </FormItem>
               )}/>
@@ -265,7 +262,7 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus 
-                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) }
+                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) } 
                       />
                     </PopoverContent>
                   </Popover>
@@ -306,8 +303,9 @@ export function BookingForm({ initialData, initialDataPreselected, salons, allHa
                 <FormMessage />
               </FormItem>
             )}/>
-            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? (initialData ? "Saving..." : "Creating...") : (initialData ? "Save Changes" : "Create Booking")}
+            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || form.formState.isSubmitting}>
+              {(isSubmitting || form.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {initialData ? "Save Changes" : "Create Booking"}
             </Button>
           </form>
         </Form>

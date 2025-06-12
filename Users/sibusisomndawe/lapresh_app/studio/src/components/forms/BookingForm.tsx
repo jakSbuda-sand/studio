@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Booking, Salon, Hairdresser } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { CalendarIcon, ClipboardList, Clock, Loader2 } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,7 +57,7 @@ export function BookingForm({
   salons, 
   allHairdressers, 
   onSubmit,
-  isSubmitting = false // Default to false if not provided
+  isSubmitting = false
 }: BookingFormProps) {
   const { user } = useAuth();
   const [selectedSalonId, setSelectedSalonId] = useState<string | undefined>(
@@ -135,6 +135,37 @@ export function BookingForm({
       if (name === "salonId") {
         setSelectedSalonId(value.salonId);
       }
+      if (name === "appointmentDateTime") {
+        // When date changes, we might need to reset appointmentTime if the current one becomes invalid
+        // or re-evaluate available slots. For now, we'll let the disable logic handle it.
+        // We could also proactively find the next available slot if the current time is past.
+        const newSelectedDate = value.appointmentDateTime || new Date();
+        const now = new Date();
+        const isSelectedDateToday = isSameDay(newSelectedDate, now);
+        const currentAppointmentTime = form.getValues("appointmentTime");
+        const [currentHours, currentMinutes] = currentAppointmentTime.split(':').map(Number);
+        
+        if (isSelectedDateToday) {
+          const slotDateTimeForCurrentSelection = new Date(newSelectedDate);
+          slotDateTimeForCurrentSelection.setHours(currentHours, currentMinutes, 0, 0);
+          if (slotDateTimeForCurrentSelection < now) {
+            // Current selected time is in the past for today, find next available
+            const firstAvailableSlot = timeSlots.find(slot => {
+                const [slotH, slotM] = slot.split(':').map(Number);
+                const tempSlotDate = new Date(newSelectedDate);
+                tempSlotDate.setHours(slotH, slotM, 0, 0);
+                return tempSlotDate >= now;
+            });
+            if(firstAvailableSlot) {
+                form.setValue("appointmentTime", firstAvailableSlot);
+            } else {
+                // No slots available today, perhaps clear or set to a default.
+                // For now, this case implies all slots are past.
+                // The disabled logic will show all as disabled.
+            }
+          }
+        }
+      }
     });
     return () => subscription.unsubscribe();
   }, [form]);
@@ -148,7 +179,7 @@ export function BookingForm({
     await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
   };
 
-  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => { // 8 AM to 7 PM (19:00)
+  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => {
     const hour = Math.floor(i / 2) + 8;
     const minute = (i % 2) * 30;
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
@@ -165,6 +196,10 @@ export function BookingForm({
   const isHairdresserSelectDisabled = 
     (!selectedSalonId || availableHairdressers.length === 0) || 
     (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
+
+  const selectedDateFromForm = form.watch("appointmentDateTime"); 
+  const nowForTimeCheck = new Date();
+  const isSelectedDateTodayForTimeCheck = selectedDateFromForm ? isSameDay(selectedDateFromForm, nowForTimeCheck) : false;
 
   return (
     <Card className="shadow-lg rounded-lg">
@@ -280,9 +315,22 @@ export function BookingForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {timeSlots.map(slot => (
-                        <SelectItem key={slot} value={slot}>{slot}</SelectItem>
-                      ))}
+                      {timeSlots.map(slot => {
+                        let isPastTime = false;
+                        if (isSelectedDateTodayForTimeCheck && selectedDateFromForm) {
+                            const [slotHours, slotMinutes] = slot.split(':').map(Number);
+                            const slotDateTimeOnSelectedDate = new Date(selectedDateFromForm);
+                            slotDateTimeOnSelectedDate.setHours(slotHours, slotMinutes, 0, 0);
+                            if (slotDateTimeOnSelectedDate < nowForTimeCheck) {
+                                isPastTime = true;
+                            }
+                        }
+                        return (
+                          <SelectItem key={slot} value={slot} disabled={isPastTime}>
+                            {slot}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -313,3 +361,4 @@ export function BookingForm({
     </Card>
   );
 }
+
