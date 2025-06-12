@@ -11,7 +11,7 @@ import * as admin from "firebase-admin";
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
   admin.initializeApp();
-  logger.log("Firebase Admin SDK initialized (global scope).");
+  logger.log("Firebase Admin SDK initialized.");
 }
 
 const db = admin.firestore();
@@ -27,18 +27,115 @@ interface CreateHairdresserData {
   working_days: string[];
 }
 
+interface UpdateUserProfileData {
+  name?: string;
+  avatarUrl?: string;
+}
+
+interface UpdateUserProfileResult {
+  status: string;
+  message: string;
+  updatedName?: string;
+  updatedAvatarUrl?: string;
+}
+
+export const updateUserProfile = onCall(
+  {region: "us-central1"},
+  async (request: CallableRequest<UpdateUserProfileData>): Promise<UpdateUserProfileResult> => {
+    logger.log("[updateUserProfile] Function started. Caller UID:", request.auth?.uid);
+    logger.log("[updateUserProfile] Received data:", JSON.stringify(request.data));
+
+    if (!request.auth) {
+      logger.error("[updateUserProfile] Function called while unauthenticated.");
+      throw new HttpsError(
+        "unauthenticated",
+        "The function must be called while authenticated."
+      );
+    }
+
+    const uid = request.auth.uid;
+    const { name, avatarUrl } = request.data;
+
+    if (!name && !avatarUrl) {
+      logger.error("[updateUserProfile] No data provided to update.");
+      throw new HttpsError(
+        "invalid-argument",
+        "You must provide a name or avatarUrl to update."
+      );
+    }
+
+    const authUpdatePayload: { displayName?: string; photoURL?: string } = {};
+    if (name) authUpdatePayload.displayName = name;
+    if (avatarUrl) authUpdatePayload.photoURL = avatarUrl;
+
+    try {
+      logger.log("[updateUserProfile] Updating Firebase Auth user:", uid, JSON.stringify(authUpdatePayload));
+      await admin.auth().updateUser(uid, authUpdatePayload);
+      logger.log("[updateUserProfile] Firebase Auth user updated successfully.");
+
+      // Now update Firestore
+      const userDocRef = db.collection("users").doc(uid);
+      const hairdresserDocRef = db.collection("hairdressers").doc(uid);
+
+      const userDoc = await userDocRef.get();
+      let firestoreUpdated = false;
+      let updatedRoleCollection: string | null = null;
+
+      if (userDoc.exists()) {
+        const firestoreUserUpdate: { name?: string; updatedAt: FirebaseFirestore.FieldValue } = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+        if (name) firestoreUserUpdate.name = name;
+        // Admins don't typically have avatarUrl in their 'users' doc in this app structure, but name is primary
+        await userDocRef.update(firestoreUserUpdate);
+        logger.log("[updateUserProfile] Firestore 'users' document updated for UID:", uid);
+        firestoreUpdated = true;
+        updatedRoleCollection = 'users';
+      } else {
+        const hairdresserDoc = await hairdresserDocRef.get();
+        if (hairdresserDoc.exists()) {
+          const firestoreHairdresserUpdate: { name?: string; profilePictureUrl?: string; updatedAt: FirebaseFirestore.FieldValue } = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+          if (name) firestoreHairdresserUpdate.name = name;
+          if (avatarUrl) firestoreHairdresserUpdate.profilePictureUrl = avatarUrl;
+          
+          await hairdresserDocRef.update(firestoreHairdresserUpdate);
+          logger.log("[updateUserProfile] Firestore 'hairdressers' document updated for UID:", uid);
+          firestoreUpdated = true;
+          updatedRoleCollection = 'hairdressers';
+        }
+      }
+
+      if (!firestoreUpdated) {
+        logger.warn("[updateUserProfile] User document not found in 'users' or 'hairdressers' for UID:", uid, "Auth was updated but Firestore was not.");
+         return {
+          status: "warning",
+          message: "Profile updated in authentication, but no matching Firestore record found to update.",
+          updatedName: name,
+          updatedAvatarUrl: avatarUrl
+        };
+      }
+
+      return {
+        status: "success",
+        message: "Profile updated successfully.",
+        updatedName: name,
+        updatedAvatarUrl: avatarUrl
+      };
+
+    } catch (error: any) {
+      logger.error("[updateUserProfile] Error updating profile:", {errorMessage: error.message, errorStack: error.stack, errorDetails: JSON.stringify(error)});
+      if (error.code && error.code.startsWith('auth/')) {
+        throw new HttpsError("internal", `Firebase Auth error: ${error.message}`);
+      }
+      throw new HttpsError("internal", `Failed to update profile: ${error.message}`);
+    }
+  }
+);
+
+
 export const createHairdresserUser = onCall(
   {region: "us-central1"},
   async (request: CallableRequest<CreateHairdresserData>) => {
-    // ---- START OF PROMINENT LOGGING ----
-    logger.info("[createHairdresserUser] Function execution started.", {structuredData: true, timestamp: new Date().toISOString()});
-    logger.warn("[createHairdresserUser] This is a test warning log at the beginning.", {dataReceived: request.data});
-    logger.error("[createHairdresserUser] This is a test error log at the beginning (not a real error).", {auth: request.auth});
-    // ---- END OF PROMINENT LOGGING ----
-
-    logger.log("[createHairdresserUser] Default log: Function continued. Caller UID:", request.auth?.uid);
+    logger.log("[createHairdresserUser] Function execution started.", {structuredData: true, timestamp: new Date().toISOString()});
     logger.log("[createHairdresserUser] Received data:", JSON.stringify(request.data));
-
 
     if (!request.auth) {
       logger.error("[createHairdresserUser] Function called while unauthenticated.");
@@ -152,3 +249,5 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   }
 );
+
+    
