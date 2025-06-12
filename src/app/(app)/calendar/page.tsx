@@ -6,65 +6,144 @@ import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import type { Booking, Salon, Hairdresser, User } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter } from "lucide-react";
+import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc } from "@/lib/types";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2 } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
+import { toast } from "@/hooks/use-toast";
 
-const mockSalonsData: Salon[] = [
-  { id: "1", name: "LaPresh Beauty Salon Midrand", address: "123 Oracle Avenue, Waterfall City, Midrand" },
-  { id: "2", name: "LaPresh Beauty Salon Randburg", address: "456 Republic Road, Randburg Central, Randburg" },
-];
-
-const mockHairdressersData: Hairdresser[] = [
-  { id: "h1", name: "Alice Smith", userId: "uid1", email: "alice@example.com", assigned_locations: ["1"], specialties: [], availability: "", working_days: [] },
-  { id: "h2", name: "Bob Johnson", userId: "uid2", email: "bob@example.com", assigned_locations: ["2", "1"], specialties: [], availability: "", working_days: [] },
-  { id: "h3", name: "Carol White", userId: "uid3", email: "carol@example.com", assigned_locations: ["1"], specialties: [], availability: "", working_days: [] },
-];
-
-let globalMockBookingsDataForCalendar: Booking[] = [
-  { id: "b1", clientName: "John Doe", salonId: "1", hairdresserId: "h1", service: "Men's Cut", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 45, status: "Confirmed", clientPhone: "0811234567", color: "hsl(var(--chart-1))" },
-  { id: "b2", clientName: "Jane Smith", salonId: "2", hairdresserId: "h2", service: "Ladies Cut & Blowdry", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 2)), durationMinutes: 90, status: "Pending", clientPhone: "0821234567", color: "hsl(var(--chart-2))" },
-  { id: "b3", clientName: "Mike Brown", salonId: "1", hairdresserId: "h3", service: "Color Correction", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 180, status: "Completed", clientPhone: "0831234567", color: "hsl(var(--chart-3))" },
-  { id: "b4", clientName: "Sarah Wilson", salonId: "1", hairdresserId: "h1", service: "Highlights", appointmentDateTime: new Date(), durationMinutes: 120, status: "Confirmed", clientPhone: "0841234567", color: "hsl(var(--chart-4))" },
-  { id: "b5", clientName: "Chris Green", salonId: "1", hairdresserId: "h2", service: "Beard Trim", appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 1)), durationMinutes: 30, status: "Confirmed", clientPhone: "0851234567", color: "hsl(var(--chart-5))" },
-];
-
+const getStatusColor = (status: Booking['status']): string => {
+  switch (status) {
+    case 'Completed':
+      return 'hsl(130, 60%, 50%)'; // Green
+    case 'Confirmed':
+      return 'hsl(var(--primary))'; // Primary theme color (lavender)
+    case 'Pending':
+      return 'hsl(38, 92%, 50%)'; // Orange/Yellow
+    case 'Cancelled':
+      return 'hsl(0, 0%, 60%)'; // Gray
+    default:
+      return 'hsl(var(--muted-foreground))';
+  }
+};
 
 export default function CalendarPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [bookings] = useState<Booking[]>(globalMockBookingsDataForCalendar);
-  const [salons] = useState<Salon[]>(mockSalonsData);
-  const [hairdressers] = useState<Hairdresser[]>(mockHairdressersData);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [salons, setSalons] = useState<Salon[]>([]);
+  const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [filterSalonId, setFilterSalonId] = useState<string>("all");
   const [filterHairdresserId, setFilterHairdresserId] = useState<string>("all");
 
   useEffect(() => {
-    if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
-      setFilterHairdresserId(user.hairdresserProfileId);
-      const hairdresserDetails = mockHairdressersData.find(h => h.id === user.hairdresserProfileId);
-      if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
-        // If hairdresser is assigned to multiple, admin might pick.
-        // For now, pre-filter by their first assigned salon if they are a hairdresser.
-        setFilterSalonId(hairdresserDetails.assigned_locations[0]);
-      }
+    if (!user) {
+      setIsLoading(false);
+      return;
     }
-  }, [user]);
 
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch Salons
+        const locationsCol = collection(db, "locations");
+        const locationSnapshot = await getDocs(locationsCol);
+        const salonsList = locationSnapshot.docs.map(sDoc => ({
+          id: sDoc.id,
+          ...(sDoc.data() as LocationDoc)
+        } as Salon));
+        setSalons(salonsList);
+
+        // Fetch Hairdressers
+        const hairdressersCol = collection(db, "hairdressers");
+        const hairdresserSnapshot = await getDocs(hairdressersCol);
+        const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
+          const data = hDoc.data() as HairdresserDoc;
+          return {
+            id: hDoc.id,
+            userId: data.user_id,
+            name: data.name,
+            email: data.email,
+            assigned_locations: data.assigned_locations || [],
+            specialties: data.specialties || [],
+            availability: data.availability || "",
+            working_days: data.working_days || [],
+            profilePictureUrl: data.profilePictureUrl || "",
+            must_reset_password: data.must_reset_password || false,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          } as Hairdresser;
+        });
+        setHairdressers(hairdressersList);
+
+        // Fetch Bookings
+        let bookingsQueryBuilder = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
+        // If hairdresser, only fetch their bookings by default
+        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+          bookingsQueryBuilder = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
+          setFilterHairdresserId(user.hairdresserProfileId); // Pre-select their filter
+          const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
+          if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
+            setFilterSalonId(hairdresserDetails.assigned_locations[0]);
+          }
+        }
+
+        const bookingSnapshot = await getDocs(bookingsQueryBuilder);
+        const bookingsList = bookingSnapshot.docs.map(bDoc => {
+          const data = bDoc.data() as BookingDoc;
+          let appointmentDateTimeJS: Date;
+          if (data.appointmentDateTime instanceof Timestamp) {
+            appointmentDateTimeJS = data.appointmentDateTime.toDate();
+          } else if (typeof data.appointmentDateTime === 'string') {
+            appointmentDateTimeJS = new Date(data.appointmentDateTime);
+          } else {
+            appointmentDateTimeJS = data.appointmentDateTime; 
+          }
+          return {
+            id: bDoc.id,
+            clientName: data.clientName,
+            clientEmail: data.clientEmail,
+            clientPhone: data.clientPhone,
+            salonId: data.salonId,
+            hairdresserId: data.hairdresserId,
+            service: data.service,
+            appointmentDateTime: appointmentDateTimeJS,
+            durationMinutes: data.durationMinutes,
+            status: data.status,
+            notes: data.notes,
+            color: getStatusColor(data.status), // Assign color based on status
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          } as Booking;
+        });
+        setBookings(bookingsList);
+
+      } catch (error: any) {
+        console.error("Error fetching calendar data:", error);
+        toast({ title: "Error Fetching Data", description: `Could not load calendar data: ${error.message}.`, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
+  
   const filteredBookings = bookings
-    .filter(booking => selectedDate ? isSameDay(new Date(booking.appointmentDateTime), selectedDate) : true)
-    .filter(booking => filterSalonId === "all" || booking.salonId === filterSalonId) // Filter by salon where booking occurs
+    .filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true)
+    .filter(booking => filterSalonId === "all" || booking.salonId === filterSalonId)
     .filter(booking => {
       if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
         return booking.hairdresserId === user.hairdresserProfileId;
       }
       return filterHairdresserId === "all" || booking.hairdresserId === filterHairdresserId;
     })
-    .sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
+    .sort((a,b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
   const getHairdresserName = (hairdresserId: string) => hairdressers.find(h => h.id === hairdresserId)?.name || "N/A";
@@ -73,18 +152,26 @@ export default function CalendarPage() {
     switch (status) {
       case 'Confirmed': return 'default';
       case 'Pending': return 'secondary';
-      case 'Completed': return 'outline';
+      case 'Completed': return 'outline'; // Greenish outline
       case 'Cancelled': return 'destructive';
       default: return 'secondary';
     }
   };
   
-  // Hairdressers available for filter dropdown, based on selected salon (if any)
   const availableHairdressersForFilter = filterSalonId === "all" 
     ? hairdressers 
     : hairdressers.filter(h => h.assigned_locations.includes(filterSalonId));
   
-  if (!user) return <p>Loading...</p>;
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading calendar...</span>
+      </div>
+    );
+  }
+
+  if (!user) return <p className="text-center mt-10 font-body">Please log in to view the calendar.</p>;
 
   return (
     <div className="space-y-8">
@@ -104,7 +191,16 @@ export default function CalendarPage() {
               <>
                 <div>
                   <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon</label>
-                  <Select value={filterSalonId} onValueChange={setFilterSalonId}>
+                  <Select value={filterSalonId} onValueChange={(value) => {
+                    setFilterSalonId(value);
+                    // If a salon is selected, and current hairdresser filter is for a hairdresser NOT in this salon, reset hairdresser filter.
+                    if (value !== "all" && filterHairdresserId !== "all") {
+                      const selectedHairdresser = hairdressers.find(h => h.id === filterHairdresserId);
+                      if (selectedHairdresser && !selectedHairdresser.assigned_locations.includes(value)) {
+                        setFilterHairdresserId("all");
+                      }
+                    }
+                  }}>
                     <SelectTrigger id="salon-filter"><SelectValue placeholder="All Salons" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Salons</SelectItem>
@@ -117,7 +213,7 @@ export default function CalendarPage() {
                   <Select 
                     value={filterHairdresserId} 
                     onValueChange={setFilterHairdresserId} 
-                    disabled={user.role === 'hairdresser' || (filterSalonId !== "all" && availableHairdressersForFilter.length === 0)}
+                    disabled={filterSalonId !== "all" && availableHairdressersForFilter.length === 0}
                   >
                     <SelectTrigger id="hairdresser-filter"><SelectValue placeholder="All Hairdressers" /></SelectTrigger>
                     <SelectContent>
@@ -163,14 +259,16 @@ export default function CalendarPage() {
                         <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge>
                       </div>
                       <div className="mt-2 space-y-1 text-sm font-body">
-                        <p className="flex items-center gap-1"><ClockIcon size={14} className="text-primary"/> {format(new Date(booking.appointmentDateTime), "p")} ({booking.durationMinutes} mins)</p>
-                        {(user.role === 'admin' || booking.hairdresserId !== user.hairdresserProfileId) && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>}
+                        <p className="flex items-center gap-1"><ClockIcon size={14} className="text-primary"/> {format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</p>
+                        {(user.role === 'admin' || (user.role === 'hairdresser' && booking.hairdresserId !== user.hairdresserProfileId)) && 
+                          (user.role === 'admin' && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>)
+                        }
                         <p className="flex items-center gap-1"><StoreIcon size={14} className="text-primary"/> {getSalonName(booking.salonId)}</p>
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
                        <div className="mt-3 text-right">
                           <Button variant="link" size="sm" asChild className="text-primary font-body">
-                              <Link href={user.role === 'hairdresser' ? `/bookings?view=mine&edit=${booking.id}` : `/bookings?edit=${booking.id}`}>View/Edit Booking</Link>
+                              <Link href={`/bookings?edit=${booking.id}`}>View/Edit Booking</Link>
                           </Button>
                        </div>
                     </li>
@@ -189,3 +287,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+    

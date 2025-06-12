@@ -7,43 +7,40 @@ export interface Salon {
   address: string;
   phone?: string;
   operatingHours?: string;
-  createdAt?: Timestamp; // Should be Timestamp from Firestore
-  updatedAt?: Timestamp; // Should be Timestamp from Firestore
+  createdAt?: Timestamp; 
+  updatedAt?: Timestamp; 
 }
 
 export interface Hairdresser {
-  id: string; // Firestore document ID from 'hairdressers' collection (should be same as userId)
-  userId: string; // Firebase Auth UID
+  id: string; 
+  userId: string; 
   name: string;
   email: string;
-  assigned_locations: string[]; // Array of location IDs
+  assigned_locations: string[]; 
   specialties: string[];
-  availability: string; // Text description of availability
-  working_days: DayOfWeek[]; // This might become redundant if 'availability' string is comprehensive
+  availability: string; 
+  working_days: DayOfWeek[]; 
   profilePictureUrl?: string;
   must_reset_password?: boolean;
-  // Firestore timestamps, converted to Date or string for UI if needed
   createdAt?: Timestamp | Date | string;
   updatedAt?: Timestamp | Date | string;
 }
 
 export interface Booking {
-  id: string; // Firestore document ID
+  id: string; 
   clientName: string;
   clientEmail?: string;
   clientPhone: string;
-  salonId: string; // Reference to 'locations' doc ID (salon where booking is made)
-  hairdresserId: string; // Reference to 'hairdressers' doc ID
+  salonId: string;
+  hairdresserId: string;
   service: string;
-  styleId?: string;
-  appointmentDateTime: Date;
+  appointmentDateTime: Date; // In-app representation
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
-  color?: string;
-  price?: number;
-  extras?: { length?: string; curls?: boolean; beads?: boolean; [key: string]: any; };
-  deposit_paid?: boolean;
+  color?: string; // For calendar event coloring
+  createdAt?: Timestamp; 
+  updatedAt?: Timestamp; 
 }
 
 export interface User {
@@ -52,8 +49,8 @@ export interface User {
   email: string | null;
   role: 'admin' | 'hairdresser' | 'unknown';
   avatarUrl?: string;
-  hairdresserDocId?: string; // Firestore doc ID for the hairdresser profile (same as uid for hairdressers)
-  hairdresserProfileId?: string; // Auth UID, used for linking (same as uid for hairdressers)
+  hairdresserDocId?: string; 
+  hairdresserProfileId?: string; 
   must_reset_password?: boolean;
 }
 
@@ -81,13 +78,12 @@ export interface LocationDoc {
 export interface HairdresserDoc {
   name: string;
   email: string;
-  user_id: string; // Auth UID
+  user_id: string; 
   assigned_locations: string[];
-  working_days: DayOfWeek[]; // Consider if this is still primary or if 'availability' string is enough
-  availability: string; // Text description like "Mon-Fri 9am-5pm"
+  working_days: DayOfWeek[]; 
+  availability: string; 
   must_reset_password: boolean;
   specialties?: string[];
-  // availability_schedule?: HairdresserAvailability; // Complex schedule object, if needed in future
   profilePictureUrl?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -100,28 +96,28 @@ export interface StyleDoc {
 }
 
 export interface BookingDoc {
-  client_name: string;
-  client_phone: string;
-  client_email?: string;
-  location_id: string;
-  hairdresser_id: string;
-  style_id: string;
-  extras: {
-    length?: string;
-    curls?: boolean;
-    beads?: boolean;
-    [key: string]: any;
-  };
-  price: number;
-  date: Timestamp;
-  start_time: string;
-  end_time: string;
-  duration_minutes: number;
-  deposit_paid: boolean;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no-show';
+  clientName: string; // Changed from client_name
+  clientEmail?: string; // Changed from client_email
+  clientPhone: string; // Changed from client_phone
+  salonId: string; // Changed from location_id
+  hairdresserId: string; // Changed from hairdresser_id
+  service: string; // Added field to match BookingForm/NewBookingPage
+  // style_id?: string; // Kept optional if still used elsewhere
+  // extras?: { // Kept optional if still used elsewhere
+  //   length?: string;
+  //   curls?: boolean;
+  //   beads?: boolean;
+  //   [key: string]: any;
+  // };
+  // price?: number; // Kept optional
+  appointmentDateTime: Timestamp; // Changed from date (and start_time/end_time implicitly)
+  durationMinutes: number; // Changed from duration_minutes
+  // deposit_paid?: boolean; // Kept optional
+  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled'; // Simplified statuses
   notes?: string;
-  created_at: Timestamp;
-  updated_at: Timestamp;
+  color?: string; 
+  createdAt: Timestamp; // Changed from created_at
+  updatedAt: Timestamp; // Changed from updated_at
 }
 
 export interface UserDoc {
@@ -141,3 +137,5 @@ export interface NotificationDoc {
   created_at: Timestamp;
   template_id?: string;
 }
+
+    
