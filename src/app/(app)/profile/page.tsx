@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { functions, httpsCallable, firebaseUpdatePassword, auth } from "@/lib/firebase";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 
 interface UpdateUserProfileData {
@@ -62,14 +63,17 @@ export default function ProfilePage() {
 
     const updateData: UpdateUserProfileData = {};
 
-    // Only add to updateData if values actually changed from current state
-    // Treat null/undefined current values as empty strings for comparison with form's empty string
-    if (formData.name !== (currentUser.name || "")) {
+    const currentName = currentUser.name || "";
+    const currentAvatarUrl = currentUser.avatarUrl || "";
+
+    if (formData.name !== currentName) {
         updateData.name = formData.name;
     }
-    if (formData.avatarUrl !== (currentUser.avatarUrl || "")) {
-        updateData.avatarUrl = formData.avatarUrl; // Send empty string if cleared, or new URL
+    // Send avatarUrl if it's different OR if it was previously set and now it's empty (clearing)
+    if (formData.avatarUrl !== currentAvatarUrl) {
+        updateData.avatarUrl = formData.avatarUrl; 
     }
+
 
     if (Object.keys(updateData).length === 0) {
       toast({ title: "No Changes", description: "No information was changed." });
@@ -133,9 +137,10 @@ export default function ProfilePage() {
       setConfirmPassword("");
       setPasswordChangeDialogOpen(false);
       if (currentUser?.role === 'hairdresser' && currentUser.must_reset_password) {
-        // If this was a forced reset, also update the flag via AuthContext if available
-        // This scenario might be better handled directly in AuthContext or a specific function
-        // For now, we assume a standard password change post-initial-reset
+         // If this was a forced reset, the flag should ideally be updated by the system that handles that.
+         // For now, we assume this is a standard password change post-initial-reset.
+         // If `updateHairdresserPasswordResetFlag` is needed, it would be called here.
+         // However, after a forced reset, the user is redirected, so this path might not be hit for the *initial* reset.
       }
     } catch (error: any) {
       console.error("Password change error:", error);
@@ -179,7 +184,7 @@ export default function ProfilePage() {
         <form onSubmit={handleProfileSubmit}>
           <CardHeader className="text-center bg-secondary/30 p-8">
             <Avatar className="h-32 w-32 mx-auto mb-4 border-4 border-primary shadow-lg">
-              <AvatarImage src={isEditing ? formData.avatarUrl : currentUser.avatarUrl || `https://placehold.co/128x128.png?text=${userInitials}`} alt={currentUser.name || "User"} data-ai-hint="person avatar" />
+              <AvatarImage src={isEditing ? formData.avatarUrl : currentUser.avatarUrl || ""} alt={currentUser.name || "User"} data-ai-hint="person avatar" />
               <AvatarFallback className="text-4xl font-headline bg-primary/20 text-primary">{userInitials}</AvatarFallback>
             </Avatar>
             {isEditing ? (
@@ -191,7 +196,7 @@ export default function ProfilePage() {
                 className="max-w-sm mx-auto font-body"
               />
             ) : (
-              <CardTitle className="font-headline text-3xl text-foreground">{currentUser.name}</CardTitle>
+              <CardTitle className="font-headline text-3xl text-foreground">{currentUser.name || "Name Not Set"}</CardTitle>
             )}
             <CardDescription className="font-body text-lg text-muted-foreground capitalize flex items-center justify-center gap-2 mt-1">
               <ShieldCheck className="h-5 w-5 text-primary" /> {currentUser.role}
@@ -213,7 +218,7 @@ export default function ProfilePage() {
                  <p className="text-lg text-foreground flex items-center gap-2 mt-1">
                     <Mail size={20} className="text-primary" /> {currentUser.email}
                   </p>
-                  {isEditing && <FormDescription className="mt-1">Email address cannot be changed here.</FormDescription>}
+                  {isEditing && <FormDescription className="mt-1 text-xs">Email address cannot be changed here.</FormDescription>}
               </div>
               
               {!isEditing && (
@@ -285,12 +290,8 @@ export default function ProfilePage() {
   );
 }
 
-// Minimal FormDescription component if not available globally
 const FormDescription = ({ className, children }: { className?: string; children: React.ReactNode }) => (
   <p className={cn("text-xs text-muted-foreground", className)}>{children}</p>
 );
-
-// Minimal cn utility if not available globally (usually from @/lib/utils)
-const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
 
     
