@@ -117,11 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true); 
       if (fbUser) {
         try {
-          console.log("AuthContext: Attempting to refresh ID token for:", fbUser.uid);
+          console.log("AuthContext (onAuthStateChanged): Attempting to refresh ID token for:", fbUser.uid);
           await fbUser.getIdToken(true); // Force refresh token
-          console.log("AuthContext: ID token refreshed for:", fbUser.uid);
+          console.log("AuthContext (onAuthStateChanged): ID token refreshed for:", fbUser.uid);
         } catch (error) {
-          console.warn("AuthContext: Failed to refresh auth token during onAuthStateChanged:", error);
+          console.warn("AuthContext (onAuthStateChanged): Failed to refresh auth token during onAuthStateChanged:", error);
         }
       }
       await fetchAndSetAppUser(fbUser);
@@ -142,7 +142,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true; 
     } catch (error: any) {
       console.error("AuthContext: Firebase login error:", error);
-      toast({ title: "Login Failed", description: error.message || "Invalid credentials.", variant: "destructive"});
+      let userMessage = "An unexpected error occurred during login. Please try again.";
+
+      switch (error.code) {
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          userMessage = "Invalid email or password. Please check your credentials and try again.";
+          break;
+        case 'auth/invalid-email':
+          userMessage = "The email address is badly formatted. Please enter a valid email.";
+          break;
+        case 'auth/user-disabled':
+          userMessage = "This user account has been disabled. Please contact support.";
+          break;
+        // Add other specific Firebase Auth error codes as needed
+        default:
+          // For other errors, you might still want to use a generic message
+          // or log error.message for admin/dev review but not show to user directly
+          console.warn("AuthContext: Unhandled login error code:", error.code, error.message);
+          break;
+      }
+
+      toast({ title: "Login Failed", description: userMessage, variant: "destructive"});
       setLoading(false); 
       return false;
     }
@@ -229,3 +251,4 @@ export function useAuth() {
   return context;
 }
 
+    

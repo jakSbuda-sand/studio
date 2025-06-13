@@ -26,6 +26,18 @@ export interface Hairdresser {
   updatedAt?: Timestamp | Date | string;
 }
 
+export interface Service {
+  id: string;
+  name: string;
+  description?: string;
+  durationMinutes: number;
+  price: number; // Price in Rands
+  salonId: string;
+  isActive: boolean;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 export interface Booking {
   id: string; 
   clientName: string;
@@ -33,7 +45,8 @@ export interface Booking {
   clientPhone: string;
   salonId: string;
   hairdresserId: string;
-  service: string;
+  serviceId: string; // Changed from service: string
+  serviceName?: string; // For display purposes
   appointmentDateTime: Date; // In-app representation
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
@@ -75,6 +88,17 @@ export interface LocationDoc {
   updatedAt: Timestamp;
 }
 
+export interface ServiceDoc {
+  name: string;
+  description?: string;
+  durationMinutes: number;
+  price: number;
+  salonId: string;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export interface HairdresserDoc {
   name: string;
   email: string;
@@ -89,35 +113,20 @@ export interface HairdresserDoc {
   updatedAt: Timestamp;
 }
 
-export interface StyleDoc {
-  name: string;
-  duration_minutes: number;
-  base_price: number;
-}
-
 export interface BookingDoc {
-  clientName: string; // Changed from client_name
-  clientEmail?: string; // Changed from client_email
-  clientPhone: string; // Changed from client_phone
-  salonId: string; // Changed from location_id
-  hairdresserId: string; // Changed from hairdresser_id
-  service: string; // Added field to match BookingForm/NewBookingPage
-  // style_id?: string; // Kept optional if still used elsewhere
-  // extras?: { // Kept optional if still used elsewhere
-  //   length?: string;
-  //   curls?: boolean;
-  //   beads?: boolean;
-  //   [key: string]: any;
-  // };
-  // price?: number; // Kept optional
-  appointmentDateTime: Timestamp; // Changed from date (and start_time/end_time implicitly)
-  durationMinutes: number; // Changed from duration_minutes
-  // deposit_paid?: boolean; // Kept optional
-  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled'; // Simplified statuses
+  clientName: string;
+  clientEmail?: string;
+  clientPhone: string;
+  salonId: string;
+  hairdresserId: string;
+  serviceId: string; // Changed from service: string
+  appointmentDateTime: Timestamp;
+  durationMinutes: number;
+  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
   color?: string; 
-  createdAt: Timestamp; // Changed from created_at
-  updatedAt: Timestamp; // Changed from updated_at
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface UserDoc {

@@ -4,123 +4,129 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check admin role
-    function isAdmin() {
-      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // Helper function to check if user is an admin
+    function isAdmin(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
     }
 
-    // Users collection (stores role information primarily for admins and system use)
+    // Helper function to check if user is a specific hairdresser
+    function isHairdresser(userId, hairdresserId) {
+      return userId == hairdresserId;
+    }
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      // Creating users and assigning roles should be done securely, e.g., via a Cloud Function.
-      // Admins might modify roles, but this needs careful validation of the 'role' field.
-      // For now, disallow direct client-side CUD operations on user role documents to prevent unauthorized modifications.
-      allow create: if false; 
-      allow update: if false; 
-      allow delete: if false; 
+      allow read: if isAuthenticated() && (isAdmin(request.auth.uid) || request.auth.uid == userId);
+      allow create: if isAdmin(request.auth.uid); // Only admins can create user role docs initially
+      allow update: if isAdmin(request.auth.uid); // Only admins can change roles or other user details
+      allow delete: if isAdmin(request.auth.uid);
     }
 
-    // Hairdressers collection
-    match /hairdressers/{hairdresserDocId} {
-      allow read: if request.auth != null; // All authenticated users can read hairdresser profiles (e.g., for booking selections)
-      
-      // Creation is handled by the 'createHairdresserUser' Cloud Function, which has its own admin check.
-      // This rule complements it by ensuring only an admin could theoretically write directly.
-      allow create: if isAdmin() &&
-                      request.resource.data.name is string && request.resource.data.name.size() > 0 &&
-                      request.resource.data.email is string &&
-                      request.resource.data.user_id == hairdresserDocId && // Doc ID must be user_id
-                      request.resource.data.createdAt == request.time &&
-                      request.resource.data.updatedAt == request.time;
-
-      allow update: if request.auth != null && (
-                      isAdmin() || // Admins can update any field
-                      (
-                        request.auth.uid == hairdresserDocId && // Hairdresser is updating their own profile
-                        // Check immutable fields: user_id, email, createdAt cannot be changed by the hairdresser
-                        request.resource.data.user_id == resource.data.user_id &&
-                        request.resource.data.email == resource.data.email &&
-                        request.resource.data.createdAt.toMillis() == resource.data.createdAt.toMillis() &&
-                        // Hairdressers can set must_reset_password from true to false (as part of reset flow), but not from false to true.
-                        // Admins can change it freely (covered by isAdmin() above).
-                        (
-                          !('must_reset_password' in request.resource.data) || // Field not being changed
-                          request.resource.data.must_reset_password == resource.data.must_reset_password || // Value isn't actually changing
-                          (request.resource.data.must_reset_password == false && resource.data.must_reset_password == true) // Allowed change: true -> false
-                        ) &&
-                        request.resource.data.updatedAt == request.time // Ensure server timestamp for update
-                      )
-                    );
-      allow delete: if isAdmin();
-    }
-
-    // Locations (Salons) collection
-    match /locations/{locationId} {
-      allow read: if request.auth != null; // All authenticated users can read salon info
-      
-      allow create: if isAdmin() &&
-                      request.resource.data.name is string && request.resource.data.name.size() > 0 &&
-                      request.resource.data.address is string && request.resource.data.address.size() > 0 &&
-                      request.resource.data.createdAt == request.time &&
-                      request.resource.data.updatedAt == request.time;
-                      
-      allow update: if isAdmin() &&
-                      request.resource.data.name is string && request.resource.data.name.size() > 0 &&
-                      request.resource.data.address is string && request.resource.data.address.size() > 0 &&
-                      request.resource.data.createdAt.toMillis() == resource.data.createdAt.toMillis() && // createdAt is immutable
-                      request.resource.data.updatedAt == request.time;
-                      
-      allow delete: if isAdmin();
-    }
-
-    // Bookings collection
-    match /bookings/{bookingId} {
-      allow read: if request.auth != null &&
-                    (isAdmin() || request.auth.uid == resource.data.hairdresserId); // Admin or the assigned hairdresser
-
-      allow create: if request.auth != null &&
-                      // Basic data validation
-                      request.resource.data.clientName is string && request.resource.data.clientName.size() > 0 &&
-                      request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() > 0 &&
-                      request.resource.data.service is string && request.resource.data.service.size() > 0 &&
-                      request.resource.data.appointmentDateTime is timestamp &&
-                      request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0 &&
-                      request.resource.data.status == 'Confirmed' && // New bookings are 'Confirmed' by default from client
-                      // Foreign key existence checks
-                      exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId)) &&
-                      exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId)) &&
-                      // Timestamps
-                      request.resource.data.createdAt == request.time &&
-                      request.resource.data.updatedAt == request.time &&
-                      // Authorization: Creator is an admin OR the hairdresser being assigned to the booking
-                      (isAdmin() || request.auth.uid == request.resource.data.hairdresserId);
-
-      allow update: if request.auth != null &&
-                      // Ensure createdAt is not changed and updatedAt is set to server time
-                      request.resource.data.createdAt.toMillis() == resource.data.createdAt.toMillis() &&
-                      request.resource.data.updatedAt == request.time &&
-                      // Ensure foreign keys still point to existing documents if they are part of the update
-                      exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId)) &&
-                      exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId)) &&
-                      // Authorization and field-level control
-                      (
-                        isAdmin() || // Admins can update all validated fields
-                        (
-                          request.auth.uid == resource.data.hairdresserId && // Hairdresser updating their own booking
-                          // Hairdressers can update: appointmentDateTime, durationMinutes, status, notes.
-                          // Other fields must remain unchanged by hairdressers.
-                          request.resource.data.clientName == resource.data.clientName &&
-                          request.resource.data.clientEmail == resource.data.clientEmail &&
-                          request.resource.data.clientPhone == resource.data.clientPhone &&
-                          request.resource.data.salonId == resource.data.salonId &&
-                          request.resource.data.hairdresserId == resource.data.hairdresserId && // Should be their own ID
-                          request.resource.data.service == resource.data.service
-                          // Fields like status, notes, appointmentDateTime, durationMinutes are allowed to change
-                        )
+    match /hairdressers/{hairdresserId} {
+      allow read: if isAuthenticated(); // All authenticated users can read hairdresser profiles (e.g., for selection in forms)
+      allow create: if isAdmin(request.auth.uid); // Typically created by an admin via a cloud function
+      allow update: if isAuthenticated() && 
+                      (isAdmin(request.auth.uid) || 
+                       (request.auth.uid == hairdresserId && 
+                        // Hairdresser can only update specific fields:
+                        request.resource.data.keys().hasOnly(['name', 'assigned_locations', 'specialties', 'availability', 'working_days', 'profilePictureUrl', 'updatedAt']) &&
+                        request.resource.data.name == resource.data.name && // Cannot change their own name via direct doc update, use profile page
+                        request.resource.data.email == resource.data.email // Cannot change email
+                       ) 
                       );
-      // Actual deletion of booking records is restricted to admins.
-      // Users typically "cancel" a booking (which is an update to the status field).
-      allow delete: if isAdmin();
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    match /locations/{locationId} {
+      allow read: if isAuthenticated(); // All authenticated users can read locations
+      allow create, update, delete: if isAuthenticated() && isAdmin(request.auth.uid);
+    }
+
+    match /services/{serviceId} {
+      allow read: if isAuthenticated(); // All authenticated users can read services (needed for booking form)
+      
+      allow create: if isAuthenticated() && isAdmin(request.auth.uid)
+                    && request.resource.data.name is string && request.resource.data.name.size() > 0
+                    && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
+                    && request.resource.data.price is number && request.resource.data.price >= 0
+                    && request.resource.data.salonId is string 
+                    && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
+                    && request.resource.data.isActive is bool
+                    && request.resource.data.containsKey('createdAt') && request.resource.data.createdAt == request.time
+                    && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAuthenticated() && isAdmin(request.auth.uid)
+                    && request.resource.data.name is string && request.resource.data.name.size() > 0
+                    && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
+                    && request.resource.data.price is number && request.resource.data.price >= 0
+                    && request.resource.data.salonId is string
+                    && request.resource.data.salonId == resource.data.salonId // Prevent changing salonId for an existing service.
+                    && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
+                    && request.resource.data.isActive is bool
+                    && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time
+                    && !request.resource.data.containsKey('createdAt'); // createdAt should not be updatable
+      
+      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated() && 
+                    (isAdmin(request.auth.uid) || 
+                     (resource.data.hairdresserId == request.auth.uid) // Hairdresser can read their own bookings
+                    );
+      allow create: if isAuthenticated() && 
+                      (isAdmin(request.auth.uid) || 
+                       // Hairdresser can create bookings for themselves or if assigned salon matches
+                       (request.resource.data.hairdresserId == request.auth.uid && 
+                        exists(/databases/$(database)/documents/hairdressers/$(request.auth.uid)) &&
+                        get(/databases/$(database)/documents/hairdressers/$(request.auth.uid)).data.assigned_locations.hasAny([request.resource.data.salonId])
+                       )
+                      )
+                      // Basic validation for create
+                      && request.resource.data.clientName is string && request.resource.data.clientName.size() > 0
+                      && request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() > 0
+                      && request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
+                      && request.resource.data.hairdresserId is string && exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId))
+                      && request.resource.data.serviceId is string && exists(/databases/$(database)/documents/services/$(request.resource.data.serviceId))
+                      && request.resource.data.appointmentDateTime is timestamp
+                      && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
+                      && request.resource.data.status is string && request.resource.data.status in ['Pending', 'Confirmed', 'Completed', 'Cancelled']
+                      && request.resource.data.containsKey('createdAt') && request.resource.data.createdAt == request.time
+                      && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAuthenticated() &&
+                      (isAdmin(request.auth.uid) || 
+                       (resource.data.hairdresserId == request.auth.uid && 
+                        // Hairdresser can only update certain fields of their own bookings, e.g., status to 'Completed' or 'Cancelled'
+                        request.resource.data.keys().hasAny(['status', 'notes', 'updatedAt']) &&
+                        // Prevent hairdresser from changing key details once set by admin or self
+                        request.resource.data.clientName == resource.data.clientName &&
+                        request.resource.data.clientPhone == resource.data.clientPhone &&
+                        request.resource.data.salonId == resource.data.salonId &&
+                        request.resource.data.hairdresserId == resource.data.hairdresserId &&
+                        request.resource.data.serviceId == resource.data.serviceId &&
+                        request.resource.data.appointmentDateTime == resource.data.appointmentDateTime &&
+                        request.resource.data.durationMinutes == resource.data.durationMinutes
+                       )
+                      )
+                      // Basic validation for update
+                      && request.resource.data.clientName is string && request.resource.data.clientName.size() > 0
+                      && request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() > 0
+                      && request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
+                      && request.resource.data.hairdresserId is string && exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId))
+                      && request.resource.data.serviceId is string && exists(/databases/$(database)/documents/services/$(request.resource.data.serviceId))
+                      && request.resource.data.appointmentDateTime is timestamp
+                      && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
+                      && request.resource.data.status is string && request.resource.data.status in ['Pending', 'Confirmed', 'Completed', 'Cancelled']
+                      && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time
+                      && !request.resource.data.containsKey('createdAt'); // createdAt should not be updatable
+
+      allow delete: if isAuthenticated() && isAdmin(request.auth.uid); // Only admins can delete bookings directly
     }
   }
 }

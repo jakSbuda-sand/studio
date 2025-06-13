@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
-import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc } from "@/lib/types";
+import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
 import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
@@ -36,6 +36,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
+  const [services, setServices] = useState<Service[]>([]); // State for services
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,73 +46,54 @@ export default function BookingsPage() {
   const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
 
   useEffect(() => {
-    console.log("==> [BookingsPage_Effect] useEffect triggered. User:", user ? user.uid : "NULL", "ViewMode:", viewMode);
     if (!user) {
-      console.log("==> [BookingsPage_Effect] No user, skipping data fetch.");
       setIsLoading(false);
       return;
     }
 
     const fetchData = async () => {
-      console.log("==> [BookingsPage_Effect_FetchData] fetchData started.");
       setIsLoading(true);
       try {
-        console.log("==> [BookingsPage_Effect_FetchData] Fetching salons from 'locations'...");
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
-        const salonsList = locationSnapshot.docs.map(sDoc => ({
-          id: sDoc.id,
-          ...(sDoc.data() as LocationDoc)
-        } as Salon));
-        console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${salonsList.length} salons.`);
+        const salonsList = locationSnapshot.docs.map(sDoc => ({ id: sDoc.id, ...(sDoc.data() as LocationDoc) } as Salon));
         setSalons(salonsList);
 
-        console.log("==> [BookingsPage_Effect_FetchData] Fetching hairdressers from 'hairdressers'...");
         const hairdressersCol = collection(db, "hairdressers");
         const hairdresserSnapshot = await getDocs(hairdressersCol);
         const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
           const data = hDoc.data() as HairdresserDoc;
           return {
-            id: hDoc.id,
-            userId: data.user_id,
-            name: data.name,
-            email: data.email,
-            assigned_locations: data.assigned_locations || [],
-            specialties: data.specialties || [],
-            availability: data.availability || "",
-            working_days: data.working_days || [],
-            profilePictureUrl: data.profilePictureUrl || "",
-            must_reset_password: data.must_reset_password || false,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
+            id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
+            assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
+            availability: data.availability || "", working_days: data.working_days || [],
+            profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
+            createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Hairdresser;
         });
-        console.log(`==> [BookingsPage_Effect_FetchData] Fetched ${hairdressersList.length} hairdressers.`);
         setHairdressers(hairdressersList);
 
-        console.log("==> [BookingsPage_Effect_FetchData] Constructing bookings query...");
-        let bookingsQueryBuilder = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
+        const servicesCol = collection(db, "services");
+        const serviceSnapshot = await getDocs(servicesCol);
+        const servicesList = serviceSnapshot.docs.map(sDoc => ({ id: sDoc.id, ...(sDoc.data() as ServiceDoc)} as Service));
+        setServices(servicesList);
 
+
+        let bookingsQueryBuilder = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
         let currentViewTitle = "All Bookings";
         let currentViewDescription = "View and manage all scheduled appointments.";
 
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-          console.log("==> [BookingsPage_Effect_FetchData] User is hairdresser. Filtering bookings for hairdresserId:", user.hairdresserProfileId);
           bookingsQueryBuilder = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
           currentViewTitle = "My Bookings";
           currentViewDescription = "View and manage your scheduled appointments.";
-        } else if (user.role === 'admin') {
-          console.log("==> [BookingsPage_Effect_FetchData] User is admin. Fetching all bookings.");
         }
         setPageTitle(currentViewTitle);
         setPageDescription(currentViewDescription);
 
-        console.log("==> [BookingsPage_Effect_FetchData] Executing bookings query...");
         const bookingSnapshot = await getDocs(bookingsQueryBuilder);
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
-          console.log(`==> [BookingsPage_Effect_FetchData] Raw booking data for ${bDoc.id}:`, JSON.stringify(data).substring(0,200)+"...");
-
           let appointmentDateTimeJS: Date;
           if (data.appointmentDateTime instanceof Timestamp) {
             appointmentDateTimeJS = data.appointmentDateTime.toDate();
@@ -120,32 +102,24 @@ export default function BookingsPage() {
           } else {
             appointmentDateTimeJS = data.appointmentDateTime;
           }
+          
+          const serviceDetails = servicesList.find(s => s.id === data.serviceId);
 
           return {
-            id: bDoc.id,
-            clientName: data.clientName,
-            clientEmail: data.clientEmail,
-            clientPhone: data.clientPhone,
-            salonId: data.salonId,
-            hairdresserId: data.hairdresserId,
-            service: data.service,
-            appointmentDateTime: appointmentDateTimeJS,
-            durationMinutes: data.durationMinutes,
-            status: data.status,
-            notes: data.notes,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
+            id: bDoc.id, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone,
+            salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+            serviceName: serviceDetails?.name || "Service Not Found", // Populate serviceName
+            appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
+            notes: data.notes, createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Booking;
         });
-        console.log(`==> [BookingsPage_Effect_FetchData] Fetched and mapped ${bookingsList.length} bookings.`);
         const sortedBookingsList = bookingsList.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
         setBookings(sortedBookingsList);
 
       } catch (error: any) {
-        console.error("==> [BookingsPage_Effect_FetchData] Error fetching data:", error);
-        toast({ title: "Error Fetching Data", description: `Could not load data: ${error.message}. Check console.`, variant: "destructive" });
+        console.error("Error fetching data:", error);
+        toast({ title: "Error Fetching Data", description: `Could not load data: ${error.message}.`, variant: "destructive" });
       } finally {
-        console.log("==> [BookingsPage_Effect_FetchData] fetchData finished.");
         setIsLoading(false);
       }
     };
@@ -154,50 +128,28 @@ export default function BookingsPage() {
   }, [user, viewMode]);
 
   const handleUpdateBooking = async (data: BookingFormValues) => {
-    if (!editingBooking) {
-        console.error("==> [BookingsPage_HandleUpdate] No editingBooking set. Aborting.");
-        return;
-    }
-    console.log("==> [BookingsPage_HandleUpdate] Attempting to update booking ID:", editingBooking.id, "with data:", JSON.stringify(data, null, 2));
+    if (!editingBooking) return;
     setIsSubmitting(true);
     try {
       const bookingRef = doc(db, "bookings", editingBooking.id);
-
       const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
-      console.log("==> [BookingsPage_HandleUpdate] Converted appointmentDateTime to Firestore Timestamp:", appointmentDateForFirestore);
 
       const updateData: Partial<BookingDoc> = {
-        clientName: data.clientName,
-        clientEmail: data.clientEmail || "",
-        clientPhone: data.clientPhone,
-        salonId: data.salonId,
-        hairdresserId: data.hairdresserId,
-        service: data.service,
-        appointmentDateTime: appointmentDateForFirestore,
-        durationMinutes: data.durationMinutes,
-        status: data.status,
-        notes: data.notes || "",
-        updatedAt: serverTimestamp() as Timestamp,
+        clientName: data.clientName, clientEmail: data.clientEmail || "", clientPhone: data.clientPhone,
+        salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+        appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
+        status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
       };
-      console.log("==> [BookingsPage_HandleUpdate] Prepared Firestore update data:", JSON.stringify(updateData, null, 2));
 
       await updateDoc(bookingRef, updateData as { [x: string]: any });
-      console.log("==> [BookingsPage_HandleUpdate] Firestore document updated successfully.");
 
+      const serviceDetails = services.find(s => s.id === data.serviceId);
       const updatedBookingForState: Booking = {
-        id: editingBooking.id, // Keep existing ID
-        createdAt: editingBooking.createdAt, // Keep existing createdAt
-        clientName: data.clientName,
-        clientEmail: data.clientEmail || "",
-        clientPhone: data.clientPhone,
-        salonId: data.salonId,
-        hairdresserId: data.hairdresserId,
-        service: data.service,
-        appointmentDateTime: data.appointmentDateTime, // This is already a JS Date from the form
-        durationMinutes: data.durationMinutes,
-        status: data.status,
-        notes: data.notes || "",
-        updatedAt: Timestamp.now(), // For UI quick update
+        ...editingBooking, // Spread existing fields
+        ...data, // Spread form data
+        appointmentDateTime: data.appointmentDateTime, // Ensure JS Date is used
+        serviceName: serviceDetails?.name || "Service Not Found",
+        updatedAt: Timestamp.now(), 
       };
 
       setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
@@ -205,44 +157,36 @@ export default function BookingsPage() {
       setIsFormOpen(false);
       setEditingBooking(null);
     } catch (error: any) {
-      console.error("==> [BookingsPage_HandleUpdate] Error updating booking:", error);
+      console.error("Error updating booking:", error);
       toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
     } finally {
-      console.log("==> [BookingsPage_HandleUpdate] Update process finished.");
       setIsSubmitting(false);
     }
   };
 
   const handleCancelBooking = async (bookingToCancel: Booking) => {
-    console.log("==> [BookingsPage_HandleCancel] Attempting to cancel booking ID:", bookingToCancel.id);
     setIsSubmitting(true);
     try {
       const bookingRef = doc(db, "bookings", bookingToCancel.id);
-      await updateDoc(bookingRef, {
-        status: 'Cancelled',
-        updatedAt: serverTimestamp() as Timestamp
-      });
-      console.log("==> [BookingsPage_HandleCancel] Firestore document status updated to Cancelled.");
-
+      await updateDoc(bookingRef, { status: 'Cancelled', updatedAt: serverTimestamp() as Timestamp });
       setBookings(prev => prev.map(b => b.id === bookingToCancel.id ? { ...b, status: 'Cancelled' as 'Cancelled', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
       toast({ title: "Booking Cancelled", description: `Booking for ${bookingToCancel.clientName} has been cancelled.`, variant: "default" });
     } catch (error: any) {
-      console.error("==> [BookingsPage_HandleCancel] Error cancelling booking:", error);
+      console.error("Error cancelling booking:", error);
       toast({ title: "Cancellation Failed", description: `Could not cancel booking: ${error.message}`, variant: "destructive" });
     } finally {
-      console.log("==> [BookingsPage_HandleCancel] Cancellation process finished.");
       setIsSubmitting(false);
     }
   };
 
   const openEditForm = (booking: Booking) => {
-    console.log("==> [BookingsPage_OpenEditForm] Opening edit form for booking:", JSON.stringify(booking, null, 2).substring(0,300)+"...");
     setEditingBooking(booking);
     setIsFormOpen(true);
   };
 
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
   const getHairdresserName = (hairdresserId: string) => hairdressers.find(h => h.id === hairdresserId)?.name || "N/A";
+  // getServiceName is no longer needed here if booking.serviceName is populated
 
   const getStatusBadgeVariant = (status: Booking['status']): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
@@ -257,54 +201,25 @@ export default function BookingsPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Loading bookings...</span>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" /><span className="ml-2 font-body">Loading bookings...</span>
       </div>
     );
   }
 
-  if (!user) {
-    return <p className="text-center mt-10 font-body">Please log in to view bookings.</p>;
-  }
+  if (!user) return <p className="text-center mt-10 font-body">Please log in to view bookings.</p>;
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title={pageTitle}
-        description={pageDescription}
-        icon={ClipboardList}
-        actions={
-          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <Link href="/bookings/new">
-              <PlusCircle className="mr-2 h-4 w-4" /> New Booking
-            </Link>
-          </Button>
-        }
+      <PageHeader title={pageTitle} description={pageDescription} icon={ClipboardList}
+        actions={ <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"> <Link href="/bookings/new"> <PlusCircle className="mr-2 h-4 w-4" /> New Booking </Link> </Button> }
       />
 
-      <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
-          setIsFormOpen(isOpen);
-          if (!isOpen) {
-            console.log("==> [BookingsPage_DialogChange] Closing dialog, resetting editingBooking.");
-            setEditingBooking(null);
-          }
-        }}>
+      <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
         <DialogContent className="sm:max-w-2xl font-body">
-          <DialogHeader>
-            <DialogTitle className="font-headline text-2xl">
-              {editingBooking ? "Edit Booking" : "New Booking"}
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="font-headline text-2xl">{editingBooking ? "Edit Booking" : "New Booking"}</DialogTitle></DialogHeader>
           {(editingBooking || (isFormOpen && !editingBooking))) && (
-            <BookingForm
-              initialData={editingBooking}
-              salons={salons}
-              allHairdressers={hairdressers}
-              onSubmit={editingBooking ? handleUpdateBooking : async (data) => {
-                  console.warn("==> [BookingsPage_DialogSubmit] New booking submission from dialog is not standard flow. Use /bookings/new.");
-                  toast({title: "Action Not Configured", description: "Please use the 'New Booking' page to create appointments.", variant: "destructive"});
-                  setIsFormOpen(false);
-              }}
+            <BookingForm initialData={editingBooking} salons={salons} allHairdressers={hairdressers}
+              onSubmit={editingBooking ? handleUpdateBooking : async () => { /* New from dialog not standard */ setIsFormOpen(false); }}
               isSubmitting={isSubmitting}
             />
           )}
@@ -312,30 +227,14 @@ export default function BookingsPage() {
       </Dialog>
 
       {bookings.length === 0 ? (
-         <Card className="text-center py-12 shadow-lg rounded-lg">
-          <CardHeader>
-            <CalendarDays className="mx-auto h-16 w-16 text-muted-foreground" />
-            <CardTitle className="mt-4 text-2xl font-headline">No Bookings Found</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CardDescription className="font-body text-lg">
-              There are no appointments scheduled that match your current view.
-            </CardDescription>
-          </CardContent>
-           <CardFooter className="justify-center">
-             <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/bookings/new">
-                <PlusCircle className="mr-2 h-4 w-4" /> Create First Booking
-                </Link>
-            </Button>
-          </CardFooter>
+        <Card className="text-center py-12 shadow-lg rounded-lg">
+          <CardHeader><CalendarDays className="mx-auto h-16 w-16 text-muted-foreground" /><CardTitle className="mt-4 text-2xl font-headline">No Bookings Found</CardTitle></CardHeader>
+          <CardContent><CardDescription className="font-body text-lg">There are no appointments scheduled that match your current view.</CardDescription></CardContent>
+          <CardFooter className="justify-center"><Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"><Link href="/bookings/new"><PlusCircle className="mr-2 h-4 w-4" /> Create First Booking</Link></Button></CardFooter>
         </Card>
       ) : (
       <Card className="shadow-lg rounded-lg">
-        <CardHeader>
-          <CardTitle className="font-headline">Appointments</CardTitle>
-           <CardDescription className="font-body">A list of appointments based on your role and filters.</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="font-headline">Appointments</CardTitle><CardDescription className="font-body">A list of appointments based on your role and filters.</CardDescription></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -361,37 +260,20 @@ export default function BookingsPage() {
                     <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                     <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                   </TableCell>
-                  <TableCell>{booking.service}</TableCell>
+                  <TableCell>{booking.serviceName || "N/A"}</TableCell> {/* Display serviceName */}
                   {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge>
-                  </TableCell>
+                  <TableCell><Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge></TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}>
-                      <Edit3 className="h-4 w-4" />
-                      <span className="sr-only">Edit</span>
-                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
                     {booking.status !== 'Cancelled' && booking.status !== 'Completed' && (
                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}>
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Cancel</span>
-                          </Button>
-                        </AlertDialogTrigger>
+                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}><Trash2 className="h-4 w-4" /><span className="sr-only">Cancel</span></Button></AlertDialogTrigger>
                         <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="font-headline">Cancel Booking?</AlertDialogTitle>
-                            <AlertDialogDescription className="font-body">
-                              Are you sure you want to cancel this booking for {booking.clientName}? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
+                          <AlertDialogHeader><AlertDialogTitle className="font-headline">Cancel Booking?</AlertDialogTitle><AlertDialogDescription className="font-body">Are you sure you want to cancel this booking for {booking.clientName}?</AlertDialogDescription></AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel className="font-body" disabled={isSubmitting}>Keep Booking</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleCancelBooking(booking)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
-                              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Confirm Cancellation"}
-                            </AlertDialogAction>
+                            <AlertDialogAction onClick={() => handleCancelBooking(booking)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Confirm Cancellation"}</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -407,5 +289,3 @@ export default function BookingsPage() {
     </div>
   );
 }
-
-    

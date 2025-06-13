@@ -19,21 +19,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Booking, Salon, Hairdresser } from "@/lib/types";
+import type { Booking, Salon, Hairdresser, Service, ServiceDoc } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format, isSameDay } from "date-fns";
-import { CalendarIcon, ClipboardList, Clock, Loader2, Info } from "lucide-react";
+import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2 } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { db, collection, getDocs, query, where } from "@/lib/firebase";
+import { toast } from "@/hooks/use-toast";
+
 
 const bookingFormSchema = z.object({
   clientName: z.string().min(2, "Client name is required."),
   clientPhone: z.string().min(10, "A valid phone number is required."),
   clientEmail: z.string().email("Invalid email address.").optional().or(z.literal('')),
   salonId: z.string({ required_error: "Please select a salon." }),
+  serviceId: z.string({ required_error: "Please select a service."}),
   hairdresserId: z.string({ required_error: "Please select a hairdresser." }),
-  service: z.string().min(3, "Service description is required."),
   appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
   appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
   durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
@@ -65,39 +68,49 @@ export function BookingForm({
     initialData?.salonId || initialDataPreselected?.salonId
   );
   const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
+  const [availableServices, setAvailableServices] = useState<Service[]>([]);
+  const [isFetchingServices, setIsFetchingServices] = useState(false);
 
-  const defaultValues: BookingFormValues = initialData ? {
+
+  const defaultValues: Partial<BookingFormValues> = initialData ? {
     ...initialData,
     appointmentDateTime: new Date(initialData.appointmentDateTime),
     appointmentTime: format(new Date(initialData.appointmentDateTime), "HH:mm"),
-    status: initialData.status, // Ensure status is included
+    status: initialData.status,
+    serviceId: initialData.serviceId,
   } : {
     clientName: "",
     clientPhone: "",
     clientEmail: "",
     salonId: initialDataPreselected?.salonId || "",
+    serviceId: initialDataPreselected?.serviceId || "",
     hairdresserId: initialDataPreselected?.hairdresserId || "",
-    service: "",
     appointmentDateTime: new Date(),
     appointmentTime: format(new Date(), "HH:mm"), 
     durationMinutes: 60,
-    status: 'Confirmed', // Default status for new bookings in the form
+    status: 'Confirmed',
     notes: "",
     ...initialDataPreselected,
   };
 
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(bookingFormSchema),
-    defaultValues,
+    defaultValues: defaultValues as BookingFormValues, // Cast because serviceId might be initially undefined
   });
   
+  // Effect for initial data loading and pre-selection
   useEffect(() => {
-    form.reset(defaultValues); 
+    form.reset(defaultValues as BookingFormValues); 
 
     const initialSalonToSet = initialData?.salonId || initialDataPreselected?.salonId;
     if (initialSalonToSet) {
       setSelectedSalonId(initialSalonToSet); 
       form.setValue("salonId", initialSalonToSet, { shouldDirty: !!initialDataPreselected?.salonId });
+
+      const initialServiceToSet = initialData?.serviceId || initialDataPreselected?.serviceId;
+      if(initialServiceToSet){
+        form.setValue("serviceId", initialServiceToSet, { shouldDirty: !!initialDataPreselected?.serviceId });
+      }
 
       const initialHairdresserToSet = initialData?.hairdresserId || initialDataPreselected?.hairdresserId;
       if (initialHairdresserToSet) {
@@ -109,6 +122,7 @@ export function BookingForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData, initialDataPreselected, form.reset]); 
 
+  // Effect for filtering hairdressers based on selected salon
   useEffect(() => {
     if (selectedSalonId) {
       const filtered = allHairdressers.filter(h => h.assigned_locations.includes(selectedSalonId));
@@ -132,11 +146,59 @@ export function BookingForm({
     }
   }, [selectedSalonId, allHairdressers, user, form]);
 
+  // Effect for fetching services based on selected salon
+  useEffect(() => {
+    if (selectedSalonId) {
+      setIsFetchingServices(true);
+      const fetchServices = async () => {
+        try {
+          const servicesCol = collection(db, "services");
+          const servicesQuery = query(servicesCol, where("salonId", "==", selectedSalonId), where("isActive", "==", true));
+          const serviceSnapshot = await getDocs(servicesQuery);
+          const servicesList = serviceSnapshot.docs.map(sDoc => ({
+            id: sDoc.id,
+            ...(sDoc.data() as ServiceDoc)
+          } as Service));
+          setAvailableServices(servicesList);
 
+          // If editing and initial serviceId is for a service not in the new list (e.g. salon changed or service became inactive), clear it.
+          // Or if creating and preselected serviceId is invalid for this salon.
+          const currentServiceId = form.getValues("serviceId");
+          if(currentServiceId && !servicesList.some(s => s.id === currentServiceId)){
+            form.setValue("serviceId", "", { shouldDirty: true });
+            form.setValue("durationMinutes", 60); // Reset duration
+          }
+
+        } catch (error) {
+          console.error("Error fetching services for salon:", error);
+          toast({ title: "Error", description: "Could not load services for the selected salon.", variant: "destructive"});
+          setAvailableServices([]);
+        } finally {
+          setIsFetchingServices(false);
+        }
+      };
+      fetchServices();
+    } else {
+      setAvailableServices([]);
+      form.setValue("serviceId", "", { shouldDirty: true });
+      form.setValue("durationMinutes", 60);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSalonId, form.setValue]);
+
+
+  // Effect for watching form value changes (salon, service, date)
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "salonId") {
         setSelectedSalonId(value.salonId);
+        // Service fetching and hairdresser filtering are handled by their own useEffects
+      }
+      if (name === "serviceId" && value.serviceId) {
+        const selectedService = availableServices.find(s => s.id === value.serviceId);
+        if (selectedService) {
+          form.setValue("durationMinutes", selectedService.durationMinutes, { shouldDirty: true });
+        }
       }
       if (name === "appointmentDateTime") {
         const newSelectedDate = value.appointmentDateTime || new Date();
@@ -163,8 +225,7 @@ export function BookingForm({
       }
     });
     return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form]);
+  }, [form, availableServices, timeSlots]);
 
 
   const handleSubmitInternal = async (data: BookingFormValues) => {
@@ -175,6 +236,7 @@ export function BookingForm({
     await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => {
     const hour = Math.floor(i / 2) + 8;
     const minute = (i % 2) * 30;
@@ -238,7 +300,7 @@ export function BookingForm({
                 <FormItem>
                   <FormLabel>Salon Location</FormLabel>
                   <Select 
-                    onValueChange={(value) => { field.onChange(value); }} 
+                    onValueChange={(value) => { field.onChange(value); setSelectedSalonId(value); form.setValue("serviceId", ""); form.setValue("hairdresserId", ""); }} 
                     value={field.value}
                     disabled={isSalonSelectDisabled}
                   >
@@ -248,38 +310,63 @@ export function BookingForm({
                   <FormMessage />
                 </FormItem>
               )}/>
-              <FormField control={form.control} name="hairdresserId" render={({ field }) => (
+              <FormField control={form.control} name="serviceId" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Hairdresser</FormLabel>
+                  <FormLabel>Service</FormLabel>
                   <Select 
-                    onValueChange={field.onChange} 
+                    onValueChange={(value) => { 
+                      field.onChange(value);
+                      const selectedService = availableServices.find(s => s.id === value);
+                      if (selectedService) {
+                        form.setValue("durationMinutes", selectedService.durationMinutes);
+                      }
+                    }} 
                     value={field.value}
-                    disabled={isHairdresserSelectDisabled}
+                    disabled={!selectedSalonId || isFetchingServices || availableServices.length === 0}
                   >
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a hairdresser" /></SelectTrigger></FormControl>
+                    <FormControl>
+                      <SelectTrigger>
+                        <Settings2 className="mr-2 h-4 w-4 opacity-50" />
+                        <SelectValue placeholder={isFetchingServices ? "Loading services..." : "Select a service"} />
+                      </SelectTrigger>
+                    </FormControl>
                     <SelectContent>
-                      {availableHairdressers.map(h => (
-                          <SelectItem key={h.id} value={h.id}>
-                            {h.name}
-                            {isHairdresserRole && h.id === hairdresserProfileId && " (You)"}
-                          </SelectItem>
-                        ))}
+                      {!isFetchingServices && availableServices.length === 0 && <p className="p-2 text-sm text-muted-foreground">No services for this salon.</p>}
+                      {availableServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R{s.price.toFixed(2)})</SelectItem>)}
                     </SelectContent>
                   </Select>
                   {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
-                  {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No hairdressers available for this salon.</FormDescription>}
-                  {isHairdresserRole && !!hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId && <FormDescription>Booking for yourself.</FormDescription>}
+                  {selectedSalonId && !isFetchingServices && availableServices.length === 0 && <FormDescription>No active services found for the selected salon.</FormDescription>}
                   <FormMessage />
                 </FormItem>
               )}/>
             </div>
-            <FormField control={form.control} name="service" render={({ field }) => (
+            
+            <FormField control={form.control} name="hairdresserId" render={({ field }) => (
               <FormItem>
-                <FormLabel>Service / Style</FormLabel>
-                <FormControl><Input placeholder="e.g., Ladies Cut & Blowdry, Full Head Highlights" {...field} /></FormControl>
+                <FormLabel>Hairdresser</FormLabel>
+                <Select 
+                  onValueChange={field.onChange} 
+                  value={field.value}
+                  disabled={isHairdresserSelectDisabled}
+                >
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select a hairdresser" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {availableHairdressers.map(h => (
+                        <SelectItem key={h.id} value={h.id}>
+                          {h.name}
+                          {isHairdresserRole && h.id === hairdresserProfileId && " (You)"}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
+                {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No hairdressers available for this salon.</FormDescription>}
+                {isHairdresserRole && !!hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId && <FormDescription>Booking for yourself.</FormDescription>}
                 <FormMessage />
               </FormItem>
             )}/>
+            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <FormField control={form.control} name="appointmentDateTime" render={({ field }) => (
                 <FormItem className="flex flex-col">
@@ -337,13 +424,14 @@ export function BookingForm({
               <FormField control={form.control} name="durationMinutes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Duration (minutes)</FormLabel>
-                  <FormControl><Input type="number" placeholder="60" {...field} /></FormControl>
+                  <FormControl><Input type="number" placeholder="60" {...field} readOnly className="bg-muted/50" /></FormControl>
+                  <FormDescription>Auto-filled based on selected service.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}/>
             </div>
 
-            {initialData && ( // Only show status dropdown if editing an existing booking
+            {initialData && (
                 <FormField
                 control={form.control}
                 name="status"
@@ -388,3 +476,4 @@ export function BookingForm({
     </Card>
   );
 }
+
