@@ -4,129 +4,99 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if user is an admin
-    function isAdmin(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+    // Helper function to check if a user is an admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Helper function to check if user is a specific hairdresser
-    function isHairdresser(userId, hairdresserId) {
-      return userId == hairdresserId;
+    // Helper function to check if a user is the authenticated hairdresser
+    function isOwnHairdresserProfile(hairdresserId) {
+      return request.auth.uid == hairdresserId;
+    }
+
+    // Helper function to check if a user is the assigned hairdresser for a booking
+    function isAssignedHairdresser(bookingData) {
+      return request.auth.uid == bookingData.hairdresserId;
     }
     
-    // Helper function to check if user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
+    // Users collection (stores admin roles primarily)
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isAdmin(request.auth.uid) || request.auth.uid == userId);
-      allow create: if isAdmin(request.auth.uid); // Only admins can create user role docs initially
-      allow update: if isAdmin(request.auth.uid); // Only admins can change roles or other user details
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if request.auth != null && (isAdmin() || request.auth.uid == userId);
+      allow create: if isAdmin(); // Only admins can create new user role entries
+      allow update: if isAdmin(); // Only admins can update user roles
+      allow delete: if isAdmin(); // Only admins can delete user role entries
     }
 
-    match /hairdressers/{hairdresserId} {
-      allow read: if isAuthenticated(); // All authenticated users can read hairdresser profiles (e.g., for selection in forms)
-      allow create: if isAdmin(request.auth.uid); // Typically created by an admin via a cloud function
-      allow update: if isAuthenticated() && 
-                      (isAdmin(request.auth.uid) || 
-                       (request.auth.uid == hairdresserId && 
-                        // Hairdresser can only update specific fields:
-                        request.resource.data.keys().hasOnly(['name', 'assigned_locations', 'specialties', 'availability', 'working_days', 'profilePictureUrl', 'updatedAt']) &&
-                        request.resource.data.name == resource.data.name && // Cannot change their own name via direct doc update, use profile page
-                        request.resource.data.email == resource.data.email // Cannot change email
-                       ) 
-                      );
-      allow delete: if isAdmin(request.auth.uid);
-    }
-
+    // Locations (Salons) collection
     match /locations/{locationId} {
-      allow read: if isAuthenticated(); // All authenticated users can read locations
-      allow create, update, delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow read: if request.auth != null; // Any authenticated user can read salon locations
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
+    // Services collection
     match /services/{serviceId} {
-      allow read: if isAuthenticated(); // All authenticated users can read services (needed for booking form)
+      allow read: if request.auth != null; // Any authenticated user can read service details
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
       
-      allow create: if isAuthenticated() && isAdmin(request.auth.uid)
-                    && request.resource.data.name is string && request.resource.data.name.size() > 0
-                    && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
-                    && request.resource.data.price is number && request.resource.data.price >= 0
-                    && request.resource.data.salonId is string 
-                    && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
-                    && request.resource.data.isActive is bool
-                    && request.resource.data.containsKey('createdAt') && request.resource.data.createdAt == request.time
-                    && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time;
-
-      allow update: if isAuthenticated() && isAdmin(request.auth.uid)
-                    && request.resource.data.name is string && request.resource.data.name.size() > 0
-                    && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
-                    && request.resource.data.price is number && request.resource.data.price >= 0
-                    && request.resource.data.salonId is string
-                    && request.resource.data.salonId == resource.data.salonId // Prevent changing salonId for an existing service.
-                    && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
-                    && request.resource.data.isActive is bool
-                    && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time
-                    && !request.resource.data.containsKey('createdAt'); // createdAt should not be updatable
-      
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      // Basic data validation for services
+      allow write: if isAdmin() && 
+                      request.resource.data.name is string && request.resource.data.name.size() > 1 &&
+                      request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0 &&
+                      request.resource.data.price is number && request.resource.data.price >= 0 &&
+                      request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId)) &&
+                      request.resource.data.isActive is bool;
     }
 
+    // Hairdressers collection
+    match /hairdressers/{hairdresserId} {
+      allow read: if request.auth != null; // Any authenticated user can read hairdresser profiles (for selection in booking form)
+      allow create: if isAdmin(); // Only admins can create hairdresser profiles (via Cloud Function)
+      allow update: if isAdmin() || 
+                       (isOwnHairdresserProfile(hairdresserId) && 
+                       !('email' in request.resource.data && request.resource.data.email != resource.data.email) && // Cannot change own email
+                       !('role' in request.resource.data) && // Cannot change own role
+                       !('user_id' in request.resource.data && request.resource.data.user_id != resource.data.user_id) // Cannot change user_id
+                       ); 
+      allow delete: if isAdmin();
+      
+      // Basic data validation for hairdressers when admin creates/updates
+      allow write: if (isAdmin() || (isOwnHairdresserProfile(hairdresserId) && 
+                                   !('email' in request.resource.data && request.resource.data.email != resource.data.email) &&
+                                   !('role' in request.resource.data) &&
+                                   !('user_id' in request.resource.data && request.resource.data.user_id != resource.data.user_id))) &&
+                      request.resource.data.name is string && request.resource.data.name.size() > 1 &&
+                      request.resource.data.email is string && request.resource.data.email.matches('.+@.+\\..+') &&
+                      request.resource.data.user_id is string && request.resource.data.user_id.size() > 0 && // Ensure user_id is present
+                      request.resource.data.assigned_locations is list &&
+                      request.resource.data.working_days is list &&
+                      request.resource.data.availability is string &&
+                      request.resource.data.must_reset_password is bool;
+                      // Specialties and profilePictureUrl are optional or can be empty strings
+    }
+
+    // Bookings collection
     match /bookings/{bookingId} {
-      allow read: if isAuthenticated() && 
-                    (isAdmin(request.auth.uid) || 
-                     (resource.data.hairdresserId == request.auth.uid) // Hairdresser can read their own bookings
-                    );
-      allow create: if isAuthenticated() && 
-                      (isAdmin(request.auth.uid) || 
-                       // Hairdresser can create bookings for themselves or if assigned salon matches
-                       (request.resource.data.hairdresserId == request.auth.uid && 
-                        exists(/databases/$(database)/documents/hairdressers/$(request.auth.uid)) &&
-                        get(/databases/$(database)/documents/hairdressers/$(request.auth.uid)).data.assigned_locations.hasAny([request.resource.data.salonId])
-                       )
-                      )
-                      // Basic validation for create
-                      && request.resource.data.clientName is string && request.resource.data.clientName.size() > 0
-                      && request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() > 0
-                      && request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
-                      && request.resource.data.hairdresserId is string && exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId))
-                      && request.resource.data.serviceId is string && exists(/databases/$(database)/documents/services/$(request.resource.data.serviceId))
-                      && request.resource.data.appointmentDateTime is timestamp
-                      && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
-                      && request.resource.data.status is string && request.resource.data.status in ['Pending', 'Confirmed', 'Completed', 'Cancelled']
-                      && request.resource.data.containsKey('createdAt') && request.resource.data.createdAt == request.time
-                      && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time;
+      allow read: if request.auth != null && (isAdmin() || isAssignedHairdresser(resource.data));
+      allow create: if request.auth != null && (isAdmin() || isAssignedHairdresser(request.resource.data)); // Anyone authenticated can create a booking (client or staff for themselves)
+      allow update: if request.auth != null && (isAdmin() || isAssignedHairdresser(resource.data));
+      allow delete: if request.auth != null && (isAdmin() || isAssignedHairdresser(resource.data)); // Or perhaps only admins can delete
 
-      allow update: if isAuthenticated() &&
-                      (isAdmin(request.auth.uid) || 
-                       (resource.data.hairdresserId == request.auth.uid && 
-                        // Hairdresser can only update certain fields of their own bookings, e.g., status to 'Completed' or 'Cancelled'
-                        request.resource.data.keys().hasAny(['status', 'notes', 'updatedAt']) &&
-                        // Prevent hairdresser from changing key details once set by admin or self
-                        request.resource.data.clientName == resource.data.clientName &&
-                        request.resource.data.clientPhone == resource.data.clientPhone &&
-                        request.resource.data.salonId == resource.data.salonId &&
-                        request.resource.data.hairdresserId == resource.data.hairdresserId &&
-                        request.resource.data.serviceId == resource.data.serviceId &&
-                        request.resource.data.appointmentDateTime == resource.data.appointmentDateTime &&
-                        request.resource.data.durationMinutes == resource.data.durationMinutes
-                       )
-                      )
-                      // Basic validation for update
-                      && request.resource.data.clientName is string && request.resource.data.clientName.size() > 0
-                      && request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() > 0
-                      && request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId))
-                      && request.resource.data.hairdresserId is string && exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId))
-                      && request.resource.data.serviceId is string && exists(/databases/$(database)/documents/services/$(request.resource.data.serviceId))
-                      && request.resource.data.appointmentDateTime is timestamp
-                      && request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0
-                      && request.resource.data.status is string && request.resource.data.status in ['Pending', 'Confirmed', 'Completed', 'Cancelled']
-                      && request.resource.data.containsKey('updatedAt') && request.resource.data.updatedAt == request.time
-                      && !request.resource.data.containsKey('createdAt'); // createdAt should not be updatable
-
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid); // Only admins can delete bookings directly
+      // Data validation for bookings
+      allow write: if request.auth != null &&
+                      (isAdmin() || isAssignedHairdresser(request.resource.data)) && // Ensure current user is admin or the assigned hairdresser for updates
+                      request.resource.data.clientName is string && request.resource.data.clientName.size() > 1 &&
+                      request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() >= 10 &&
+                      request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId)) &&
+                      request.resource.data.hairdresserId is string && exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId)) &&
+                      request.resource.data.serviceId is string && exists(/databases/$(database)/documents/services/$(request.resource.data.serviceId)) &&
+                      request.resource.data.appointmentDateTime is timestamp &&
+                      request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0 &&
+                      request.resource.data.status is string && 
+                        (request.resource.data.status == 'Pending' || request.resource.data.status == 'Confirmed' || request.resource.data.status == 'Completed' || request.resource.data.status == 'Cancelled');
     }
   }
 }
