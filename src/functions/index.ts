@@ -56,11 +56,8 @@ export const updateUserProfile = onCall(
     const uid = request.auth.uid;
     const {name, avatarUrl} = request.data;
 
-    // Check if any actual data was sent for update
     if (name === undefined && avatarUrl === undefined) {
-      logger.error("[updateUserProfile] No data provided to update (name and avatarUrl are undefined).");
-      // This case should ideally be caught by client-side logic that checks if Object.keys(updateData).length === 0
-      // However, if it reaches here, it means client sent an empty object or object with undefined values.
+      logger.log("[updateUserProfile] No data provided to update (name and avatarUrl are undefined).");
       return {
         status: "no_change",
         message: "No information was submitted for update.",
@@ -76,7 +73,7 @@ export const updateUserProfile = onCall(
       nameChanged = true;
     }
     if (avatarUrl !== undefined) {
-      authUpdatePayload.photoURL = avatarUrl === "" ? null : avatarUrl;
+      authUpdatePayload.photoURL = avatarUrl === "" ? null : avatarUrl; // Set to null if avatarUrl is empty string
       avatarChanged = true;
     }
 
@@ -84,9 +81,9 @@ export const updateUserProfile = onCall(
       if (Object.keys(authUpdatePayload).length > 0) {
         logger.log("[updateUserProfile] Updating Firebase Auth user:", uid, JSON.stringify(authUpdatePayload));
         await admin.auth().updateUser(uid, authUpdatePayload);
-        logger.log("[updateUserProfile] Firebase Auth user updated successfully.");
+        logger.log("[updateUserProfile] Firebase Auth user updated successfully for UID:", uid);
       } else {
-        logger.log("[updateUserProfile] No changes to Firebase Auth user needed.");
+        logger.log("[updateUserProfile] No changes to Firebase Auth user needed for UID:", uid);
       }
 
       const userDocRef = db.collection("users").doc(uid);
@@ -94,11 +91,8 @@ export const updateUserProfile = onCall(
 
       const userDoc = await userDocRef.get();
       let firestoreUpdated = false;
-      let updatedRoleCollection = "unknown";
 
-
-      if (userDoc.exists) {
-        updatedRoleCollection = "users";
+      if (userDoc.exists) { // User is an admin
         const firestoreUserUpdate: {name?: string; updatedAt: FirebaseFirestore.FieldValue} = {updatedAt: admin.firestore.FieldValue.serverTimestamp()};
         if (nameChanged && name !== undefined) {
           firestoreUserUpdate.name = name;
@@ -106,13 +100,14 @@ export const updateUserProfile = onCall(
         // Admin's avatar is primarily from Auth photoURL, 'users' doc doesn't store avatarUrl.
         if (Object.keys(firestoreUserUpdate).length > 1) { // more than just updatedAt
           await userDocRef.update(firestoreUserUpdate);
-          logger.log("[updateUserProfile] Firestore 'users' document updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
+          logger.log("[updateUserProfile] Firestore 'users' document updated for admin UID:", uid, JSON.stringify(firestoreUserUpdate));
           firestoreUpdated = true;
+        } else {
+          logger.log("[updateUserProfile] Firestore 'users' document for admin UID:", uid, "not updated (only timestamp would change, or no relevant Firestore fields changed). This is expected if only avatar changed for an admin.");
         }
       } else {
         const hairdresserDoc = await hairdresserDocRef.get();
-        if (hairdresserDoc.exists) {
-          updatedRoleCollection = "hairdressers";
+        if (hairdresserDoc.exists) { // User is a hairdresser
           const firestoreHairdresserUpdate: {
             name?: string;
             profilePictureUrl?: string;
@@ -122,32 +117,33 @@ export const updateUserProfile = onCall(
           if (nameChanged && name !== undefined) {
             firestoreHairdresserUpdate.name = name;
           }
-          if (avatarChanged && avatarUrl !== undefined) {
-            firestoreHairdresserUpdate.profilePictureUrl = avatarUrl; // empty string or new URL
+          if (avatarChanged && avatarUrl !== undefined) { // avatarUrl could be "" to clear
+            firestoreHairdresserUpdate.profilePictureUrl = avatarUrl;
           }
 
           if (Object.keys(firestoreHairdresserUpdate).length > 1) { // more than just updatedAt
             await hairdresserDocRef.update(firestoreHairdresserUpdate);
-            logger.log("[updateUserProfile] Firestore 'hairdressers' document updated for UID:", uid, JSON.stringify(firestoreHairdresserUpdate));
+            logger.log("[updateUserProfile] Firestore 'hairdressers' document updated for hairdresser UID:", uid, JSON.stringify(firestoreHairdresserUpdate));
             firestoreUpdated = true;
+          } else {
+            logger.log("[updateUserProfile] Firestore 'hairdressers' document for UID:", uid, "not updated (only timestamp would change, or no relevant Firestore fields changed).");
           }
         }
       }
 
       if (!nameChanged && !avatarChanged) {
+        // This case should ideally be caught by the initial check, but as a safeguard.
         return {
           status: "no_change",
           message: "Profile information submitted was the same as current; no update performed.",
         };
       }
+      // If we reach here, at least one change (name or avatar) was intended.
+      // Check if the user document exists for context in logging/returning status.
+      const userExistsInCollections = userDoc.exists || (await hairdresserDocRef.get()).exists;
 
-      if ((nameChanged || avatarChanged) && !firestoreUpdated && updatedRoleCollection !== "unknown") {
-        logger.warn(`[updateUserProfile] Auth might have been updated, but Firestore doc in '${updatedRoleCollection}' for UID: ${uid} was not (possibly because only timestamp would change).`);
-        // This can happen if the name/avatar submitted matches what's already in Firestore,
-        // but was different from what client thought it was, triggering an Auth update.
-        // Or if only avatar changed for an admin (Firestore 'users' doc doesn't store avatar for admin).
-      } else if (!firestoreUpdated && updatedRoleCollection === "unknown") {
-        logger.warn("[updateUserProfile] User document not found in 'users' or 'hairdressers' for UID:", uid, ". Auth was updated but Firestore was not.");
+      if (!userExistsInCollections) {
+        logger.warn("[updateUserProfile] User document not found in 'users' or 'hairdressers' for UID:", uid, ". Auth may have been updated but Firestore was not.");
         return {
           status: "warning",
           message: "Profile updated in authentication, but no matching Firestore record found to update other details.",
@@ -156,14 +152,21 @@ export const updateUserProfile = onCall(
         };
       }
 
+      // If an admin only changed avatar, firestoreUpdated might be false, but it's still a success.
+      if (userDoc.exists && avatarChanged && !nameChanged && !firestoreUpdated) {
+        logger.log("[updateUserProfile] Admin avatar successfully updated in Auth. Firestore 'users' doc not modified as it doesn't store avatarUrl.");
+      } else if (!firestoreUpdated && (nameChanged || (avatarChanged && !userDoc.exists))) {
+        // Log if Firestore wasn't updated but was expected to (e.g. name change for admin, or avatar change for hairdresser)
+        logger.warn(`[updateUserProfile] Auth for UID: ${uid} was updated, but the corresponding Firestore document was not updated with new field values (only timestamp may have changed). Review if this is expected.`);
+      }
       return {
         status: "success",
         message: "Profile updated successfully.",
-        updatedName: name, // Will be undefined if not part of request data
-        updatedAvatarUrl: avatarUrl, // Will be undefined if not part of request data
+        updatedName: name,
+        updatedAvatarUrl: avatarUrl,
       };
     } catch (error: any) {
-      logger.error("[updateUserProfile] Error updating profile:", {
+      logger.error("[updateUserProfile] Error updating profile for UID:", uid, {
         errorMessage: error.message,
         errorStack: error.stack,
         errorDetails: JSON.stringify(error),

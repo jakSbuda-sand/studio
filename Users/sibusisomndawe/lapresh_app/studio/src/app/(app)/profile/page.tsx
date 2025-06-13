@@ -34,7 +34,7 @@ export default function ProfilePage() {
   const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   
-  const [formData, setFormData] = useState<{ name: string; avatarUrl: string }>({ name: "", email: "", avatarUrl: "" });
+  const [formData, setFormData] = useState<{ name: string; email: string; avatarUrl: string }>({ name: "", email: "", avatarUrl: "" });
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordChangeDialogOpen, setPasswordChangeDialogOpen] = useState(false);
@@ -45,7 +45,7 @@ export default function ProfilePage() {
     if (currentUser) {
       setFormData({
         name: currentUser.name || "",
-        email: currentUser.email || "", // email is not editable here, just for consistency
+        email: currentUser.email || "", 
         avatarUrl: currentUser.avatarUrl || "",
       });
     }
@@ -61,8 +61,15 @@ export default function ProfilePage() {
     setIsSubmittingProfile(true);
 
     const updateData: UpdateUserProfileData = {};
-    if (formData.name !== currentUser.name) updateData.name = formData.name;
-    if (formData.avatarUrl !== currentUser.avatarUrl) updateData.avatarUrl = formData.avatarUrl;
+
+    // Only add to updateData if values actually changed from current state
+    // Treat null/undefined current values as empty strings for comparison with form's empty string
+    if (formData.name !== (currentUser.name || "")) {
+        updateData.name = formData.name;
+    }
+    if (formData.avatarUrl !== (currentUser.avatarUrl || "")) {
+        updateData.avatarUrl = formData.avatarUrl; // Send empty string if cleared, or new URL
+    }
 
     if (Object.keys(updateData).length === 0) {
       toast({ title: "No Changes", description: "No information was changed." });
@@ -72,19 +79,31 @@ export default function ProfilePage() {
     }
 
     try {
+      console.log("Client: Submitting profile update with data:", JSON.stringify(updateData));
       const updateUserProfileFunction = httpsCallable<UpdateUserProfileData, UpdateUserProfileResult>(functions, 'updateUserProfile');
       const result = await updateUserProfileFunction(updateData);
+      console.log("Client: Cloud function result:", JSON.stringify(result.data));
 
       if (result.data.status === 'success' || result.data.status === 'warning') {
         toast({ title: "Profile Updated", description: result.data.message });
-        await refreshAppUser(); // Refresh user data in AuthContext
+        await refreshAppUser(); 
         setIsEditing(false);
-      } else {
+      } else if (result.data.status === 'no_change') {
+        toast({ title: "No Changes Detected by Server", description: result.data.message });
+        setIsEditing(false);
+      }
+      else {
         toast({ title: "Update Failed", description: result.data.message, variant: "destructive" });
       }
     } catch (error: any) {
       console.error("Error updating profile:", error);
-      toast({ title: "Update Error", description: error.message || "Could not update profile.", variant: "destructive" });
+      let errorMessage = "Could not update profile.";
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      toast({ title: "Update Error", description: errorMessage, variant: "destructive" });
     } finally {
       setIsSubmittingProfile(false);
     }
@@ -113,6 +132,11 @@ export default function ProfilePage() {
       setNewPassword("");
       setConfirmPassword("");
       setPasswordChangeDialogOpen(false);
+      if (currentUser?.role === 'hairdresser' && currentUser.must_reset_password) {
+        // If this was a forced reset, also update the flag via AuthContext if available
+        // This scenario might be better handled directly in AuthContext or a specific function
+        // For now, we assume a standard password change post-initial-reset
+      }
     } catch (error: any) {
       console.error("Password change error:", error);
       if (error.code === "auth/requires-recent-login") {
@@ -180,7 +204,7 @@ export default function ProfilePage() {
                   <Input id="name" value={formData.name} onChange={handleInputChange} className="text-lg"/>
                 ) : (
                   <p className="text-lg text-foreground flex items-center gap-2 mt-1">
-                    <UserCircle size={20} className="text-primary" /> {currentUser.name}
+                    <UserCircle size={20} className="text-primary" /> {currentUser.name || "Not set"}
                   </p>
                 )}
               </div>
@@ -249,7 +273,7 @@ export default function ProfilePage() {
                     {isSubmittingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Save Changes
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => { setIsEditing(false); setFormData({ name: currentUser.name || "", email: currentUser.email || "", avatarUrl: currentUser.avatarUrl || "" }); }} className="flex-1" disabled={isSubmittingProfile}>
+                  <Button type="button" variant="outline" onClick={() => { setIsEditing(false); if(currentUser) setFormData({ name: currentUser.name || "", email: currentUser.email || "", avatarUrl: currentUser.avatarUrl || "" }); }} className="flex-1" disabled={isSubmittingProfile}>
                     Cancel
                   </Button>
                 </CardFooter>

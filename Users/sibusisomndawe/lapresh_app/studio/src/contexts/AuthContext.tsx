@@ -11,7 +11,7 @@ import {
   firebaseSignOut, 
   firebaseSignInWithEmailAndPassword,
   firebaseSendPasswordResetEmail,
-  firebaseUpdatePassword, // Ensure this is imported for direct use or re-export
+  firebaseUpdatePassword, 
   doc,
   getDoc,
   updateDoc
@@ -41,10 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchAndSetAppUser = useCallback(async (fbUser: FirebaseUser | null) => {
     if (fbUser) {
-      setFirebaseUser(fbUser); // Keep a reference to the FirebaseUser object
+      setFirebaseUser(fbUser); 
       let appUser: User | null = null;
 
-      // Try to fetch user data from 'users' collection (admins)
       const userDocRef = doc(db, "users", fbUser.uid);
       const userDocSnap = await getDoc(userDocRef);
 
@@ -52,13 +51,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userDocData = userDocSnap.data() as UserDoc;
         appUser = {
           uid: fbUser.uid,
-          name: userDocData.name || fbUser.displayName, // Prioritize Firestore name
-          email: userDocData.email || fbUser.email,     // Prioritize Firestore email
+          name: userDocData.name || fbUser.displayName, 
+          email: userDocData.email || fbUser.email,     
           role: userDocData.role,
-          avatarUrl: fbUser.photoURL || undefined, // Auth photoURL is primary for admin avatar
+          avatarUrl: fbUser.photoURL || undefined, 
         };
+        console.log("AuthContext: Admin user data set:", JSON.stringify(appUser, null, 2));
       } else {
-        // If not in 'users', try 'hairdressers' collection
         const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid);
         const hairdresserDocSnap = await getDoc(hairdresserDocRef);
 
@@ -66,44 +65,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
           appUser = {
             uid: fbUser.uid,
-            name: hairdresserData.name || fbUser.displayName, // Prioritize Firestore name
-            email: hairdresserData.email || fbUser.email,     // Prioritize Firestore email
+            name: hairdresserData.name || fbUser.displayName, 
+            email: hairdresserData.email || fbUser.email,     
             role: 'hairdresser',
-            // For hairdressers, Firestore profilePictureUrl is primary, fallback to Auth photoURL
             avatarUrl: hairdresserData.profilePictureUrl || fbUser.photoURL || undefined,
             must_reset_password: hairdresserData.must_reset_password,
             hairdresserDocId: hairdresserDocSnap.id, 
             hairdresserProfileId: fbUser.uid, 
           };
+          console.log("AuthContext: Hairdresser user data set:", JSON.stringify(appUser, null, 2));
         }
       }
 
       if (appUser) {
         setUser(appUser);
-        // Redirection logic based on user state
         if (appUser.role === 'hairdresser' && appUser.must_reset_password) {
           if (pathname !== '/auth/force-password-reset') {
+            console.log("AuthContext: Redirecting hairdresser to force password reset.");
             router.replace('/auth/force-password-reset');
           }
         } else if (pathname === '/login' || pathname === '/' || pathname === '/auth/force-password-reset') {
+           console.log("AuthContext: User authenticated, redirecting to dashboard.");
            router.replace('/dashboard');
         }
       } else {
-        // No user record found in Firestore for this authenticated Firebase user
-        console.warn(`User document not found in Firestore for UID: ${fbUser.uid}. Logging out.`);
-        await firebaseSignOut(auth); // Sign out from Firebase Auth
+        console.warn(`AuthContext: User document not found in Firestore for UID: ${fbUser.uid}. Logging out.`);
+        await firebaseSignOut(auth); 
         setUser(null);
         setFirebaseUser(null);
-        if (pathname !== '/login') router.replace('/login');
+        if (pathname !== '/login') {
+          console.log("AuthContext: No app user found, redirecting to login.");
+          router.replace('/login');
+        }
       }
     } else {
-      // No Firebase user is authenticated
       setUser(null);
       setFirebaseUser(null);
       const allowedGuestPaths = ['/login', '/auth/force-password-reset', '/'];
-      // Only redirect if current path is not an allowed guest path and not a Next.js internal path
       if (!allowedGuestPaths.includes(pathname) && !pathname.startsWith('/_next/')) {
-        // router.replace('/login'); // Consider implications of redirecting from all non-guest paths
+        console.log(`AuthContext: User not authenticated, current path ${pathname} is not allowed guest path. Redirecting to login.`);
+        // router.replace('/login'); // This can cause redirect loops if not handled carefully, e.g. on initial load of /
       }
     }
     setLoading(false);
@@ -112,31 +113,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setLoading(true); // Set loading true at the start of auth state change
+      console.log("AuthContext: onAuthStateChanged triggered. Firebase user:", fbUser ? fbUser.uid : null);
+      setLoading(true); 
       if (fbUser) {
         try {
-          // Attempt to refresh the token to get the latest profile data
-          await fbUser.getIdToken(true);
+          console.log("AuthContext: Attempting to refresh ID token for:", fbUser.uid);
+          await fbUser.getIdToken(true); // Force refresh token
+          console.log("AuthContext: ID token refreshed for:", fbUser.uid);
         } catch (error) {
           console.warn("AuthContext: Failed to refresh auth token during onAuthStateChanged:", error);
         }
       }
       await fetchAndSetAppUser(fbUser);
-      // setLoading(false) is handled within fetchAndSetAppUser
     });
-    return () => unsubscribe(); // Cleanup subscription on unmount
+    return () => {
+      console.log("AuthContext: Unsubscribing from onAuthStateChanged.");
+      unsubscribe();
+    };
   }, [fetchAndSetAppUser]);
 
   const login = async (email: string, password_param: string): Promise<boolean> => {
     setLoading(true);
     try {
+      console.log("AuthContext: Attempting login for email:", email);
       await firebaseSignInWithEmailAndPassword(auth, email, password_param);
-      // onAuthStateChanged will trigger fetchAndSetAppUser, which handles user state and setLoading(false)
+      // onAuthStateChanged handles user state and setLoading(false)
+      console.log("AuthContext: Login successful for email:", email);
       return true; 
     } catch (error: any) {
-      console.error("Firebase login error:", error);
+      console.error("AuthContext: Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid credentials.", variant: "destructive"});
-      setLoading(false); // Explicitly set loading false on error
+      setLoading(false); 
       return false;
     }
   };
@@ -144,12 +151,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setLoading(true);
     try {
+      console.log("AuthContext: Attempting logout.");
       await firebaseSignOut(auth);
       setUser(null); 
       setFirebaseUser(null);
       router.push('/login');
+      console.log("AuthContext: Logout successful.");
     } catch (error) {
-      console.error("Firebase logout error:", error);
+      console.error("AuthContext: Firebase logout error:", error);
       toast({ title: "Logout Failed", description: "Could not log out. Please try again.", variant: "destructive"});
     } finally {
       setLoading(false);
@@ -158,10 +167,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendPasswordReset = async (email: string): Promise<boolean> => {
     try {
+      console.log("AuthContext: Sending password reset email to:", email);
       await firebaseSendPasswordResetEmail(auth, email);
+      console.log("AuthContext: Password reset email sent successfully to:", email);
       return true;
     } catch (error: any) {
-      console.error("Send password reset email error:", error);
+      console.error("AuthContext: Send password reset email error:", error);
       toast({title: "Error", description: error.message || "Could not send password reset email.", variant: "destructive"});
       return false;
     }
@@ -169,15 +180,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateHairdresserPasswordResetFlag = async (hairdresserAuthUid: string, value: boolean): Promise<boolean> => {
     try {
+      console.log(`AuthContext: Updating must_reset_password flag for UID ${hairdresserAuthUid} to ${value}`);
       const hairdresserDocRef = doc(db, "hairdressers", hairdresserAuthUid);
       await updateDoc(hairdresserDocRef, { must_reset_password: value });
-      // Optimistically update local user state if it's the current user
       if (user && user.uid === hairdresserAuthUid) {
         setUser(prev => prev ? ({ ...prev, must_reset_password: value }) : null);
       }
+      console.log(`AuthContext: Successfully updated must_reset_password flag for UID ${hairdresserAuthUid}`);
       return true;
     } catch (error: any) {
-      console.error("Error updating must_reset_password flag:", error);
+      console.error("AuthContext: Error updating must_reset_password flag:", error);
       toast({title: "Error", description: "Failed to update password reset status.", variant: "destructive"});
       return false;
     }
@@ -187,18 +199,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentFbUser = auth.currentUser;
     if (currentFbUser) {
       setLoading(true);
+      console.log("AuthContext (refreshAppUser): Current Firebase user UID:", currentFbUser.uid);
       try {
-        // Force refresh the token; this updates the user's profile data on the client (like photoURL)
-        console.log("AuthContext: Attempting to refresh user token for latest profile data...");
+        console.log("AuthContext (refreshAppUser): Attempting to force refresh user token for latest profile data...");
         await currentFbUser.getIdToken(true);
-        console.log("AuthContext: User token refreshed. Re-fetching app user data.");
+        console.log("AuthContext (refreshAppUser): User token refreshed. Re-fetching app user data.");
       } catch (error) {
-        console.warn("AuthContext: Failed to refresh auth token during refreshAppUser:", error);
-        // Proceed even if token refresh fails, as Firestore data might still be fetched correctly.
+        console.warn("AuthContext (refreshAppUser): Failed to refresh auth token during refreshAppUser:", error);
       }
-      await fetchAndSetAppUser(currentFbUser); // Re-run the main user fetching and setting logic
+      await fetchAndSetAppUser(currentFbUser); 
     } else {
-        console.log("AuthContext: refreshAppUser called but no current Firebase user.");
+        console.log("AuthContext (refreshAppUser): refreshAppUser called but no current Firebase user.");
     }
   };
 
@@ -217,3 +228,4 @@ export function useAuth() {
   }
   return context;
 }
+
