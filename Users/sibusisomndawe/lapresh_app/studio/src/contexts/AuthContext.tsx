@@ -27,8 +27,7 @@ interface AuthContextType {
   loading: boolean;
   sendPasswordReset: (email: string) => Promise<boolean>;
   updateHairdresserPasswordResetFlag: (hairdresserAuthUid: string, value: boolean) => Promise<boolean>;
-  refreshAppUser: () => Promise<void>; // New method
-  // firebaseUpdatePassword is directly available from @/lib/firebase
+  refreshAppUser: () => Promise<void>; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,9 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchAndSetAppUser = useCallback(async (fbUser: FirebaseUser | null) => {
     if (fbUser) {
-      setFirebaseUser(fbUser);
+      setFirebaseUser(fbUser); // Keep a reference to the FirebaseUser object
       let appUser: User | null = null;
 
+      // Try to fetch user data from 'users' collection (admins)
       const userDocRef = doc(db, "users", fbUser.uid);
       const userDocSnap = await getDoc(userDocRef);
 
@@ -52,12 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userDocData = userDocSnap.data() as UserDoc;
         appUser = {
           uid: fbUser.uid,
-          name: userDocData.name || fbUser.displayName,
-          email: userDocData.email || fbUser.email,
+          name: userDocData.name || fbUser.displayName, // Prioritize Firestore name
+          email: userDocData.email || fbUser.email,     // Prioritize Firestore email
           role: userDocData.role,
-          avatarUrl: fbUser.photoURL || undefined,
+          avatarUrl: fbUser.photoURL || undefined, // Auth photoURL is primary for admin avatar
         };
       } else {
+        // If not in 'users', try 'hairdressers' collection
         const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid);
         const hairdresserDocSnap = await getDoc(hairdresserDocRef);
 
@@ -65,12 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
           appUser = {
             uid: fbUser.uid,
-            name: hairdresserData.name || fbUser.displayName,
-            email: hairdresserData.email || fbUser.email,
+            name: hairdresserData.name || fbUser.displayName, // Prioritize Firestore name
+            email: hairdresserData.email || fbUser.email,     // Prioritize Firestore email
             role: 'hairdresser',
+            // For hairdressers, Firestore profilePictureUrl is primary, fallback to Auth photoURL
             avatarUrl: hairdresserData.profilePictureUrl || fbUser.photoURL || undefined,
             must_reset_password: hairdresserData.must_reset_password,
-            hairdresserDocId: hairdresserDocSnap.id, // This is user_id / uid
+            hairdresserDocId: hairdresserDocSnap.id, 
             hairdresserProfileId: fbUser.uid, 
           };
         }
@@ -78,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (appUser) {
         setUser(appUser);
+        // Redirection logic based on user state
         if (appUser.role === 'hairdresser' && appUser.must_reset_password) {
           if (pathname !== '/auth/force-password-reset') {
             router.replace('/auth/force-password-reset');
@@ -86,19 +89,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
            router.replace('/dashboard');
         }
       } else {
+        // No user record found in Firestore for this authenticated Firebase user
         console.warn(`User document not found in Firestore for UID: ${fbUser.uid}. Logging out.`);
-        await firebaseSignOut(auth);
+        await firebaseSignOut(auth); // Sign out from Firebase Auth
         setUser(null);
         setFirebaseUser(null);
         if (pathname !== '/login') router.replace('/login');
       }
     } else {
+      // No Firebase user is authenticated
       setUser(null);
       setFirebaseUser(null);
       const allowedGuestPaths = ['/login', '/auth/force-password-reset', '/'];
-        if (!allowedGuestPaths.includes(pathname) && !pathname.startsWith('/_next/')) {
-           // router.replace('/login'); // Keep this commented or refine logic if needed
-        }
+      // Only redirect if current path is not an allowed guest path and not a Next.js internal path
+      if (!allowedGuestPaths.includes(pathname) && !pathname.startsWith('/_next/')) {
+        // router.replace('/login'); // Consider implications of redirecting from all non-guest paths
+      }
     }
     setLoading(false);
   }, [router, pathname]);
@@ -106,25 +112,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setLoading(true);
+      setLoading(true); // Set loading true at the start of auth state change
       await fetchAndSetAppUser(fbUser);
+      // setLoading(false) is handled within fetchAndSetAppUser
     });
-    return () => unsubscribe();
+    return () => unsubscribe(); // Cleanup subscription on unmount
   }, [fetchAndSetAppUser]);
 
   const login = async (email: string, password_param: string): Promise<boolean> => {
     setLoading(true);
     try {
       await firebaseSignInWithEmailAndPassword(auth, email, password_param);
-      // onAuthStateChanged + fetchAndSetAppUser will handle setting user state and redirection
+      // onAuthStateChanged will trigger fetchAndSetAppUser, which handles user state and setLoading(false)
       return true; 
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid credentials.", variant: "destructive"});
-      setLoading(false);
+      setLoading(false); // Explicitly set loading false on error
       return false;
     }
-    // setLoading(false) will be called by fetchAndSetAppUser
   };
 
   const logout = async () => {
@@ -138,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Firebase logout error:", error);
       toast({ title: "Logout Failed", description: "Could not log out. Please try again.", variant: "destructive"});
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -157,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const hairdresserDocRef = doc(db, "hairdressers", hairdresserAuthUid);
       await updateDoc(hairdresserDocRef, { must_reset_password: value });
+      // Optimistically update local user state if it's the current user
       if (user && user.uid === hairdresserAuthUid) {
         setUser(prev => prev ? ({ ...prev, must_reset_password: value }) : null);
       }
@@ -169,10 +176,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshAppUser = async () => {
-    const currentFbUser = auth.currentUser; // Get the most up-to-date Firebase user
+    const currentFbUser = auth.currentUser;
     if (currentFbUser) {
       setLoading(true);
-      await fetchAndSetAppUser(currentFbUser); // Re-run the user fetching logic
+      try {
+        // Attempt to refresh the token; this can sometimes update the user's profile data on the client
+        await currentFbUser.getIdToken(true);
+      } catch (error) {
+        console.warn("Failed to refresh auth token during refreshAppUser:", error);
+        // Proceed even if token refresh fails, as Firestore data might still be up-to-date
+      }
+      await fetchAndSetAppUser(currentFbUser); // Re-run the main user fetching and setting logic
+      // setLoading(false) is handled by fetchAndSetAppUser
     }
   };
 
@@ -191,5 +206,3 @@ export function useAuth() {
   }
   return context;
 }
-
-    
