@@ -113,6 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setLoading(true); // Set loading true at the start of auth state change
+      if (fbUser) {
+        try {
+          // Attempt to refresh the token to get the latest profile data
+          await fbUser.getIdToken(true);
+        } catch (error) {
+          console.warn("AuthContext: Failed to refresh auth token during onAuthStateChanged:", error);
+        }
+      }
       await fetchAndSetAppUser(fbUser);
       // setLoading(false) is handled within fetchAndSetAppUser
     });
@@ -180,14 +188,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (currentFbUser) {
       setLoading(true);
       try {
-        // Attempt to refresh the token; this can sometimes update the user's profile data on the client
+        // Force refresh the token; this updates the user's profile data on the client (like photoURL)
+        console.log("AuthContext: Attempting to refresh user token for latest profile data...");
         await currentFbUser.getIdToken(true);
+        console.log("AuthContext: User token refreshed. Re-fetching app user data.");
       } catch (error) {
-        console.warn("Failed to refresh auth token during refreshAppUser:", error);
-        // Proceed even if token refresh fails, as Firestore data might still be up-to-date
+        console.warn("AuthContext: Failed to refresh auth token during refreshAppUser:", error);
+        // Proceed even if token refresh fails, as Firestore data might still be fetched correctly.
       }
       await fetchAndSetAppUser(currentFbUser); // Re-run the main user fetching and setting logic
-      // setLoading(false) is handled by fetchAndSetAppUser
+    } else {
+        console.log("AuthContext: refreshAppUser called but no current Firebase user.");
     }
   };
 
