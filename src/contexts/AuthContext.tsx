@@ -2,7 +2,7 @@
 "use client";
 
 import type { User, UserDoc, HairdresserDoc } from '@/lib/types';
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
   auth, 
@@ -11,6 +11,7 @@ import {
   firebaseSignOut, 
   firebaseSignInWithEmailAndPassword,
   firebaseSendPasswordResetEmail,
+  firebaseUpdatePassword, // Ensure this is imported for direct use or re-export
   doc,
   getDoc,
   updateDoc
@@ -19,13 +20,15 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { toast } from '@/hooks/use-toast';
 
 interface AuthContextType {
-  user: User | null; // This is your application's User type
-  firebaseUser: FirebaseUser | null; // Raw Firebase Auth user object
+  user: User | null; 
+  firebaseUser: FirebaseUser | null;
   login: (email: string, password_param: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
   sendPasswordReset: (email: string) => Promise<boolean>;
   updateHairdresserPasswordResetFlag: (hairdresserAuthUid: string, value: boolean) => Promise<boolean>;
+  refreshAppUser: () => Promise<void>; // New method
+  // firebaseUpdatePassword is directly available from @/lib/firebase
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,86 +40,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const fetchAndSetAppUser = useCallback(async (fbUser: FirebaseUser | null) => {
+    if (fbUser) {
+      setFirebaseUser(fbUser);
+      let appUser: User | null = null;
+
+      const userDocRef = doc(db, "users", fbUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const userDocData = userDocSnap.data() as UserDoc;
+        appUser = {
+          uid: fbUser.uid,
+          name: userDocData.name || fbUser.displayName,
+          email: userDocData.email || fbUser.email,
+          role: userDocData.role,
+          avatarUrl: fbUser.photoURL || undefined,
+        };
+      } else {
+        const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid);
+        const hairdresserDocSnap = await getDoc(hairdresserDocRef);
+
+        if (hairdresserDocSnap.exists()) {
+          const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
+          appUser = {
+            uid: fbUser.uid,
+            name: hairdresserData.name || fbUser.displayName,
+            email: hairdresserData.email || fbUser.email,
+            role: 'hairdresser',
+            avatarUrl: hairdresserData.profilePictureUrl || fbUser.photoURL || undefined,
+            must_reset_password: hairdresserData.must_reset_password,
+            hairdresserDocId: hairdresserDocSnap.id, // This is user_id / uid
+            hairdresserProfileId: fbUser.uid, 
+          };
+        }
+      }
+
+      if (appUser) {
+        setUser(appUser);
+        if (appUser.role === 'hairdresser' && appUser.must_reset_password) {
+          if (pathname !== '/auth/force-password-reset') {
+            router.replace('/auth/force-password-reset');
+          }
+        } else if (pathname === '/login' || pathname === '/' || pathname === '/auth/force-password-reset') {
+           router.replace('/dashboard');
+        }
+      } else {
+        console.warn(`User document not found in Firestore for UID: ${fbUser.uid}. Logging out.`);
+        await firebaseSignOut(auth);
+        setUser(null);
+        setFirebaseUser(null);
+        if (pathname !== '/login') router.replace('/login');
+      }
+    } else {
+      setUser(null);
+      setFirebaseUser(null);
+      const allowedGuestPaths = ['/login', '/auth/force-password-reset', '/'];
+        if (!allowedGuestPaths.includes(pathname) && !pathname.startsWith('/_next/')) {
+           // router.replace('/login'); // Keep this commented or refine logic if needed
+        }
+    }
+    setLoading(false);
+  }, [router, pathname]);
+
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setLoading(true);
-      if (fbUser) {
-        setFirebaseUser(fbUser);
-        let appUser: User | null = null;
-
-        // 1. Check 'users' collection (typically for admins)
-        const userDocRef = doc(db, "users", fbUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (userDocSnap.exists()) {
-          const userDocData = userDocSnap.data() as UserDoc;
-          appUser = {
-            uid: fbUser.uid,
-            name: userDocData.name || fbUser.displayName, // Prioritize UserDoc name
-            email: userDocData.email || fbUser.email,     // Prioritize UserDoc email
-            role: userDocData.role,
-            avatarUrl: fbUser.photoURL || undefined,
-          };
-        } else {
-          // 2. If not in 'users', check 'hairdressers' collection
-          const hairdresserDocRef = doc(db, "hairdressers", fbUser.uid);
-          const hairdresserDocSnap = await getDoc(hairdresserDocRef);
-
-          if (hairdresserDocSnap.exists()) {
-            const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
-            appUser = {
-              uid: fbUser.uid,
-              name: hairdresserData.name || fbUser.displayName, // Prioritize HairdresserDoc name
-              email: hairdresserData.email || fbUser.email,   // Prioritize HairdresserDoc email
-              role: 'hairdresser',
-              avatarUrl: hairdresserData.profilePictureUrl || fbUser.photoURL || undefined,
-              must_reset_password: hairdresserData.must_reset_password,
-              hairdresserDocId: hairdresserDocSnap.id,
-              hairdresserProfileId: fbUser.uid, // Redundant, same as uid
-            };
-          }
-        }
-
-        if (appUser) {
-          setUser(appUser);
-          // Handle redirection for password reset
-          if (appUser.role === 'hairdresser' && appUser.must_reset_password) {
-            if (pathname !== '/auth/force-password-reset') {
-              router.replace('/auth/force-password-reset');
-            }
-          } else if (pathname === '/login' || pathname === '/' || pathname === '/auth/force-password-reset') {
-            // if password reset page is visited by user who does not need to reset, redirect to dashboard
-             router.replace('/dashboard');
-          }
-        } else {
-          console.warn(`User document not found in Firestore for UID: ${fbUser.uid} in 'users' or 'hairdressers' collections. Logging out.`);
-          await firebaseSignOut(auth);
-          setUser(null);
-          setFirebaseUser(null);
-          if (pathname !== '/login') router.replace('/login');
-        }
-
-      } else { // No Firebase user (logged out)
-        setUser(null);
-        setFirebaseUser(null);
-        const allowedGuestPaths = ['/login', '/auth/force-password-reset', '/'];
-        if (!allowedGuestPaths.includes(pathname) && !pathname.startsWith('/_next/')) { // Avoid redirect loops from dev server requests
-           // Only redirect if not on an allowed guest path
-           // router.replace('/login'); // Consider if automatic redirect is always desired
-        }
-      }
-      setLoading(false);
+      await fetchAndSetAppUser(fbUser);
     });
-
     return () => unsubscribe();
-  }, [router, pathname]);
+  }, [fetchAndSetAppUser]);
 
   const login = async (email: string, password_param: string): Promise<boolean> => {
     setLoading(true);
     try {
       await firebaseSignInWithEmailAndPassword(auth, email, password_param);
-      // onAuthStateChanged will handle setting user state and redirection
-      setLoading(false);
+      // onAuthStateChanged + fetchAndSetAppUser will handle setting user state and redirection
       return true; 
     } catch (error: any) {
       console.error("Firebase login error:", error);
@@ -124,13 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return false;
     }
+    // setLoading(false) will be called by fetchAndSetAppUser
   };
 
   const logout = async () => {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      setUser(null); // Clear user state immediately
+      setUser(null); 
       setFirebaseUser(null);
       router.push('/login');
     } catch (error) {
@@ -156,7 +157,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const hairdresserDocRef = doc(db, "hairdressers", hairdresserAuthUid);
       await updateDoc(hairdresserDocRef, { must_reset_password: value });
-      // If current user is this hairdresser, update local state
       if (user && user.uid === hairdresserAuthUid) {
         setUser(prev => prev ? ({ ...prev, must_reset_password: value }) : null);
       }
@@ -168,8 +168,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshAppUser = async () => {
+    const currentFbUser = auth.currentUser; // Get the most up-to-date Firebase user
+    if (currentFbUser) {
+      setLoading(true);
+      await fetchAndSetAppUser(currentFbUser); // Re-run the user fetching logic
+    }
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, firebaseUser, login, logout, loading, sendPasswordReset, updateHairdresserPasswordResetFlag }}>
+    <AuthContext.Provider value={{ user, firebaseUser, login, logout, loading, sendPasswordReset, updateHairdresserPasswordResetFlag, refreshAppUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -182,3 +191,5 @@ export function useAuth() {
   }
   return context;
 }
+
+    
