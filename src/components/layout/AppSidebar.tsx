@@ -26,11 +26,14 @@ import {
   PlusCircle,
   Shield,
   UserCircle as ProfileIcon, // Renamed to avoid conflict
+  Settings2, // Icon for services
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import React from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/contexts/AuthContext';
+import type { User } from '@/lib/types';
+
 
 const Logo = () => (
   <div className="flex items-center gap-2 px-3 py-4">
@@ -54,8 +57,13 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
     return null; // Don't render if user role not allowed
   }
 
-  const isActive = currentPath === href || (subItems && subItems.some(sub => currentPath === sub.href));
+  const isActive = currentPath === href || (subItems && subItems.some(sub => currentPath.startsWith(sub.href))); // Use startsWith for parent active state
   const [isOpen, setIsOpen] = React.useState(isActive);
+
+  React.useEffect(() => {
+    setIsOpen(isActive);
+  }, [isActive]);
+
 
   // Filter subItems based on role
   const visibleSubItems = subItems?.filter(sub => !sub.roles || (userRole && sub.roles.includes(userRole)));
@@ -66,14 +74,14 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
         <AccordionItem value={label} className="border-none">
           <AccordionTrigger
             className={cn(
-              "flex w-full items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
+              "flex w-full items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground font-body",
               isActive && "bg-sidebar-accent text-sidebar-accent-foreground"
             )}
             onClick={() => setIsOpen(!isOpen)}
           >
             <div className="flex items-center gap-2">
               <Icon className="h-5 w-5" />
-              <span className="truncate font-body">{label}</span>
+              <span className="truncate">{label}</span>
             </div>
           </AccordionTrigger>
           <AccordionContent className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4 data-[state=closed]:animate-none data-[state=open]:animate-none">
@@ -111,16 +119,17 @@ const navItems: NavItemProps[] = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'hairdresser'] },
   { href: '/locations', icon: Store, label: 'Salon Locations', roles: ['admin'] },
   { href: '/hairdressers', icon: Users, label: 'Hairdressers', roles: ['admin'] },
+  { href: '/services', icon: Settings2, label: 'Services', roles: ['admin'] },
   {
     href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin', 'hairdresser'],
     subItems: [
-      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] }, // Hairdressers might make bookings for themselves
+      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] }, 
       { href: '/bookings', icon: ClipboardList, label: 'View All Bookings', roles: ['admin'] },
       { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
     ]
   },
   { href: '/calendar', icon: CalendarDays, label: 'Calendar View', roles: ['admin', 'hairdresser'] },
-  { href: '/notifications', icon: Bell, label: 'Notifications', badge: '3', roles: ['admin'] },
+  { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] }, // Badge was '3', removed as it's static
 ];
 
 export function AppSidebar() {
