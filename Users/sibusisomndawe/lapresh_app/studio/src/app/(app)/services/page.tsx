@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ServiceForm, type ServiceFormValues } from "@/components/forms/ServiceForm";
 import type { Service, Salon, LocationDoc, ServiceDoc, User } from "@/lib/types";
-import { Scissors, PlusCircle, Edit3, Trash2, Loader2, PackageOpen, ShieldAlert, Tag } from "lucide-react";
+import { Scissors, PlusCircle, Edit3, Trash2, Loader2, PackageOpen, ShieldAlert } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +20,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,12 +38,12 @@ export default function ServicesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!user) { // Initial load, wait for user context
+    if (!user) { 
         setIsLoading(true);
         return;
     }
     if (user.role !== 'admin') {
-      setIsLoading(false); // Stop loading as access is denied
+      setIsLoading(false); 
       return;
     }
 
@@ -77,7 +77,7 @@ export default function ServicesPage() {
     fetchData();
   }, [user]);
 
-  if (!user && !isLoading) { // User not loaded and not currently loading, implies logged out or error
+  if (!user && !isLoading) { 
     router.replace('/login');
     return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
@@ -107,7 +107,12 @@ export default function ServicesPage() {
     setIsSubmitting(true);
     try {
       const docData: Omit<ServiceDoc, 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
-        ...data,
+        name: data.name,
+        description: data.description,
+        durationMinutes: data.durationMinutes,
+        price: data.price,
+        salonIds: data.salonIds,
+        isActive: data.isActive,
         createdAt: serverTimestamp() as Timestamp,
         updatedAt: serverTimestamp() as Timestamp,
       };
@@ -128,18 +133,18 @@ export default function ServicesPage() {
     setIsSubmitting(true);
     try {
       const serviceRef = doc(db, "services", editingService.id);
-      // salonId cannot be changed after creation as per current design/form
-      const updateData: Partial<Omit<ServiceDoc, 'salonId' | 'createdAt'>> & {updatedAt: Timestamp} = { 
+      const updateData: Partial<Omit<ServiceDoc, 'createdAt'>> & {updatedAt: Timestamp} = { 
         name: data.name,
         description: data.description,
         durationMinutes: data.durationMinutes,
         price: data.price,
+        salonIds: data.salonIds,
         isActive: data.isActive,
         updatedAt: serverTimestamp() as Timestamp,
       };
-      await updateDoc(serviceRef, updateData as any); // Cast to any due to serverTimestamp
+      await updateDoc(serviceRef, updateData as any); 
       
-      setServices(prev => prev.map(s => s.id === editingService.id ? { ...s, ...data, salonId: editingService.salonId, updatedAt: Timestamp.now() } : s).sort((a,b) => a.name.localeCompare(b.name)));
+      setServices(prev => prev.map(s => s.id === editingService.id ? { ...s, ...data, salonIds: data.salonIds, updatedAt: Timestamp.now() } : s).sort((a,b) => a.name.localeCompare(b.name)));
       toast({ title: "Service Updated", description: `${data.name} has been successfully updated.` });
       setIsFormOpen(false);
       setEditingService(null);
@@ -170,7 +175,13 @@ export default function ServicesPage() {
     setIsFormOpen(true);
   };
 
-  const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
+  const getSalonNames = (salonIds: string[]) => {
+    if (!salonIds || salonIds.length === 0) return <Badge variant="outline" className="font-body">No Salons</Badge>;
+    return salonIds.map(id => {
+        const salon = salons.find(s => s.id === id);
+        return salon ? <Badge key={id} variant="secondary" className="mr-1 mb-1 font-body">{salon.name}</Badge> : null;
+    }).filter(Boolean);
+  };
 
   return (
     <div className="space-y-8">
@@ -223,7 +234,7 @@ export default function ServicesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-headline">Service Name</TableHead>
-                  <TableHead className="font-headline">Salon</TableHead>
+                  <TableHead className="font-headline">Salons</TableHead>
                   <TableHead className="font-headline text-right">Duration (min)</TableHead>
                   <TableHead className="font-headline text-right">Price (R)</TableHead>
                   <TableHead className="font-headline text-center">Status</TableHead>
@@ -237,7 +248,7 @@ export default function ServicesPage() {
                       <div className="font-medium text-foreground">{service.name}</div>
                       {service.description && <div className="text-xs text-muted-foreground truncate max-w-xs">{service.description}</div>}
                     </TableCell>
-                    <TableCell>{getSalonName(service.salonId)}</TableCell>
+                    <TableCell><div className="flex flex-wrap">{getSalonNames(service.salonIds)}</div></TableCell>
                     <TableCell className="text-right">{service.durationMinutes}</TableCell>
                     <TableCell className="text-right">{service.price.toFixed(2)}</TableCell>
                     <TableCell className="text-center">
