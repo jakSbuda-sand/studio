@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format, isSameDay } from "date-fns";
 import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2 } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
@@ -55,11 +55,11 @@ interface BookingFormProps {
   isSubmitting?: boolean;
 }
 
-export function BookingForm({ 
-  initialData, 
-  initialDataPreselected, 
-  salons, 
-  allHairdressers, 
+export function BookingForm({
+  initialData,
+  initialDataPreselected,
+  salons,
+  allHairdressers,
   onSubmit,
   isSubmitting = false
 }: BookingFormProps) {
@@ -86,7 +86,7 @@ export function BookingForm({
     serviceId: initialDataPreselected?.serviceId || "",
     hairdresserId: initialDataPreselected?.hairdresserId || "",
     appointmentDateTime: new Date(),
-    appointmentTime: format(new Date(), "HH:mm"), 
+    appointmentTime: format(new Date(), "HH:mm"),
     durationMinutes: 60,
     status: 'Confirmed',
     notes: "",
@@ -97,14 +97,20 @@ export function BookingForm({
     resolver: zodResolver(bookingFormSchema),
     defaultValues: defaultValues as BookingFormValues, // Cast because serviceId might be initially undefined
   });
-  
+
+  const timeSlots = useMemo(() => Array.from({ length: (19 - 8) * 2 + 1 }, (_, i) => {
+    const hour = Math.floor(i / 2) + 8;
+    const minute = (i % 2) * 30;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }), []);
+
   // Effect for initial data loading and pre-selection
   useEffect(() => {
-    form.reset(defaultValues as BookingFormValues); 
+    form.reset(defaultValues as BookingFormValues);
 
     const initialSalonToSet = initialData?.salonId || initialDataPreselected?.salonId;
     if (initialSalonToSet) {
-      setSelectedSalonId(initialSalonToSet); 
+      setSelectedSalonId(initialSalonToSet);
       form.setValue("salonId", initialSalonToSet, { shouldDirty: !!initialDataPreselected?.salonId });
 
       const initialServiceToSet = initialData?.serviceId || initialDataPreselected?.serviceId;
@@ -117,22 +123,22 @@ export function BookingForm({
          form.setValue("hairdresserId", initialHairdresserToSet, { shouldDirty: !!initialDataPreselected?.hairdresserId });
       }
     } else {
-      setSelectedSalonId(undefined); 
+      setSelectedSalonId(undefined);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialData, initialDataPreselected, form.reset]); 
+  }, [initialData, initialDataPreselected, form.reset]);
 
   // Effect for filtering hairdressers based on selected salon
   useEffect(() => {
     if (selectedSalonId) {
       const filtered = allHairdressers.filter(h => h.assigned_locations.includes(selectedSalonId));
       setAvailableHairdressers(filtered);
-      
+
       const currentHairdresserId = form.getValues("hairdresserId");
       const isCurrentHairdresserValidForSalon = filtered.some(h => h.id === currentHairdresserId);
 
       if (user?.role === 'hairdresser' && user.hairdresserProfileId && filtered.some(h => h.id === user.hairdresserProfileId)) {
-        if (form.getValues("hairdresserId") !== user.hairdresserProfileId) { 
+        if (form.getValues("hairdresserId") !== user.hairdresserProfileId) {
             form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
         }
       } else if (currentHairdresserId && !isCurrentHairdresserValidForSalon) {
@@ -140,7 +146,7 @@ export function BookingForm({
       }
     } else {
       setAvailableHairdressers([]);
-      if (form.getValues("hairdresserId") !== "") { 
+      if (form.getValues("hairdresserId") !== "") {
         form.setValue("hairdresserId", "", { shouldDirty: true });
       }
     }
@@ -206,7 +212,7 @@ export function BookingForm({
         const isSelectedDateToday = isSameDay(newSelectedDate, now);
         const currentAppointmentTime = form.getValues("appointmentTime");
         const [currentHours, currentMinutes] = currentAppointmentTime.split(':').map(Number);
-        
+
         if (isSelectedDateToday) {
           const slotDateTimeForCurrentSelection = new Date(newSelectedDate);
           slotDateTimeForCurrentSelection.setHours(currentHours, currentMinutes, 0, 0);
@@ -232,30 +238,24 @@ export function BookingForm({
     const [hours, minutes] = data.appointmentTime.split(':').map(Number);
     const combinedDateTime = new Date(data.appointmentDateTime);
     combinedDateTime.setHours(hours, minutes, 0, 0);
-    
+
     await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const timeSlots = Array.from({ length: (19-8)*2 + 1 }, (_, i) => {
-    const hour = Math.floor(i / 2) + 8;
-    const minute = (i % 2) * 30;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  });
 
   const isHairdresserRole = user?.role === 'hairdresser';
   const hairdresserProfileId = user?.hairdresserProfileId;
 
-  const isSalonSelectDisabled = isHairdresserRole && 
-                                !!initialDataPreselected?.salonId && 
-                                !!hairdresserProfileId && 
+  const isSalonSelectDisabled = isHairdresserRole &&
+                                !!initialDataPreselected?.salonId &&
+                                !!hairdresserProfileId &&
                                 allHairdressers.find(h => h.id === hairdresserProfileId)?.assigned_locations.includes(initialDataPreselected.salonId);
 
-  const isHairdresserSelectDisabled = 
-    (!selectedSalonId || availableHairdressers.length === 0) || 
+  const isHairdresserSelectDisabled =
+    (!selectedSalonId || availableHairdressers.length === 0) ||
     (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
 
-  const selectedDateFromForm = form.watch("appointmentDateTime"); 
+  const selectedDateFromForm = form.watch("appointmentDateTime");
   const nowForTimeCheck = new Date();
   const isSelectedDateTodayForTimeCheck = selectedDateFromForm ? isSameDay(selectedDateFromForm, nowForTimeCheck) : false;
 
@@ -299,8 +299,8 @@ export function BookingForm({
               <FormField control={form.control} name="salonId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Salon Location</FormLabel>
-                  <Select 
-                    onValueChange={(value) => { field.onChange(value); setSelectedSalonId(value); form.setValue("serviceId", ""); form.setValue("hairdresserId", ""); }} 
+                  <Select
+                    onValueChange={(value) => { field.onChange(value); setSelectedSalonId(value); form.setValue("serviceId", ""); form.setValue("hairdresserId", ""); }}
                     value={field.value}
                     disabled={isSalonSelectDisabled}
                   >
@@ -313,14 +313,14 @@ export function BookingForm({
               <FormField control={form.control} name="serviceId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Service</FormLabel>
-                  <Select 
-                    onValueChange={(value) => { 
+                  <Select
+                    onValueChange={(value) => {
                       field.onChange(value);
                       const selectedService = availableServices.find(s => s.id === value);
                       if (selectedService) {
                         form.setValue("durationMinutes", selectedService.durationMinutes);
                       }
-                    }} 
+                    }}
                     value={field.value}
                     disabled={!selectedSalonId || isFetchingServices || availableServices.length === 0}
                   >
@@ -341,12 +341,12 @@ export function BookingForm({
                 </FormItem>
               )}/>
             </div>
-            
+
             <FormField control={form.control} name="hairdresserId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Hairdresser</FormLabel>
-                <Select 
-                  onValueChange={field.onChange} 
+                <Select
+                  onValueChange={field.onChange}
                   value={field.value}
                   disabled={isHairdresserSelectDisabled}
                 >
@@ -366,7 +366,7 @@ export function BookingForm({
                 <FormMessage />
               </FormItem>
             )}/>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <FormField control={form.control} name="appointmentDateTime" render={({ field }) => (
                 <FormItem className="flex flex-col">
@@ -381,8 +381,8 @@ export function BookingForm({
                       </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus 
-                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) } 
+                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus
+                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) }
                       />
                     </PopoverContent>
                   </Popover>
