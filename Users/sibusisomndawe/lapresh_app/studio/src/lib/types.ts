@@ -1,6 +1,17 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export interface DailyWorkingHours {
+  start: string; // HH:mm format
+  end: string; // HH:mm format
+  isOff: boolean; // True if the hairdresser is off on this day
+}
+
+export type HairdresserWorkingHours = Partial<Record<DayOfWeek, DailyWorkingHours>>;
+
+
 export interface Salon {
   id: string;
   name: string;
@@ -18,8 +29,9 @@ export interface Hairdresser {
   email: string;
   assigned_locations: string[]; 
   specialties: string[];
-  availability: string; 
-  working_days: DayOfWeek[]; 
+  availability: string; // General text description
+  working_days: DayOfWeek[]; // Kept for now, might be derived from workingHours later
+  workingHours?: HairdresserWorkingHours; // Granular working hours
   profilePictureUrl?: string;
   must_reset_password?: boolean;
   createdAt?: Timestamp | Date | string;
@@ -32,7 +44,7 @@ export interface Service {
   description?: string;
   durationMinutes: number;
   price: number; // Price in Rands
-  salonIds: string[]; // Changed from salonId: string
+  salonIds: string[]; 
   isActive: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -67,8 +79,6 @@ export interface User {
   must_reset_password?: boolean;
 }
 
-export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
-
 export interface AvailabilitySlot {
   start: string; // HH:mm format
   end: string; // HH:mm format
@@ -93,7 +103,7 @@ export interface ServiceDoc {
   description?: string;
   durationMinutes: number;
   price: number;
-  salonIds: string[]; // Changed from salonId: string
+  salonIds: string[]; 
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -106,6 +116,7 @@ export interface HairdresserDoc {
   assigned_locations: string[];
   working_days: DayOfWeek[]; 
   availability: string; 
+  workingHours?: HairdresserWorkingHours; // Granular working hours
   must_reset_password: boolean;
   specialties?: string[];
   profilePictureUrl?: string;
@@ -146,5 +157,3 @@ export interface NotificationDoc {
   created_at: Timestamp;
   template_id?: string;
 }
-
-    

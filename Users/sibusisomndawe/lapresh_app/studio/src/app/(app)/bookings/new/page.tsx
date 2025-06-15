@@ -17,6 +17,28 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     throw new Error("User not authenticated.");
   }
 
+  // TODO: Implement robust double-booking prevention here or, preferably, in a Cloud Function.
+  // This would involve:
+  // 1. Querying existing bookings for the selected hairdresserId.
+  // 2. Checking if the new booking's (appointmentDateTime + durationMinutes) overlaps with any existing bookings.
+  // 3. If an overlap is found, throw an error or return a specific status to prevent booking creation.
+  // Example check:
+  // const bookingEndDateTime = new Date(data.appointmentDateTime.getTime() + data.durationMinutes * 60000);
+  // const existingBookingsQuery = query(
+  //   collection(db, "bookings"),
+  //   where("hairdresserId", "==", data.hairdresserId),
+  //   where("status", "in", ["Confirmed", "Pending"]) // Consider only active bookings
+  //   // Add time range checks here based on data.appointmentDateTime and bookingEndDateTime
+  //   // This can be complex with Firestore queries alone for overlaps.
+  //   // A common pattern is to check if new_start < existing_end AND new_end > existing_start
+  // );
+  // const existingSnapshot = await getDocs(existingBookingsQuery);
+  // if (!existingSnapshot.empty) {
+  //    // Iterate and perform precise overlap check if Firestore query was broad
+  //    // throw new Error("This time slot is already booked or overlaps with an existing appointment.");
+  // }
+
+
   const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
 
   const newBookingDoc: Omit<BookingDoc, 'id'> = {
@@ -25,7 +47,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     clientPhone: data.clientPhone,
     salonId: data.salonId,
     hairdresserId: data.hairdresserId,
-    serviceId: data.serviceId, // Changed from service to serviceId
+    serviceId: data.serviceId, 
     appointmentDateTime: appointmentDateForFirestore,
     durationMinutes: data.durationMinutes,
     status: 'Confirmed', 
@@ -51,7 +73,6 @@ export default function NewBookingPage() {
   const { user } = useAuth();
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
-  // Services state removed, BookingForm will fetch its own services
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -80,6 +101,7 @@ export default function NewBookingPage() {
             id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
             assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
             availability: data.availability || "", working_days: data.working_days || [],
+            workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Hairdresser;
@@ -118,7 +140,7 @@ export default function NewBookingPage() {
       await createBookingInFirestore(data, user);
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error) {
-      // Error toast handled in createBookingInFirestore
+      // Error toast handled in createBookingInFirestore or specific error handling
     } finally {
       setIsSubmitting(false);
     }
