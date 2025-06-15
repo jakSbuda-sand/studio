@@ -186,7 +186,6 @@ export default function BookingsPage() {
 
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
   const getHairdresserName = (hairdresserId: string) => hairdressers.find(h => h.id === hairdresserId)?.name || "N/A";
-  // getServiceName is no longer needed here if booking.serviceName is populated
 
   const getStatusBadgeVariant = (status: Booking['status']): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
@@ -217,7 +216,7 @@ export default function BookingsPage() {
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
         <DialogContent className="sm:max-w-2xl font-body">
           <DialogHeader><DialogTitle className="font-headline text-2xl">{editingBooking ? "Edit Booking" : "New Booking"}</DialogTitle></DialogHeader>
-          {(editingBooking || (isFormOpen && !editingBooking))) && (
+          {(editingBooking || (isFormOpen && !editingBooking)) && (
             <BookingForm initialData={editingBooking} salons={salons} allHairdressers={hairdressers}
               onSubmit={editingBooking ? handleUpdateBooking : async () => { /* New from dialog not standard */ setIsFormOpen(false); }}
               isSubmitting={isSubmitting}
@@ -260,7 +259,7 @@ export default function BookingsPage() {
                     <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                     <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                   </TableCell>
-                  <TableCell>{booking.serviceName || "N/A"}</TableCell> {/* Display serviceName */}
+                  <TableCell>{booking.serviceName || "N/A"}</TableCell>
                   {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
                   <TableCell><Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge></TableCell>
