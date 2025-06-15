@@ -1,8 +1,8 @@
 
-const path = require("path"); // Using require is standard for .eslintrc.js
+const path = require("path");
 
 const functionsDir = __dirname; // Should resolve to src/functions
-const projectRootDir = path.resolve(functionsDir, ".."); // Should resolve to src/
+const projectSrcDir = path.resolve(functionsDir, ".."); // Should resolve to src/
 
 module.exports = {
   root: true,
@@ -24,7 +24,7 @@ module.exports = {
       path.join(functionsDir, "tsconfig.json"),      // e.g. src/functions/tsconfig.json
       path.join(functionsDir, "tsconfig.dev.json"), // e.g. src/functions/tsconfig.dev.json
     ],
-    tsconfigRootDir: projectRootDir, // This should be the 'src' directory
+    tsconfigRootDir: projectSrcDir, // Set to src/, the common root for TS project context
     sourceType: "module",
   },
   ignorePatterns: [
@@ -43,9 +43,10 @@ module.exports = {
     "indent": ["error", 2],
     "max-len": "off",
     "@typescript-eslint/no-explicit-any": "off",
-    "object-curly-spacing": ["error", "never"], // Applied as per original lint errors
+    "object-curly-spacing": ["error", "never"], 
     "no-trailing-spaces": "error",
     "comma-dangle": ["error", "always-multiline"],
     "padded-blocks": ["error", "never"],
+    "@typescript-eslint/no-var-requires": "warn",
   },
 };
