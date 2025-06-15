@@ -7,7 +7,7 @@ import {onCall, HttpsError, type CallableRequest} from "firebase-functions/v2/ht
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "lib/types"; // Import necessary types
+import type {HairdresserWorkingHours, DayOfWeek} from "lib/types"; // Adjusted path relative to rootDir
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
@@ -71,16 +71,14 @@ export const updateUserProfile = onCall(
     let nameChanged = false;
     let avatarChanged = false;
 
-    // Check for name change
     if (newName !== undefined && newName !== currentDisplayName) {
       authUpdatePayload.displayName = newName;
       nameChanged = true;
       logger.log("[updateUserProfile] Name change detected. New:", newName, "Current:", currentDisplayName);
     }
 
-    // Check for avatar change (including clearing the avatar)
     if (newAvatarUrl !== undefined && newAvatarUrl !== currentPhotoURL) {
-      authUpdatePayload.photoURL = newAvatarUrl === "" ? null : newAvatarUrl; // Set to null to remove photoURL
+      authUpdatePayload.photoURL = newAvatarUrl === "" ? null : newAvatarUrl;
       avatarChanged = true;
       logger.log("[updateUserProfile] Avatar URL change detected. New:", newAvatarUrl, "Current:", currentPhotoURL, "Payload photoURL:", authUpdatePayload.photoURL);
     }
@@ -93,9 +91,8 @@ export const updateUserProfile = onCall(
       };
     }
 
-    logger.log("[updateUserProfile] Changes detected. Name changed:", nameChanged, "Avatar changed:", avatarChanged);
+    logger.log("[updateUserProfile] Auth changes detected. Name changed:", nameChanged, "Avatar changed:", avatarChanged);
     logger.log("[updateUserProfile] Payload for Firebase Auth update for UID", uid, ":", JSON.stringify(authUpdatePayload));
-
 
     try {
       if (Object.keys(authUpdatePayload).length > 0) {
@@ -110,7 +107,7 @@ export const updateUserProfile = onCall(
       const userDoc = await userDocRef.get();
       let firestoreUpdated = false;
 
-      if (userDoc.exists) { // Check boolean property directly
+      if (userDoc.exists) {
         logger.log("[updateUserProfile] Admin user document exists for UID:", uid);
         const firestoreUserUpdate: {name?: string; updatedAt: FirebaseFirestore.FieldValue} = {
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -118,18 +115,17 @@ export const updateUserProfile = onCall(
         if (nameChanged && newName !== undefined) {
           firestoreUserUpdate.name = newName;
         }
-        // Admin users' avatars are managed by Firebase Auth photoURL, not a separate field in 'users' doc
-        if (Object.keys(firestoreUserUpdate).length > 1) { // only 'name' or 'updatedAt' (always present)
+        if (Object.keys(firestoreUserUpdate).length > 1) {
           await userDocRef.update(firestoreUserUpdate);
           logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
           firestoreUpdated = true;
         } else {
-          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated with new field values (avatar changes are Auth-only for admin, or no name change).");
+          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated. Avatar changes are Auth-only for admin, or no name change.");
         }
       } else {
         logger.log("[updateUserProfile] Admin user document does NOT exist for UID:", uid, "Checking for hairdresser doc.");
         const hairdresserDoc = await hairdresserDocRef.get();
-        if (hairdresserDoc.exists) { // Check boolean property directly
+        if (hairdresserDoc.exists) {
           logger.log("[updateUserProfile] Hairdresser document exists for UID:", uid);
           const firestoreHairdresserUpdate: {
             name?: string;
@@ -140,11 +136,11 @@ export const updateUserProfile = onCall(
           if (nameChanged && newName !== undefined) {
             firestoreHairdresserUpdate.name = newName;
           }
-          if (avatarChanged && newAvatarUrl !== undefined) { // newAvatarUrl could be "" to clear
+          if (avatarChanged && newAvatarUrl !== undefined) {
             firestoreHairdresserUpdate.profilePictureUrl = newAvatarUrl;
           }
 
-          if (Object.keys(firestoreHairdresserUpdate).length > 1) { // if name or avatar changed, or just updatedAt
+          if (Object.keys(firestoreHairdresserUpdate).length > 1) {
             await hairdresserDocRef.update(firestoreHairdresserUpdate);
             logger.log("[updateUserProfile] Firestore 'hairdressers' doc updated for UID:", uid, JSON.stringify(firestoreHairdresserUpdate));
             firestoreUpdated = true;
@@ -153,17 +149,14 @@ export const updateUserProfile = onCall(
           }
         } else {
           logger.warn("[updateUserProfile] User document not found in 'users' or 'hairdressers' for UID:", uid);
-          // If Auth was updated but Firestore doc not found, it's a warning state.
-          // This scenario implies an inconsistency if an Auth user exists without a corresponding Firestore profile doc.
           return {
             status: "warning",
             message: "Profile updated in authentication, but no matching Firestore record found to update other details.",
-            updatedName: nameChanged ? newName : undefined, // Only return if changed
-            updatedAvatarUrl: avatarChanged ? newAvatarUrl : undefined, // Only return if changed
+            updatedName: nameChanged ? newName : undefined,
+            updatedAvatarUrl: avatarChanged ? newAvatarUrl : undefined,
           };
         }
       }
-      
       logger.log(`[updateUserProfile] Final status for UID ${uid}: Name changed: ${nameChanged}, Avatar changed: ${avatarChanged}, Firestore updated: ${firestoreUpdated}`);
       return {
         status: "success",
@@ -171,7 +164,6 @@ export const updateUserProfile = onCall(
         updatedName: nameChanged ? newName : undefined,
         updatedAvatarUrl: avatarChanged ? newAvatarUrl : undefined,
       };
-
     } catch (error: any) {
       logger.error("[updateUserProfile] Error during Firestore update or final Auth update process for UID:", uid, {
         errorMessage: error.message,
@@ -205,7 +197,7 @@ export const createHairdresserUser = onCall(
 
     try {
       const adminUserDoc = await adminUserDocRef.get();
-      if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") { // Check boolean property directly
+      if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
         logger.error("[createHairdresserUser] Caller is not an admin. Role:", adminUserDoc.data()?.role);
         throw new HttpsError(
           "permission-denied",
@@ -235,7 +227,7 @@ export const createHairdresserUser = onCall(
         email: data.email,
         password: temporaryPassword,
         displayName: data.displayName,
-        emailVerified: false, // Typically set to false, email verification flow can be added separately
+        emailVerified: false,
         photoURL: data.profilePictureUrl || undefined,
       });
       logger.log("[createHairdresserUser] Successfully created Firebase Auth user with UID:", newUserRecord.uid);
@@ -250,14 +242,14 @@ export const createHairdresserUser = onCall(
     const newHairdresserDocRef = db.collection("hairdressers").doc(newUserRecord.uid);
     try {
       const hairdresserDocData = {
-        user_id: newUserRecord.uid, // Storing the Auth UID
+        user_id: newUserRecord.uid,
         name: data.displayName,
         email: data.email,
         assigned_locations: data.assigned_locations || [],
-        working_days: data.working_days || [], // This might be derived from workingHours
-        availability: data.availability, // General text description
-        workingHours: data.workingHours || {}, // Store new workingHours
-        must_reset_password: true, // New hairdressers should reset their password
+        working_days: data.working_days || [],
+        availability: data.availability,
+        workingHours: data.workingHours || {},
+        must_reset_password: true,
         specialties: data.specialties || [],
         profilePictureUrl: data.profilePictureUrl || "",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -266,18 +258,13 @@ export const createHairdresserUser = onCall(
       await newHairdresserDocRef.set(hairdresserDocData);
       logger.log("[createHairdresserUser] Successfully created Firestore document for hairdresser:", newUserRecord.uid);
 
-      // Optionally, you might want to create a corresponding entry in a 'users' collection
-      // if hairdressers are also considered 'users' in a generic sense for roles/permissions,
-      // but the current model seems to keep them separate ('users' for admin, 'hairdressers' for staff).
-
       return {
         status: "success",
         userId: newUserRecord.uid,
         message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.`,
       };
-    } catch (error: any)
+    } catch (error: any) {
       logger.error("[createHairdresserUser] Error creating Firestore document for hairdresser:", {error});
-      // If Firestore document creation fails, delete the orphaned Firebase Auth user
       await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError: any) => {
         logger.error("[createHairdresserUser] CRITICAL: Error deleting orphaned auth user after Firestore failure:", {deleteError});
       });
@@ -286,7 +273,6 @@ export const createHairdresserUser = onCall(
   },
 );
 
-
 export const helloWorld = onRequest(
   {region: "us-central1"},
   (request, response) => {
@@ -294,4 +280,3 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   },
 );
-
