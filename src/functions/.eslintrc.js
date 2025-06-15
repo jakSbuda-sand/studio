@@ -21,17 +21,17 @@ module.exports = {
   parser: "@typescript-eslint/parser",
   parserOptions: {
     project: [
-      path.join(functionsDir, "tsconfig.json"), // Equivalent to "./tsconfig.json" if tsconfigRootDir is __dirname
-      path.join(functionsDir, "tsconfig.dev.json"), // Equivalent to "./tsconfig.dev.json"
+      "./tsconfig.json", // Relative to tsconfigRootDir
+      "./tsconfig.dev.json", // Relative to tsconfigRootDir
     ],
     tsconfigRootDir: functionsDir, // src/functions/
     sourceType: "module",
   },
   ignorePatterns: [
-    "lib/**/*",        // Ignores 'src/functions/lib/**/*'
-    "generated/**/*",  // Ignores 'src/functions/generated/**/*'
-    "index.js",        // Ignores 'src/functions/index.js'
-    ".eslintrc.js",    // Ignore this file itself from TS linting
+    "./lib/",        // Explicitly ignore the 'lib' directory in src/functions/
+    "generated/",    // If you have this directory
+    "index.js",      // Ignore src/functions/index.js (the non-TS entry point if it exists)
+    ".eslintrc.js",  // Ignore this ESLint config file itself
   ],
   plugins: [
     "@typescript-eslint",
