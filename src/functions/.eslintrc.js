@@ -1,3 +1,6 @@
+
+const path = require('path'); // Added for path resolution
+
 module.exports = {
   root: true,
   env: {
@@ -14,14 +17,14 @@ module.exports = {
   ],
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: ["tsconfig.json", "tsconfig.dev.json"],
-    tsconfigRootDir: __dirname,
+    project: ["functions/tsconfig.json", "functions/tsconfig.dev.json"], // Paths relative to the new tsconfigRootDir
+    tsconfigRootDir: path.resolve(__dirname, '..'), // Changed to point to src/
     sourceType: "module",
   },
   ignorePatterns: [
-    "/lib/**/*", // Ignore built files.
-    "/generated/**/*", // Ignore generated files.
-    "index.js",
+    "/lib/**/*", // Ignore built files from src/functions/lib
+    "/generated/**/*", // Ignore generated files
+    "index.js", // Ignore the JS entry point in src/functions if it exists
   ],
   plugins: [
     "@typescript-eslint",
@@ -33,5 +36,10 @@ module.exports = {
     "indent": ["error", 2],
     "max-len": "off",
     "@typescript-eslint/no-explicit-any": "off",
+    "object-curly-spacing": ["error", "never"],
+    "no-trailing-spaces": "error",
+    "comma-dangle": ["error", "always-multiline"],
+    "padded-blocks": ["error", "never"],
+
   },
 };

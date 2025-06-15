@@ -1,5 +1,8 @@
 
-const path = require('path'); // Added for path resolution
+const path = require("path"); // Using require is standard for .eslintrc.js
+
+const functionsDir = __dirname; // Should resolve to src/functions
+const projectRootDir = path.resolve(functionsDir, ".."); // Should resolve to src/
 
 module.exports = {
   root: true,
@@ -17,14 +20,18 @@ module.exports = {
   ],
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: ["functions/tsconfig.json", "functions/tsconfig.dev.json"], // Paths relative to the new tsconfigRootDir
-    tsconfigRootDir: path.resolve(__dirname, '..'), // Changed to point to src/
+    project: [
+      path.join(functionsDir, "tsconfig.json"),      // e.g. src/functions/tsconfig.json
+      path.join(functionsDir, "tsconfig.dev.json"), // e.g. src/functions/tsconfig.dev.json
+    ],
+    tsconfigRootDir: projectRootDir, // This should be the 'src' directory
     sourceType: "module",
   },
   ignorePatterns: [
-    "/lib/**/*", // Ignore built files from src/functions/lib
-    "/generated/**/*", // Ignore generated files
-    "index.js", // Ignore the JS entry point in src/functions if it exists
+    "lib/**/*",        // Ignores 'src/functions/lib/**/*'
+    "generated/**/*",  // Ignores 'src/functions/generated/**/*'
+    "index.js",        // Ignores 'src/functions/index.js'
+    ".eslintrc.js",    // Ignore this file itself from TS linting
   ],
   plugins: [
     "@typescript-eslint",
@@ -36,10 +43,9 @@ module.exports = {
     "indent": ["error", 2],
     "max-len": "off",
     "@typescript-eslint/no-explicit-any": "off",
-    "object-curly-spacing": ["error", "never"],
+    "object-curly-spacing": ["error", "never"], // Applied as per original lint errors
     "no-trailing-spaces": "error",
     "comma-dangle": ["error", "always-multiline"],
     "padded-blocks": ["error", "never"],
-
   },
 };
