@@ -31,7 +31,7 @@ const dailyWorkingHoursSchema = z.object({
   isOff: z.boolean().default(false),
 }).refine(data => (data.isOff || (data.start && data.end)), {
   message: "Start and end times are required unless marked as off.",
-  path: ["start"], // Show error near start time, or make it global for the day
+  path: ["start"],
 }).refine(data => {
     if (!data.isOff && data.start && data.end) {
       return data.start < data.end;
@@ -42,6 +42,8 @@ const dailyWorkingHoursSchema = z.object({
     path: ["end"],
 });
 
+// Define daysOfWeek array before it's used in the schema
+const daysOfWeek: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
@@ -51,7 +53,14 @@ const hairdresserFormSchema = z.object({
   specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
   availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
-  workingHours: z.record(z.nativeEnum(DayOfWeek), dailyWorkingHoursSchema).optional() as z.ZodType<HairdresserWorkingHours | undefined>,
+  workingHours: z.object(
+      daysOfWeek.reduce((acc, day) => {
+        acc[day] = dailyWorkingHoursSchema;
+        return acc;
+      }, {} as Record<DayOfWeek, typeof dailyWorkingHoursSchema>)
+    )
+    .partial() // Makes all day keys optional (e.g. "Monday", "Tuesday")
+    .optional(), // Makes the entire workingHours object optional
 });
 
 export type HairdresserFormValues = z.infer<typeof hairdresserFormSchema>;
@@ -64,9 +73,8 @@ interface HairdresserFormProps {
   isLoading?: boolean;
 }
 
-const daysOfWeek: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-const defaultWorkingHours = daysOfWeek.reduce((acc, day) => {
+// This defaultWorkingHours is for form initialization, not Zod schema.
+const defaultWorkingHoursForFormInit = daysOfWeek.reduce((acc, day) => {
   acc[day] = { start: day === "Saturday" || day === "Sunday" ? "" : "09:00", end: day === "Saturday" || day === "Sunday" ? "" : "17:00", isOff: day === "Saturday" || day === "Sunday" };
   return acc;
 }, {} as HairdresserWorkingHours);
@@ -81,7 +89,7 @@ export function HairdresserForm({
 }: HairdresserFormProps) {
   
   const getInitialFormValues = React.useCallback(() => {
-    const baseValues = {
+    const baseValues: HairdresserFormValues = { // Ensure baseValues match HairdresserFormValues type
       name: "",
       email: "",
       initialPassword: "",
@@ -89,19 +97,31 @@ export function HairdresserForm({
       specialties: "",
       availability: "Mon-Fri 9am-5pm, Sat 10am-3pm",
       profilePictureUrl: "",
-      workingHours: JSON.parse(JSON.stringify(defaultWorkingHours)) // Deep copy
+      workingHours: JSON.parse(JSON.stringify(defaultWorkingHoursForFormInit)) // Deep copy
     };
 
     if (isEditing && initialData) {
+      // Ensure all keys from HairdresserFormValues are present
+      const currentWorkingHours = initialData.workingHours 
+        ? { ...defaultWorkingHoursForFormInit, ...initialData.workingHours } 
+        : JSON.parse(JSON.stringify(defaultWorkingHoursForFormInit));
+      
+      // Ensure all days are present in currentWorkingHours for the form
+      daysOfWeek.forEach(day => {
+        if (!currentWorkingHours[day]) {
+          currentWorkingHours[day] = defaultWorkingHoursForFormInit[day];
+        }
+      });
+
       return {
-        ...baseValues,
         name: initialData.name || "",
         email: initialData.email || "",
+        initialPassword: "", // Not populated for edits
         assigned_locations: initialData.assigned_locations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
         availability: initialData.availability || baseValues.availability,
         profilePictureUrl: initialData.profilePictureUrl || "",
-        workingHours: initialData.workingHours ? { ...defaultWorkingHours, ...initialData.workingHours } : baseValues.workingHours,
+        workingHours: currentWorkingHours,
       };
     }
     return baseValues;
@@ -117,16 +137,18 @@ export function HairdresserForm({
   }, [initialData, getInitialFormValues, form]);
 
   const handleSubmitInternal = async (data: HairdresserFormValues) => {
-    // Filter out days marked as 'isOff' or with empty start/end times from workingHours
     const processedWorkingHours: HairdresserWorkingHours = {};
     if (data.workingHours) {
       for (const day in data.workingHours) {
         const dayKey = day as DayOfWeek;
         const hours = data.workingHours[dayKey];
-        if (hours && !hours.isOff && hours.start && hours.end) {
-          processedWorkingHours[dayKey] = { start: hours.start, end: hours.end, isOff: false };
-        } else if (hours && hours.isOff) {
-          processedWorkingHours[dayKey] = { start: "", end: "", isOff: true };
+        if (hours) { // Check if hours object exists for the day
+          if (!hours.isOff && hours.start && hours.end) {
+            processedWorkingHours[dayKey] = { start: hours.start, end: hours.end, isOff: false };
+          } else if (hours.isOff) {
+            processedWorkingHours[dayKey] = { start: "", end: "", isOff: true };
+          }
+          // If a day has neither isOff=true nor valid start/end, it's omitted from processedWorkingHours
         }
       }
     }
@@ -251,9 +273,19 @@ export function HairdresserForm({
                                   checked={field.value}
                                   onCheckedChange={(checked) => {
                                     field.onChange(checked)
-                                    if (checked) { // If marked as off, clear times
+                                    if (checked) { 
                                       form.setValue(`workingHours.${day}.start`, "");
                                       form.setValue(`workingHours.${day}.end`, "");
+                                    } else {
+                                        // If unchecking "Day Off", set default times if they were previously cleared
+                                        const currentDayHours = form.getValues(`workingHours.${day}`);
+                                        if (!currentDayHours?.start && !currentDayHours?.end) {
+                                            const defaultDaySetting = defaultWorkingHoursForFormInit[day];
+                                            if (defaultDaySetting && !defaultDaySetting.isOff) {
+                                                form.setValue(`workingHours.${day}.start`, defaultDaySetting.start);
+                                                form.setValue(`workingHours.${day}.end`, defaultDaySetting.end);
+                                            }
+                                        }
                                     }
                                   }}
                                 />
@@ -291,7 +323,9 @@ export function HairdresserForm({
                         />
                          {form.formState.errors.workingHours?.[day] && (
                             <FormMessage className="text-xs md:col-span-3">
-                                {form.formState.errors.workingHours?.[day]?.root?.message || form.formState.errors.workingHours?.[day]?.start?.message || form.formState.errors.workingHours?.[day]?.end?.message}
+                                {(form.formState.errors.workingHours?.[day] as any)?.root?.message || 
+                                 (form.formState.errors.workingHours?.[day] as any)?.start?.message || 
+                                 (form.formState.errors.workingHours?.[day] as any)?.end?.message}
                             </FormMessage>
                         )}
                       </div>
@@ -346,3 +380,5 @@ export function HairdresserForm({
     </Card>
   );
 }
+
+    

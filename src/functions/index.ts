@@ -22,7 +22,7 @@ interface CreateHairdresserData {
   displayName: string;
   assigned_locations: string[];
   availability: string;
-  working_days: DayOfWeek[];
+  working_days: DayOfWeek[]; // This might become deprecated if workingHours is primary
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
@@ -77,7 +77,7 @@ export const updateUserProfile = onCall(
     }
 
     if (newAvatarUrl !== undefined && newAvatarUrl !== currentPhotoURL) {
-      authUpdatePayload.photoURL = newAvatarUrl === "" ? null : newAvatarUrl;
+      authUpdatePayload.photoURL = newAvatarUrl === "" ? null : newAvatarUrl; // Handle clearing avatar
       avatarChanged = true;
       logger.log("[updateUserProfile] Avatar URL change detected. New:", newAvatarUrl, "Current:", currentPhotoURL, "Payload photoURL:", authUpdatePayload.photoURL);
     }
@@ -114,12 +114,13 @@ export const updateUserProfile = onCall(
         if (nameChanged && newName !== undefined) {
           firestoreUserUpdate.name = newName;
         }
+        // Avatar URL is not stored in admin user Firestore doc by current design, only in Auth
         if (Object.keys(firestoreUserUpdate).length > 1) { // Only update if name changed
           await userDocRef.update(firestoreUserUpdate);
           logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
           firestoreUpdated = true;
         } else {
-           logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated as only avatar might have changed or no name change.");
+          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated as only avatar might have changed or no name change.");
         }
       } else {
         logger.log("[updateUserProfile] Admin user document does NOT exist for UID:", uid, "Checking for hairdresser doc.");
@@ -128,15 +129,14 @@ export const updateUserProfile = onCall(
           logger.log("[updateUserProfile] Hairdresser document exists for UID:", uid);
           const firestoreHairdresserUpdate: {
             name?: string;
-            profilePictureUrl?: string;
+            profilePictureUrl?: string; // Ensure this matches the field in HairdresserDoc
             updatedAt: FirebaseFirestore.FieldValue;
           } = {updatedAt: admin.firestore.FieldValue.serverTimestamp()};
 
           if (nameChanged && newName !== undefined) {
             firestoreHairdresserUpdate.name = newName;
           }
-          // For hairdressers, avatarUrl IS stored in their Firestore doc
-          if (avatarChanged && newAvatarUrl !== undefined) {
+          if (avatarChanged && newAvatarUrl !== undefined) { // For hairdressers, avatar IS stored in Firestore
             firestoreHairdresserUpdate.profilePictureUrl = newAvatarUrl;
           }
 
@@ -149,7 +149,6 @@ export const updateUserProfile = onCall(
           }
         } else {
           logger.warn("[updateUserProfile] User document not found in 'users' or 'hairdressers' for UID:", uid);
-          // Still return success if Auth was updated, but with a warning.
           return {
             status: "warning",
             message: "Profile updated in authentication, but no matching Firestore record found to update other details.",
@@ -214,7 +213,8 @@ export const createHairdresserUser = onCall(
     const data = request.data;
     const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "availability"];
     for (const field of requiredFields) {
-      if (!data[field] && field !== "working_days" && field !== "workingHours") { // working_days and workingHours are optional for now
+      // Note: working_days and workingHours are optional in the interface, so not strictly required here unless business logic dictates
+      if (!data[field] && field !== "working_days" && field !== "workingHours" && field !== "specialties" && field !== "profilePictureUrl" && field !== "password") {
         logger.error(`[createHairdresserUser] Missing required field: ${field}.`, {data: JSON.stringify(data)});
         throw new HttpsError("invalid-argument", `Missing required field: ${field}.`);
       }
@@ -228,7 +228,7 @@ export const createHairdresserUser = onCall(
         email: data.email,
         password: temporaryPassword,
         displayName: data.displayName,
-        emailVerified: false,
+        emailVerified: false, // Consider sending verification email
         photoURL: data.profilePictureUrl || undefined,
       });
       logger.log("[createHairdresserUser] Successfully created Firebase Auth user with UID:", newUserRecord.uid);
@@ -247,10 +247,10 @@ export const createHairdresserUser = onCall(
         name: data.displayName,
         email: data.email,
         assigned_locations: data.assigned_locations || [],
-        working_days: data.working_days || [],
-        availability: data.availability,
-        workingHours: data.workingHours || {},
-        must_reset_password: true,
+        working_days: data.working_days || [], // Keep if still used, or derive from workingHours
+        availability: data.availability, // General text availability
+        workingHours: data.workingHours || {}, // Structured working hours
+        must_reset_password: true, // Always true for new hairdressers
         specialties: data.specialties || [],
         profilePictureUrl: data.profilePictureUrl || "",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -266,6 +266,7 @@ export const createHairdresserUser = onCall(
       };
     } catch (error: any) {
       logger.error("[createHairdresserUser] Error creating Firestore document for hairdresser:", {error});
+      // Attempt to clean up the Auth user if Firestore write fails
       await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError: any) => {
         logger.error("[createHairdresserUser] CRITICAL: Error deleting orphaned auth user after Firestore failure:", {deleteError});
       });
@@ -273,6 +274,7 @@ export const createHairdresserUser = onCall(
     }
   },
 );
+
 
 export const helloWorld = onRequest(
   {region: "us-central1"},

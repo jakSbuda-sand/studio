@@ -2,7 +2,7 @@
 const path = require("path");
 
 const functionsDir = __dirname; // Should resolve to src/functions
-const projectSrcDir = path.resolve(functionsDir, ".."); // Should resolve to src/
+// const projectSrcDir = path.resolve(functionsDir, ".."); // src/
 
 module.exports = {
   root: true,
@@ -21,10 +21,10 @@ module.exports = {
   parser: "@typescript-eslint/parser",
   parserOptions: {
     project: [
-      path.join(functionsDir, "tsconfig.json"),      // e.g. src/functions/tsconfig.json
-      path.join(functionsDir, "tsconfig.dev.json"), // e.g. src/functions/tsconfig.dev.json
+      path.join(functionsDir, "tsconfig.json"), // Equivalent to "./tsconfig.json" if tsconfigRootDir is __dirname
+      path.join(functionsDir, "tsconfig.dev.json"), // Equivalent to "./tsconfig.dev.json"
     ],
-    tsconfigRootDir: projectSrcDir, // Set to src/, the common root for TS project context
+    tsconfigRootDir: functionsDir, // src/functions/
     sourceType: "module",
   },
   ignorePatterns: [
@@ -43,7 +43,7 @@ module.exports = {
     "indent": ["error", 2],
     "max-len": "off",
     "@typescript-eslint/no-explicit-any": "off",
-    "object-curly-spacing": ["error", "never"], 
+    "object-curly-spacing": ["error", "never"],
     "no-trailing-spaces": "error",
     "comma-dangle": ["error", "always-multiline"],
     "padded-blocks": ["error", "never"],
