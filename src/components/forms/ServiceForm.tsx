@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import type { Salon, Service } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,7 +28,7 @@ const serviceFormSchema = z.object({
   description: z.string().optional(),
   durationMinutes: z.coerce.number().int().positive({ message: "Duration must be a positive number of minutes." }),
   price: z.coerce.number().min(0, { message: "Price cannot be negative." }),
-  salonId: z.string({ required_error: "Please select a salon for this service." }),
+  salonIds: z.array(z.string()).nonempty({ message: "Please select at least one salon for this service." }),
   isActive: z.boolean().default(true),
 });
 
@@ -49,14 +49,14 @@ export function ServiceForm({ initialData, salons, onSubmit, isSubmitting = fals
       description: initialData.description || "",
       durationMinutes: initialData.durationMinutes,
       price: initialData.price,
-      salonId: initialData.salonId,
+      salonIds: initialData.salonIds || [],
       isActive: initialData.isActive !== undefined ? initialData.isActive : true,
     } : {
       name: "",
       description: "",
       durationMinutes: 60,
       price: 0,
-      salonId: "",
+      salonIds: [],
       isActive: true,
     },
   });
@@ -68,7 +68,7 @@ export function ServiceForm({ initialData, salons, onSubmit, isSubmitting = fals
         description: initialData.description || "",
         durationMinutes: initialData.durationMinutes,
         price: initialData.price,
-        salonId: initialData.salonId,
+        salonIds: initialData.salonIds || [],
         isActive: initialData.isActive !== undefined ? initialData.isActive : true,
       });
     } else {
@@ -77,7 +77,7 @@ export function ServiceForm({ initialData, salons, onSubmit, isSubmitting = fals
         description: "",
         durationMinutes: 60,
         price: 0,
-        salonId: salons.length > 0 ? salons[0].id : "", // Default to first salon if available
+        salonIds: [],
         isActive: true,
       });
     }
@@ -104,32 +104,59 @@ export function ServiceForm({ initialData, salons, onSubmit, isSubmitting = fals
                 </FormItem>
               )}
             />
+            
             <FormField
               control={form.control}
-              name="salonId"
-              render={({ field }) => (
+              name="salonIds"
+              render={() => (
                 <FormItem>
-                  <FormLabel>Salon</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={!!initialData || salons.length === 0}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select the salon offering this service" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {salons.map((salon) => (
-                        <SelectItem key={salon.id} value={salon.id}>
-                          {salon.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!!initialData && <FormDescription>Salon cannot be changed after service creation. Create a new service for a different salon.</FormDescription>}
-                  {salons.length === 0 && <FormDescription>No salons available. Please add a salon first.</FormDescription>}
+                  <div className="mb-2">
+                    <FormLabel className="text-base">Associated Salons</FormLabel>
+                    <FormDescription>
+                      Select all salons where this service is offered.
+                    </FormDescription>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {salons.map((salon) => (
+                      <FormField
+                        key={salon.id}
+                        control={form.control}
+                        name="salonIds"
+                        render={({ field }) => {
+                          return (
+                            <FormItem
+                              className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm hover:bg-accent/50 transition-colors"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(salon.id)}
+                                  onCheckedChange={(checked) => {
+                                    const currentValue = field.value || [];
+                                    return checked
+                                      ? field.onChange([...currentValue, salon.id])
+                                      : field.onChange(
+                                          currentValue.filter(
+                                            (value) => value !== salon.id
+                                          )
+                                        );
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer flex-1 text-sm">
+                                {salon.name}
+                              </FormLabel>
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {salons.length === 0 && <FormDescription className="mt-2 text-destructive">No salons available. Please add a salon first to create a service.</FormDescription>}
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}

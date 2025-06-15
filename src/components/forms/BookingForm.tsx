@@ -71,6 +71,11 @@ export function BookingForm({
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isFetchingServices, setIsFetchingServices] = useState(false);
 
+  const timeSlots = useMemo(() => Array.from({ length: (19 - 8) * 2 + 1 }, (_, i) => {
+    const hour = Math.floor(i / 2) + 8;
+    const minute = (i % 2) * 30;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }), []);
 
   const defaultValues: Partial<BookingFormValues> = initialData ? {
     ...initialData,
@@ -95,16 +100,10 @@ export function BookingForm({
 
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(bookingFormSchema),
-    defaultValues: defaultValues as BookingFormValues, // Cast because serviceId might be initially undefined
+    defaultValues: defaultValues as BookingFormValues,
   });
 
-  const timeSlots = useMemo(() => Array.from({ length: (19 - 8) * 2 + 1 }, (_, i) => {
-    const hour = Math.floor(i / 2) + 8;
-    const minute = (i % 2) * 30;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }), []);
 
-  // Effect for initial data loading and pre-selection
   useEffect(() => {
     form.reset(defaultValues as BookingFormValues);
 
@@ -128,7 +127,7 @@ export function BookingForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData, initialDataPreselected, form.reset]);
 
-  // Effect for filtering hairdressers based on selected salon
+
   useEffect(() => {
     if (selectedSalonId) {
       const filtered = allHairdressers.filter(h => h.assigned_locations.includes(selectedSalonId));
@@ -152,14 +151,14 @@ export function BookingForm({
     }
   }, [selectedSalonId, allHairdressers, user, form]);
 
-  // Effect for fetching services based on selected salon
+
   useEffect(() => {
     if (selectedSalonId) {
       setIsFetchingServices(true);
       const fetchServices = async () => {
         try {
           const servicesCol = collection(db, "services");
-          const servicesQuery = query(servicesCol, where("salonId", "==", selectedSalonId), where("isActive", "==", true));
+          const servicesQuery = query(servicesCol, where("salonIds", "array-contains", selectedSalonId), where("isActive", "==", true));
           const serviceSnapshot = await getDocs(servicesQuery);
           const servicesList = serviceSnapshot.docs.map(sDoc => ({
             id: sDoc.id,
@@ -167,12 +166,10 @@ export function BookingForm({
           } as Service));
           setAvailableServices(servicesList);
 
-          // If editing and initial serviceId is for a service not in the new list (e.g. salon changed or service became inactive), clear it.
-          // Or if creating and preselected serviceId is invalid for this salon.
           const currentServiceId = form.getValues("serviceId");
           if(currentServiceId && !servicesList.some(s => s.id === currentServiceId)){
             form.setValue("serviceId", "", { shouldDirty: true });
-            form.setValue("durationMinutes", 60); // Reset duration
+            form.setValue("durationMinutes", 60); 
           }
 
         } catch (error) {
@@ -193,12 +190,11 @@ export function BookingForm({
   }, [selectedSalonId, form.setValue]);
 
 
-  // Effect for watching form value changes (salon, service, date)
+
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "salonId") {
         setSelectedSalonId(value.salonId);
-        // Service fetching and hairdresser filtering are handled by their own useEffects
       }
       if (name === "serviceId" && value.serviceId) {
         const selectedService = availableServices.find(s => s.id === value.serviceId);

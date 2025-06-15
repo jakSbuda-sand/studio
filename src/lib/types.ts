@@ -32,7 +32,7 @@ export interface Service {
   description?: string;
   durationMinutes: number;
   price: number; // Price in Rands
-  salonId: string;
+  salonIds: string[]; // Changed from salonId: string
   isActive: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -45,13 +45,13 @@ export interface Booking {
   clientPhone: string;
   salonId: string;
   hairdresserId: string;
-  serviceId: string; // Changed from service: string
-  serviceName?: string; // For display purposes
-  appointmentDateTime: Date; // In-app representation
+  serviceId: string; 
+  serviceName?: string; 
+  appointmentDateTime: Date; 
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
-  color?: string; // For calendar event coloring
+  color?: string; 
   createdAt?: Timestamp; 
   updatedAt?: Timestamp; 
 }
@@ -93,7 +93,7 @@ export interface ServiceDoc {
   description?: string;
   durationMinutes: number;
   price: number;
-  salonId: string;
+  salonIds: string[]; // Changed from salonId: string
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -119,7 +119,7 @@ export interface BookingDoc {
   clientPhone: string;
   salonId: string;
   hairdresserId: string;
-  serviceId: string; // Changed from service: string
+  serviceId: string; 
   appointmentDateTime: Timestamp;
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
