@@ -28,7 +28,7 @@ module.exports = {
     sourceType: "module",
   },
   ignorePatterns: [
-    "./lib/",        // Explicitly ignore the 'lib' directory in src/functions/
+    "lib/**",        // Explicitly ignore the 'lib' directory in src/functions/
     "generated/",    // If you have this directory
     "index.js",      // Ignore src/functions/index.js (the non-TS entry point if it exists)
     ".eslintrc.js",  // Ignore this ESLint config file itself
