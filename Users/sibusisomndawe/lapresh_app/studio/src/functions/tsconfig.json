@@ -4,8 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "es2022",
-    "outDir": "lib", // Output relative to this tsconfig.json, so src/functions/lib
-    "rootDir": ".",  // Root for *this* config's files is src/functions/
+    "rootDir": "..",
+    "baseUrl": "..",
+    "outDir": "functions/lib",
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
@@ -16,12 +17,12 @@
     "lib": ["es2022"]
   },
   "include": [
-    "index.ts",       // This is src/functions/index.ts
-    "../lib/types.ts" // Explicitly include shared types, relative to src/functions/
+    "functions/index.ts",
+    "lib/types.ts"
   ],
   "exclude": [
     "node_modules",
-    "lib"             // Exclude the output directory src/functions/lib
+    "functions/lib"
   ],
   "compileOnSave": true
 }
