@@ -7,9 +7,8 @@ import {onCall, HttpsError, type CallableRequest} from "firebase-functions/v2/ht
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "lib/types"; // Adjusted path relative to rootDir
+import type {HairdresserWorkingHours, DayOfWeek} from "lib/types"; // Adjusted path relative to rootDir & baseUrl
 
-// Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
   admin.initializeApp();
   logger.log("Firebase Admin SDK initialized.");
@@ -22,9 +21,9 @@ interface CreateHairdresserData {
   password?: string;
   displayName: string;
   assigned_locations: string[];
-  availability: string; // Text description
-  working_days: DayOfWeek[]; // This might become redundant if fully relying on workingHours
-  workingHours?: HairdresserWorkingHours; // New structured working hours
+  availability: string;
+  working_days: DayOfWeek[];
+  workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
 }
@@ -115,12 +114,12 @@ export const updateUserProfile = onCall(
         if (nameChanged && newName !== undefined) {
           firestoreUserUpdate.name = newName;
         }
-        if (Object.keys(firestoreUserUpdate).length > 1) {
+        if (Object.keys(firestoreUserUpdate).length > 1) { // Only update if name changed
           await userDocRef.update(firestoreUserUpdate);
           logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
           firestoreUpdated = true;
         } else {
-          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated. Avatar changes are Auth-only for admin, or no name change.");
+           logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated as only avatar might have changed or no name change.");
         }
       } else {
         logger.log("[updateUserProfile] Admin user document does NOT exist for UID:", uid, "Checking for hairdresser doc.");
@@ -136,11 +135,12 @@ export const updateUserProfile = onCall(
           if (nameChanged && newName !== undefined) {
             firestoreHairdresserUpdate.name = newName;
           }
+          // For hairdressers, avatarUrl IS stored in their Firestore doc
           if (avatarChanged && newAvatarUrl !== undefined) {
             firestoreHairdresserUpdate.profilePictureUrl = newAvatarUrl;
           }
 
-          if (Object.keys(firestoreHairdresserUpdate).length > 1) {
+          if (Object.keys(firestoreHairdresserUpdate).length > 1) { // Only update if fields changed
             await hairdresserDocRef.update(firestoreHairdresserUpdate);
             logger.log("[updateUserProfile] Firestore 'hairdressers' doc updated for UID:", uid, JSON.stringify(firestoreHairdresserUpdate));
             firestoreUpdated = true;
@@ -149,6 +149,7 @@ export const updateUserProfile = onCall(
           }
         } else {
           logger.warn("[updateUserProfile] User document not found in 'users' or 'hairdressers' for UID:", uid);
+          // Still return success if Auth was updated, but with a warning.
           return {
             status: "warning",
             message: "Profile updated in authentication, but no matching Firestore record found to update other details.",
@@ -211,9 +212,9 @@ export const createHairdresserUser = onCall(
     }
 
     const data = request.data;
-    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "availability", "working_days"];
+    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "availability"];
     for (const field of requiredFields) {
-      if (!data[field]) {
+      if (!data[field] && field !== "working_days" && field !== "workingHours") { // working_days and workingHours are optional for now
         logger.error(`[createHairdresserUser] Missing required field: ${field}.`, {data: JSON.stringify(data)});
         throw new HttpsError("invalid-argument", `Missing required field: ${field}.`);
       }

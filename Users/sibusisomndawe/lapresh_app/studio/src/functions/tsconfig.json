@@ -4,9 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "es2022",
-    "rootDir": "..",
-    "baseUrl": "..",
-    "outDir": "functions/lib",
+    "rootDir": "..",            // Actual project root for TS is src/
+    "baseUrl": "..",            // Base for non-relative module imports is src/
+    "outDir": "functions/lib",  // Output to src/functions/lib (relative to rootDir)
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
@@ -17,12 +17,12 @@
     "lib": ["es2022"]
   },
   "include": [
-    "functions/index.ts",
-    "lib/types.ts"
+    "index.ts",             // Relative to this tsconfig.json: src/functions/index.ts
+    "../lib/types.ts"       // Relative to this tsconfig.json: src/lib/types.ts
   ],
   "exclude": [
-    "node_modules",
-    "functions/lib"
+    "lib",                  // Relative to this tsconfig.json: src/functions/lib
+    "node_modules"
   ],
   "compileOnSave": true
 }
