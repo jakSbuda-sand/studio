@@ -4,8 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "es2022",
-    "outDir": "lib",
-    "rootDir": ".",
+    "outDir": "functions/lib",
+    "rootDir": "../",
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
@@ -16,7 +16,7 @@
     "lib": ["es2022"]
   },
   "include": [
-    "index.ts"
+    "functions/index.ts"
   ],
   "exclude": [
     "node_modules",
@@ -24,3 +24,4 @@
   ],
   "compileOnSave": true
 }
+
