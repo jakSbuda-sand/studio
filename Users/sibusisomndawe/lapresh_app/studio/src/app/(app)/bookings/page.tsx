@@ -210,7 +210,16 @@ export default function BookingsPage() {
   return (
     <div className="space-y-8">
       <PageHeader title={pageTitle} description={pageDescription} icon={ClipboardList}
-        actions={ <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"> <Link href="/bookings/new"> <PlusCircle className="mr-2 h-4 w-4" /> New Booking </Link> </Button> }
+        actions={
+          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Link href="/bookings/new">
+              <span className="flex items-center gap-2">
+                <PlusCircle className="h-4 w-4" />
+                New Booking
+              </span>
+            </Link>
+          </Button>
+        }
       />
 
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
@@ -239,9 +248,9 @@ export default function BookingsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="font-headline">Client</TableHead>
-                <TableHead className="font-headline">Date & Time</TableHead>
+                <TableHead className="font-headline">Date &amp; Time</TableHead>
                 <TableHead className="font-headline">Service</TableHead>
-                {user.role === 'admin' && <TableHead className="font-headline">Hairdresser</TableHead>}
+                {user.role === 'admin' &amp;&amp; <TableHead className="font-headline">Hairdresser</TableHead>}
                 <TableHead className="font-headline">Salon</TableHead>
                 <TableHead className="font-headline">Status</TableHead>
                 <TableHead className="text-right font-headline">Actions</TableHead>
@@ -253,19 +262,19 @@ export default function BookingsPage() {
                   <TableCell>
                     <div className="font-medium text-foreground">{booking.clientName}</div>
                     <div className="text-sm text-muted-foreground">{booking.clientPhone}</div>
-                    {booking.clientEmail && <div className="text-xs text-muted-foreground">{booking.clientEmail}</div>}
+                    {booking.clientEmail &amp;&amp; <div className="text-xs text-muted-foreground">{booking.clientEmail}</div>}
                   </TableCell>
                   <TableCell>
                     <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                     <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                   </TableCell>
                   <TableCell>{booking.serviceName || "N/A"}</TableCell>
-                  {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
+                  {user.role === 'admin' &amp;&amp; <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
                   <TableCell><Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                    {booking.status !== 'Cancelled' && booking.status !== 'Completed' && (
+                    {booking.status !== 'Cancelled' &amp;&amp; booking.status !== 'Completed' &amp;&amp; (
                       <AlertDialog>
                         <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}><Trash2 className="h-4 w-4" /><span className="sr-only">Cancel</span></Button></AlertDialogTrigger>
                         <AlertDialogContent>
