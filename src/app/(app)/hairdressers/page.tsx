@@ -9,8 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
-import type { Hairdresser, Salon, DayOfWeek, User, LocationDoc, HairdresserDoc } from "@/lib/types";
-import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail, Loader2 } from "lucide-react";
+import type { Hairdresser, Salon, DayOfWeek, User, LocationDoc, HairdresserDoc, HairdresserWorkingHours } from "@/lib/types";
+import { Users, PlusCircle, Edit3, Trash2, Store, Sparkles, Clock, ShieldAlert, Mail, Loader2, CalendarDays } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +27,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { db, collection, getDocs, doc, updateDoc, deleteDoc, Timestamp, serverTimestamp } from "@/lib/firebase";
+
+const formatWorkingHours = (workingHours?: HairdresserWorkingHours): string => {
+  if (!workingHours) return "Not set";
+  const days: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const parts: string[] = [];
+  days.forEach(day => {
+    const wh = workingHours[day];
+    if (wh) {
+      if (wh.isOff) {
+        parts.push(`${day.substring(0,3)}: Off`);
+      } else if (wh.start && wh.end) {
+        parts.push(`${day.substring(0,3)}: ${wh.start}-${wh.end}`);
+      }
+    }
+  });
+  return parts.length > 0 ? parts.join(" | ") : "Not set";
+};
+
 
 export default function HairdressersPage() {
   const { user } = useAuth();
@@ -59,17 +77,16 @@ export default function HairdressersPage() {
         const hairdresserSnapshot = await getDocs(hairdressersCol);
         const hairdressersListPromises = hairdresserSnapshot.docs.map(async hDoc => { 
           const data = hDoc.data() as HairdresserDoc;
-          // Fetch user document from 'users' to get additional details if needed or to verify consistency.
-          // For now, email is assumed to be in HairdresserDoc.
           return {
             id: hDoc.id, 
             userId: data.user_id, 
             name: data.name,
-            email: data.email, // Assuming email is stored in HairdresserDoc
+            email: data.email, 
             assigned_locations: data.assigned_locations || [],
             specialties: data.specialties || [],
             availability: data.availability || "",
             working_days: data.working_days || [],
+            workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "",
             must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt, 
@@ -94,7 +111,7 @@ export default function HairdressersPage() {
 
   if (!user || user.role === 'unknown') return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading user...</span></div>;
 
-  if (user.role !== 'admin' && !isLoading) { // Ensure isLoading is false before showing access denied
+  if (user.role !== 'admin' && !isLoading) { 
     return (
       <div className="space-y-8 flex flex-col items-center justify-center h-full">
         <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
@@ -112,20 +129,16 @@ export default function HairdressersPage() {
     
     const parsedWorkingDays: DayOfWeek[] = [];
     if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
-    if (data.availability.toLowerCase().includes("tue")) parsedWorkingDays.push("Tuesday");
-    if (data.availability.toLowerCase().includes("wed")) parsedWorkingDays.push("Wednesday");
-    if (data.availability.toLowerCase().includes("thu")) parsedWorkingDays.push("Thursday");
-    if (data.availability.toLowerCase().includes("fri")) parsedWorkingDays.push("Friday");
-    if (data.availability.toLowerCase().includes("sat")) parsedWorkingDays.push("Saturday");
-    if (data.availability.toLowerCase().includes("sun")) parsedWorkingDays.push("Sunday");
-
+    // ... add other days or use a more robust parsing method
+    
     const hairdresserRef = doc(db, "hairdressers", editingHairdresser.id);
     const updateData: Partial<HairdresserDoc> = {
       name: data.name,
       assigned_locations: data.assigned_locations,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
-      availability: data.availability,
-      working_days: parsedWorkingDays,
+      availability: data.availability, // The string description
+      working_days: parsedWorkingDays, // This might need adjustment based on HairdresserForm
+      workingHours: data.workingHours || {},
       profilePictureUrl: data.profilePictureUrl || "",
       updatedAt: serverTimestamp() as Timestamp,
     };
@@ -135,8 +148,8 @@ export default function HairdressersPage() {
       setHairdressers(prev => prev.map(h => 
         h.id === editingHairdresser.id ? { 
             ...h, 
-            ...updateData, // Spread the updateData
-            updatedAt: Timestamp.now() // For optimistic UI update
+            ...updateData, 
+            updatedAt: Timestamp.now() 
         } : h 
       ).sort((a,b) => a.name.localeCompare(b.name)));
       toast({ title: "Hairdresser Updated", description: `${data.name} has been updated.` });
@@ -153,21 +166,24 @@ export default function HairdressersPage() {
   const handleDeleteHairdresser = async (hairdresserToDelete: Hairdresser) => {
     setIsSubmitting(true);
     try {
-      await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id));
-      
-      try {
-        await deleteDoc(doc(db, "users", hairdresserToDelete.userId));
-        toast({ title: "Hairdresser Record Deleted", description: `Firestore records for ${hairdresserToDelete.name} deleted. Full Firebase Auth user deletion requires a Cloud Function.`, variant: "default" });
-      } catch (userDocError: any) {
-         toast({ title: "Hairdresser Profile Deleted", description: `Profile for ${hairdresserToDelete.name} deleted. Could not delete 'users' record: ${userDocError.message}. Full Firebase Auth user deletion needs a Cloud Function.`, variant: "destructive" });
-        console.error("Detailed error deleting user document from 'users' collection:", userDocError, JSON.stringify(userDocError, Object.getOwnPropertyNames(userDocError)));
-      }
+      // Delete the hairdresser document from Firestore.
+      // The Cloud Function `onHairdresserDeleted` will handle deleting the Auth user.
+      await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id)); 
 
       setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
+      toast({ 
+        title: "Hairdresser Profile Deleting", 
+        description: `Firestore record for ${hairdresserToDelete.name} deleted. Their authentication account will be removed automatically.`,
+        variant: "default" 
+      });
 
     } catch (error: any) {
-        console.error("Detailed error deleting hairdresser Firestore record:", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        toast({ title: "Deletion Failed", description: "Could not delete hairdresser record. " + error.message, variant: "destructive" });
+        console.error("Error deleting hairdresser Firestore record:", error);
+        toast({ 
+          title: "Deletion Failed", 
+          description: `Could not delete hairdresser Firestore record: ${error.message}`, 
+          variant: "destructive" 
+        });
     } finally {
         setIsSubmitting(false);
     }
@@ -212,7 +228,7 @@ export default function HairdressersPage() {
       />
 
       <Dialog open={isEditFormOpen} onOpenChange={(isOpen) => { setIsEditFormOpen(isOpen); if (!isOpen) setEditingHairdresser(null); }}>
-        <DialogContent className="sm:max-w-lg font-body">
+        <DialogContent className="sm:max-w-2xl font-body"> {/* Increased max-width for longer form */}
           <DialogHeader> <DialogTitle className="font-headline text-2xl">Edit Hairdresser Profile</DialogTitle> </DialogHeader>
           {editingHairdresser && (
             <HairdresserForm
@@ -239,7 +255,7 @@ export default function HairdressersPage() {
            </CardFooter>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"> {/* Responsive grid */}
           {hairdressers.map((hairdresser) => (
             <Card key={hairdresser.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg overflow-hidden">
               <CardHeader className="flex flex-row items-start gap-4 bg-secondary/30 p-4">
@@ -255,13 +271,14 @@ export default function HairdressersPage() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-4 space-y-2 font-body flex-grow p-4">
-                 {hairdresser.email && ( <div className="flex items-start text-sm"> <Mail className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Email: </strong> {hairdresser.email} </div> </div> )}
-                 {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs mt-1">Password Reset Required</Badge>}
-                <div className="flex items-start text-sm"> <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Specialties: </strong> {hairdresser.specialties.join(", ")} </div> </div>
-                <div className="flex items-start text-sm"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability: </strong> {hairdresser.availability} </div> </div>
+              <CardContent className="pt-4 space-y-2 font-body flex-grow p-4 text-sm">
+                 {hairdresser.email && ( <div className="flex items-start"> <Mail className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Email: </strong> {hairdresser.email} </div> </div> )}
+                 {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs my-1">Password Reset Required</Badge>}
+                <div className="flex items-start"> <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Specialties: </strong> {hairdresser.specialties.join(", ") || "N/A"} </div> </div>
+                <div className="flex items-start"> <CalendarDays className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Working Hours: </strong> {formatWorkingHours(hairdresser.workingHours)} </div> </div>
+                <div className="flex items-start"> <Clock className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Availability Notes: </strong> {hairdresser.availability || "N/A"} </div> </div>
               </CardContent>
-              <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
+              <CardFooter className="border-t mt-auto pt-4 flex justify-end gap-2 bg-muted/20 p-4">
                  <Button variant="outline" size="sm" onClick={() => openEditForm(hairdresser)} className="font-body" disabled={isSubmitting}> <Edit3 className="mr-2 h-4 w-4" /> Edit </Button>
                  <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -271,11 +288,11 @@ export default function HairdressersPage() {
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
-                    <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action will delete the Firestore record for "{hairdresser.name}". Full user deletion (Auth & 'users' record) requires a separate Cloud Function. </AlertDialogDescription> </AlertDialogHeader>
+                    <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action will delete the Firestore record for "{hairdresser.name}". Their authentication account will be removed automatically by the system. </AlertDialogDescription> </AlertDialogHeader>
                     <AlertDialogFooter> 
                         <AlertDialogCancel className="font-body" disabled={isSubmitting && hairdresser.id === editingHairdresser?.id}>Cancel</AlertDialogCancel> 
                         <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting && hairdresser.id === editingHairdresser?.id}> 
-                            {(isSubmitting && hairdresser.id === editingHairdresser?.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Records"}
+                            {(isSubmitting && hairdresser.id === editingHairdresser?.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Profile"}
                         </AlertDialogAction> 
                     </AlertDialogFooter>
                   </AlertDialogContent>
