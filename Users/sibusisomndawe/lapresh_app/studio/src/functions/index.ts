@@ -5,10 +5,12 @@
 
 import {onCall, HttpsError, type CallableRequest} from "firebase-functions/v2/https";
 import {onRequest} from "firebase-functions/v2/https";
+import {onDocumentDeleted} from "firebase-functions/v2/firestore"; // Added for Firestore triggers
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "lib/types"; // Adjusted path relative to rootDir & baseUrl
+import type {HairdresserWorkingHours, DayOfWeek} from "lib/types";
 
+// Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
   admin.initializeApp();
   logger.log("Firebase Admin SDK initialized.");
@@ -22,7 +24,7 @@ interface CreateHairdresserData {
   displayName: string;
   assigned_locations: string[];
   availability: string;
-  working_days: DayOfWeek[]; // This might become deprecated if workingHours is primary
+  working_days: DayOfWeek[];
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
@@ -114,13 +116,12 @@ export const updateUserProfile = onCall(
         if (nameChanged && newName !== undefined) {
           firestoreUserUpdate.name = newName;
         }
-        // Avatar URL is not stored in admin user Firestore doc by current design, only in Auth
-        if (Object.keys(firestoreUserUpdate).length > 1) { // Only update if name changed
+        if (Object.keys(firestoreUserUpdate).length > 1) {
           await userDocRef.update(firestoreUserUpdate);
           logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
           firestoreUpdated = true;
         } else {
-          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated as only avatar might have changed or no name change.");
+          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated. Avatar changes are Auth-only for admin, or no name change.");
         }
       } else {
         logger.log("[updateUserProfile] Admin user document does NOT exist for UID:", uid, "Checking for hairdresser doc.");
@@ -129,18 +130,18 @@ export const updateUserProfile = onCall(
           logger.log("[updateUserProfile] Hairdresser document exists for UID:", uid);
           const firestoreHairdresserUpdate: {
             name?: string;
-            profilePictureUrl?: string; // Ensure this matches the field in HairdresserDoc
+            profilePictureUrl?: string;
             updatedAt: FirebaseFirestore.FieldValue;
           } = {updatedAt: admin.firestore.FieldValue.serverTimestamp()};
 
           if (nameChanged && newName !== undefined) {
             firestoreHairdresserUpdate.name = newName;
           }
-          if (avatarChanged && newAvatarUrl !== undefined) { // For hairdressers, avatar IS stored in Firestore
+          if (avatarChanged && newAvatarUrl !== undefined) {
             firestoreHairdresserUpdate.profilePictureUrl = newAvatarUrl;
           }
 
-          if (Object.keys(firestoreHairdresserUpdate).length > 1) { // Only update if fields changed
+          if (Object.keys(firestoreHairdresserUpdate).length > 1) {
             await hairdresserDocRef.update(firestoreHairdresserUpdate);
             logger.log("[updateUserProfile] Firestore 'hairdressers' doc updated for UID:", uid, JSON.stringify(firestoreHairdresserUpdate));
             firestoreUpdated = true;
@@ -211,10 +212,9 @@ export const createHairdresserUser = onCall(
     }
 
     const data = request.data;
-    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "availability"];
+    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "availability", "working_days"];
     for (const field of requiredFields) {
-      // Note: working_days and workingHours are optional in the interface, so not strictly required here unless business logic dictates
-      if (!data[field] && field !== "working_days" && field !== "workingHours" && field !== "specialties" && field !== "profilePictureUrl" && field !== "password") {
+      if (!data[field]) {
         logger.error(`[createHairdresserUser] Missing required field: ${field}.`, {data: JSON.stringify(data)});
         throw new HttpsError("invalid-argument", `Missing required field: ${field}.`);
       }
@@ -228,7 +228,7 @@ export const createHairdresserUser = onCall(
         email: data.email,
         password: temporaryPassword,
         displayName: data.displayName,
-        emailVerified: false, // Consider sending verification email
+        emailVerified: false,
         photoURL: data.profilePictureUrl || undefined,
       });
       logger.log("[createHairdresserUser] Successfully created Firebase Auth user with UID:", newUserRecord.uid);
@@ -247,10 +247,10 @@ export const createHairdresserUser = onCall(
         name: data.displayName,
         email: data.email,
         assigned_locations: data.assigned_locations || [],
-        working_days: data.working_days || [], // Keep if still used, or derive from workingHours
-        availability: data.availability, // General text availability
-        workingHours: data.workingHours || {}, // Structured working hours
-        must_reset_password: true, // Always true for new hairdressers
+        working_days: data.working_days || [],
+        availability: data.availability,
+        workingHours: data.workingHours || {},
+        must_reset_password: true,
         specialties: data.specialties || [],
         profilePictureUrl: data.profilePictureUrl || "",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -266,13 +266,49 @@ export const createHairdresserUser = onCall(
       };
     } catch (error: any) {
       logger.error("[createHairdresserUser] Error creating Firestore document for hairdresser:", {error});
-      // Attempt to clean up the Auth user if Firestore write fails
       await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError: any) => {
         logger.error("[createHairdresserUser] CRITICAL: Error deleting orphaned auth user after Firestore failure:", {deleteError});
       });
       throw new HttpsError("internal", `Error creating Firestore document for hairdresser: ${error.message}. Associated Auth user cleanup attempted.`);
     }
   },
+);
+
+export const onHairdresserDeleted = onDocumentDeleted(
+  {
+    document: "hairdressers/{hairdresserId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const hairdresserId = event.params.hairdresserId; // This is the Auth UID
+    const deletedData = event.data?.data();
+
+    logger.log(`[onHairdresserDeleted] Triggered for hairdresserId: ${hairdresserId}.`);
+
+    if (!deletedData) {
+      logger.warn(`[onHairdresserDeleted] No data found for deleted hairdresser: ${hairdresserId}.`);
+    } else {
+      logger.log(`[onHairdresserDeleted] Hairdresser data before deletion for ${deletedData.email || hairdresserId}:`, JSON.stringify(deletedData));
+    }
+
+    try {
+      await admin.auth().deleteUser(hairdresserId);
+      logger.log(`[onHairdresserDeleted] Successfully deleted Firebase Auth user for UID: ${hairdresserId}.`);
+      return {status: "success", message: `Auth user ${hairdresserId} deleted.`};
+    } catch (error: any) {
+      logger.error(`[onHairdresserDeleted] Error deleting Firebase Auth user for UID: ${hairdresserId}`, {
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorStack: error.stack,
+      });
+      if (error.code === "auth/user-not-found") {
+        logger.warn(`[onHairdresserDeleted] Auth user ${hairdresserId} not found. Might have been already deleted.`);
+        return {status: "warning", message: `Auth user ${hairdresserId} not found, possibly already deleted.`};
+      }
+      // Re-throwing the error will cause the function to report a failure if it's not a 'user-not-found' error.
+      throw new HttpsError("internal", `Failed to delete Auth user ${hairdresserId}: ${error.message}`);
+    }
+  }
 );
 
 

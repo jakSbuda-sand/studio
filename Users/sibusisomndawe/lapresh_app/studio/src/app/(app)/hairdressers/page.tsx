@@ -127,8 +127,6 @@ export default function HairdressersPage() {
     if (!editingHairdresser) return;
     setIsSubmitting(true);
     
-    // This parsing might be redundant if HairdresserForm already provides DayOfWeek[]
-    // For now, assume data.availability (string) needs parsing if working_days is not directly part of form values
     const parsedWorkingDays: DayOfWeek[] = [];
     if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
     // ... add other days or use a more robust parsing method
@@ -168,22 +166,24 @@ export default function HairdressersPage() {
   const handleDeleteHairdresser = async (hairdresserToDelete: Hairdresser) => {
     setIsSubmitting(true);
     try {
-      await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id));
-      
-      try {
-        // Attempt to delete associated user from 'users' collection if it exists (shouldn't for hairdressers by design, but defensive)
-        // Or more likely, if there's a corresponding Firebase Auth user to delete, that would be via a Cloud Function.
-        // For now, just deleting the 'hairdressers' doc.
-        toast({ title: "Hairdresser Profile Deleted", description: `Profile for ${hairdresserToDelete.name} deleted from Firestore. Auth user deletion requires a Cloud Function.`, variant: "default" });
-      } catch (userDocError: any) {
-         toast({ title: "Hairdresser Profile Deleted", description: `Profile for ${hairdresserToDelete.name} deleted. Could not delete other related records: ${userDocError.message}.`, variant: "warning" });
-      }
+      // Delete the hairdresser document from Firestore.
+      // The Cloud Function `onHairdresserDeleted` will handle deleting the Auth user.
+      await deleteDoc(doc(db, "hairdressers", hairdresserToDelete.id)); 
 
       setHairdressers(prev => prev.filter(h => h.id !== hairdresserToDelete.id));
+      toast({ 
+        title: "Hairdresser Profile Deleting", 
+        description: `Firestore record for ${hairdresserToDelete.name} deleted. Their authentication account will be removed automatically.`,
+        variant: "default" 
+      });
 
     } catch (error: any) {
-        console.error("Detailed error deleting hairdresser Firestore record:", error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        toast({ title: "Deletion Failed", description: "Could not delete hairdresser record. " + error.message, variant: "destructive" });
+        console.error("Error deleting hairdresser Firestore record:", error);
+        toast({ 
+          title: "Deletion Failed", 
+          description: `Could not delete hairdresser Firestore record: ${error.message}`, 
+          variant: "destructive" 
+        });
     } finally {
         setIsSubmitting(false);
     }
@@ -288,7 +288,7 @@ export default function HairdressersPage() {
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
-                    <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action will delete the Firestore record for "{hairdresser.name}". Full user deletion (Auth & 'users' record) requires a separate Cloud Function. </AlertDialogDescription> </AlertDialogHeader>
+                    <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This action will delete the Firestore record for "{hairdresser.name}". Their authentication account will be removed automatically by the system. </AlertDialogDescription> </AlertDialogHeader>
                     <AlertDialogFooter> 
                         <AlertDialogCancel className="font-body" disabled={isSubmitting && hairdresser.id === editingHairdresser?.id}>Cancel</AlertDialogCancel> 
                         <AlertDialogAction onClick={() => handleDeleteHairdresser(hairdresser)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting && hairdresser.id === editingHairdresser?.id}> 
