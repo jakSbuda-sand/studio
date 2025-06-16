@@ -248,7 +248,7 @@ export default function BookingsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="font-headline">Client</TableHead>
-                <TableHead className="font-headline">Date & Time</TableHead>
+                <TableHead className="font-headline">Date &amp; Time</TableHead>
                 <TableHead className="font-headline">Service</TableHead>
                 {user.role === 'admin' && <TableHead className="font-headline">Hairdresser</TableHead>}
                 <TableHead className="font-headline">Salon</TableHead>
