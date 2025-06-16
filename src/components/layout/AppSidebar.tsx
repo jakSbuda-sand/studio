@@ -15,7 +15,6 @@ import {
 import { Separator } from '@/components/ui/separator';
 import {
   LayoutDashboard,
-  MapPin,
   Users,
   ClipboardList,
   CalendarDays,
@@ -24,9 +23,9 @@ import {
   Scissors,
   Store,
   PlusCircle,
-  Shield,
   UserCircle as ProfileIcon, // Renamed to avoid conflict
   Settings2, // Icon for services
+  Contact, // Icon for Clients
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import React from 'react';
@@ -123,13 +122,14 @@ const navItems: NavItemProps[] = [
   {
     href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin', 'hairdresser'],
     subItems: [
-      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] }, 
+      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] },
       { href: '/bookings', icon: ClipboardList, label: 'View All Bookings', roles: ['admin'] },
       { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
     ]
   },
+  { href: '/clients', icon: Contact, label: 'Clients', roles: ['admin'] },
   { href: '/calendar', icon: CalendarDays, label: 'Calendar View', roles: ['admin', 'hairdresser'] },
-  { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] }, // Badge was '3', removed as it's static
+  { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] },
 ];
 
 export function AppSidebar() {
