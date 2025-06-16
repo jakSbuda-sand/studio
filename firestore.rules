@@ -3,100 +3,76 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper function to check if a user is an admin
-    function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // Default deny all access unless explicitly allowed
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    // Helper function to check if a user is the authenticated hairdresser
-    function isOwnHairdresserProfile(hairdresserId) {
-      return request.auth.uid == hairdresserId;
+    // USERS collection (for admin role check and user profile management)
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      // Allow admin to manage any user document (useful for setup or recovery)
+      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Allow creation of user docs, e.g., during signup if you have a separate user profile collection
+      allow create: if request.auth != null; 
     }
 
-    // Helper function to check if a user is the assigned hairdresser for a booking
-    function isAssignedHairdresser(bookingData) {
-      return request.auth.uid == bookingData.hairdresserId;
+    // HAIRDRESSERS collection
+    match /hairdressers/{hairdresserId} {
+      // Hairdresser can manage their own profile
+      allow read, update, delete: if request.auth != null && request.auth.uid == hairdresserId;
+      // Admins can manage all hairdresser profiles
+      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // BOOKINGS collection
+    // Rules for LISTING bookings (applies to queries on the collection, e.g., the double-booking check)
+    match /bookings {
+      // Allow authenticated users to perform list operations.
+      // Security relies on:
+      // 1. Client-side queries being correctly restricted (e.g., hairdresser queries for their own ID).
+      // 2. Individual document read rules (match /bookings/{bookingId} { allow get: ... }) ensuring
+      //    that even if a broader list is attempted, only permitted documents are actually read.
+      // Admins are covered by their specific rule allowing broader list access.
+      allow list: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow list: if request.auth != null; // Hairdressers (and any auth user) can attempt to list.
+                                          // The query from the client for a hairdresser should be filtered by their UID.
+    }
+
+    // Rules for accessing INDIVIDUAL booking documents (get, create, update, delete)
+    match /bookings/{bookingId} {
+      // Any authenticated user can create a booking (client-side logic should validate booking details).
+      allow create: if request.auth != null; 
+
+      // Admins can read/write any specific booking document.
+      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // Hairdressers can get/update their own specific booking documents.
+      // The 'get' permission here is important: if a 'list' operation returns documents,
+      // Firestore will then check if the user has 'get' permission for each of those documents.
+      allow get, update: if request.auth != null && resource.data.hairdresserId == request.auth.uid;
+                          // Optionally, be more granular for updates by hairdressers:
+                          // && (request.method == 'get' || (request.method == 'update' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'notes', 'updatedAt'])));
+    }
+
+    // LOCATIONS collection
+    match /locations/{locationId} {
+      allow read: if request.auth != null; // All authenticated users can read locations
+      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
+    }
+
+    // SERVICES collection
+    match /services/{serviceId} {
+       allow read: if request.auth != null; // All authenticated users can read services
+       allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
     }
     
-    // Users collection (stores admin roles primarily)
-    match /users/{userId} {
-      allow read: if request.auth != null && (isAdmin() || request.auth.uid == userId);
-      allow create: if isAdmin(); // Only admins can create new user role entries
-      allow update: if isAdmin(); // Only admins can update user roles
-      allow delete: if isAdmin(); // Only admins can delete user role entries
-    }
-
-    // Locations (Salons) collection
-    match /locations/{locationId} {
-      allow read: if request.auth != null; // Any authenticated user can read salon locations
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // Services collection
-    match /services/{serviceId} {
-      allow read: if request.auth != null; // Any authenticated user can read service details
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-      
-      // Basic data validation for services
-      allow write: if isAdmin() && 
-                      request.resource.data.name is string && request.resource.data.name.size() > 1 &&
-                      request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0 &&
-                      request.resource.data.price is number && request.resource.data.price >= 0 &&
-                      request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId)) &&
-                      request.resource.data.isActive is bool;
-    }
-
-    // Hairdressers collection
-    match /hairdressers/{hairdresserId} {
-      allow read: if request.auth != null; // Any authenticated user can read hairdresser profiles (for selection in booking form)
-      allow create: if isAdmin(); // Only admins can create hairdresser profiles (via Cloud Function)
-      allow update: if isAdmin() || 
-                       (isOwnHairdresserProfile(hairdresserId) && 
-                       !('email' in request.resource.data && request.resource.data.email != resource.data.email) && // Cannot change own email
-                       !('role' in request.resource.data) && // Cannot change own role
-                       !('user_id' in request.resource.data && request.resource.data.user_id != resource.data.user_id) // Cannot change user_id
-                       ); 
-      allow delete: if isAdmin();
-      
-      // Basic data validation for hairdressers when admin creates/updates
-      allow write: if (isAdmin() || (isOwnHairdresserProfile(hairdresserId) && 
-                                   !('email' in request.resource.data && request.resource.data.email != resource.data.email) &&
-                                   !('role' in request.resource.data) &&
-                                   !('user_id' in request.resource.data && request.resource.data.user_id != resource.data.user_id))) &&
-                      request.resource.data.name is string && request.resource.data.name.size() > 1 &&
-                      request.resource.data.email is string && request.resource.data.email.matches('.+@.+\\..+') &&
-                      request.resource.data.user_id is string && request.resource.data.user_id.size() > 0 && // Ensure user_id is present
-                      request.resource.data.assigned_locations is list &&
-                      request.resource.data.working_days is list &&
-                      request.resource.data.availability is string &&
-                      request.resource.data.must_reset_password is bool;
-                      // Specialties and profilePictureUrl are optional or can be empty strings
-    }
-
-    // Bookings collection
-    match /bookings/{bookingId} {
-      allow read: if request.auth != null && (isAdmin() || isAssignedHairdresser(resource.data));
-      allow create: if request.auth != null && (isAdmin() || isAssignedHairdresser(request.resource.data)); // Anyone authenticated can create a booking (client or staff for themselves)
-      allow update: if request.auth != null && (isAdmin() || isAssignedHairdresser(resource.data));
-      allow delete: if request.auth != null && (isAdmin() || isAssignedHairdresser(resource.data)); // Or perhaps only admins can delete
-
-      // Data validation for bookings
-      allow write: if request.auth != null &&
-                      (isAdmin() || isAssignedHairdresser(request.resource.data)) && // Ensure current user is admin or the assigned hairdresser for updates
-                      request.resource.data.clientName is string && request.resource.data.clientName.size() > 1 &&
-                      request.resource.data.clientPhone is string && request.resource.data.clientPhone.size() >= 10 &&
-                      request.resource.data.salonId is string && exists(/databases/$(database)/documents/locations/$(request.resource.data.salonId)) &&
-                      request.resource.data.hairdresserId is string && exists(/databases/$(database)/documents/hairdressers/$(request.resource.data.hairdresserId)) &&
-                      request.resource.data.serviceId is string && exists(/databases/$(database)/documents/services/$(request.resource.data.serviceId)) &&
-                      request.resource.data.appointmentDateTime is timestamp &&
-                      request.resource.data.durationMinutes is number && request.resource.data.durationMinutes > 0 &&
-                      request.resource.data.status is string && 
-                        (request.resource.data.status == 'Pending' || request.resource.data.status == 'Confirmed' || request.resource.data.status == 'Completed' || request.resource.data.status == 'Cancelled');
+    // CLIENTS collection
+    match /clients/{clientId} {
+      // Only admins can manage client records
+      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }
+
+    

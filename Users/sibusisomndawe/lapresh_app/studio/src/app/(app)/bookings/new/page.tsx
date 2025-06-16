@@ -9,7 +9,7 @@ import { PlusCircle, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch } from "@/lib/firebase";
+import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
 import { increment } from "firebase/firestore"; // Import increment directly
 import { format } from 'date-fns';
 
@@ -70,7 +70,8 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     where("hairdresserId", "==", data.hairdresserId),
     where("status", "in", ["Confirmed", "Pending"]),
     where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
-    where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd))
+    where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
+    orderBy("appointmentDateTime") 
   );
 
   try {
