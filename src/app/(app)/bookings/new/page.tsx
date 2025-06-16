@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
-import { increment } from "firebase/firestore";
+import { increment } from "firebase/firestore"; // Import increment directly
 import { format } from 'date-fns';
 
 async function createOrUpdateClient(
@@ -71,7 +71,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     where("status", "in", ["Confirmed", "Pending"]),
     where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
     where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
-    orderBy("appointmentDateTime") // Added orderBy
+    orderBy("appointmentDateTime") 
   );
 
   try {
@@ -84,12 +84,9 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       } else if (typeof existingBookingData.appointmentDateTime === 'string') {
         existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
       } else {
-        // Fallback if it's already a Date object (though Firestore usually converts to Timestamp or string)
         existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
       }
       const existingAppointmentEnd = new Date(existingAppointmentStart.getTime() + existingBookingData.durationMinutes * 60000);
-
-      // Check for overlap
       if (newAppointmentStart < existingAppointmentEnd && newAppointmentEnd > existingAppointmentStart) {
         const errorMessage = `Booking conflict: This hairdresser is already booked from ${format(existingAppointmentStart, "HH:mm")} to ${format(existingAppointmentEnd, "HH:mm")} on ${format(existingAppointmentStart, "MMM dd, yyyy")}. Please choose a different time or hairdresser.`;
         toast({ title: "Booking Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
@@ -97,12 +94,9 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       }
     }
   } catch (error: any) {
-    // If it's the specific "Booking conflict" error we threw, re-throw it to be caught by the caller.
     if (error.message.startsWith("Booking conflict:")) throw error;
-
-    // For other errors during the query (like permission issues if index is still not working)
     console.error("Error fetching existing bookings for double-booking check:", error);
-    toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability. This might be due to a missing database index or permission issue.", variant: "destructive" });
+    toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability.", variant: "destructive" });
     throw new Error("Failed to check for existing bookings.");
   }
 
@@ -220,8 +214,6 @@ export default function NewBookingPage() {
       await createBookingInFirestore(data, user);
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error: any) {
-      // Specific errors (like "Booking conflict") are already toasted by createBookingInFirestore
-      // Only log generic/unexpected errors here if they weren't handled more specifically.
       if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.startsWith("Failed to check") || error.message.startsWith("Failed to manage client record")))) {
         console.error("Error during booking creation process:", error);
       }

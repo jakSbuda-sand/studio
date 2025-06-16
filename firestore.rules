@@ -3,76 +3,80 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny all access unless explicitly allowed
+
+    // Helper function to check if the user is an admin
+    function isAdmin() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Global admin access - Admins can read/write anything
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
 
-    // USERS collection (for admin role check and user profile management)
-    match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      // Allow admin to manage any user document (useful for setup or recovery)
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      // Allow creation of user docs, e.g., during signup if you have a separate user profile collection
-      allow create: if request.auth != null; 
-    }
-
-    // HAIRDRESSERS collection
-    match /hairdressers/{hairdresserId} {
-      // Hairdresser can manage their own profile
-      allow read, update, delete: if request.auth != null && request.auth.uid == hairdresserId;
-      // Admins can manage all hairdresser profiles
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    // BOOKINGS collection
-    // Rules for LISTING bookings (applies to queries on the collection, e.g., the double-booking check)
-    match /bookings {
-      // Allow authenticated users to perform list operations.
-      // Security relies on:
-      // 1. Client-side queries being correctly restricted (e.g., hairdresser queries for their own ID).
-      // 2. Individual document read rules (match /bookings/{bookingId} { allow get: ... }) ensuring
-      //    that even if a broader list is attempted, only permitted documents are actually read.
-      // Admins are covered by their specific rule allowing broader list access.
-      allow list: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow list: if request.auth != null; // Hairdressers (and any auth user) can attempt to list.
-                                          // The query from the client for a hairdresser should be filtered by their UID.
-    }
-
-    // Rules for accessing INDIVIDUAL booking documents (get, create, update, delete)
-    match /bookings/{bookingId} {
-      // Any authenticated user can create a booking (client-side logic should validate booking details).
-      allow create: if request.auth != null; 
-
-      // Admins can read/write any specific booking document.
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      
-      // Hairdressers can get/update their own specific booking documents.
-      // The 'get' permission here is important: if a 'list' operation returns documents,
-      // Firestore will then check if the user has 'get' permission for each of those documents.
-      allow get, update: if request.auth != null && resource.data.hairdresserId == request.auth.uid;
-                          // Optionally, be more granular for updates by hairdressers:
-                          // && (request.method == 'get' || (request.method == 'update' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'notes', 'updatedAt'])));
-    }
-
-    // LOCATIONS collection
+    // Locations: Admins can read/write
+    // Non-admins cannot access directly through these rules if global admin rule doesn't apply
     match /locations/{locationId} {
-      allow read: if request.auth != null; // All authenticated users can read locations
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
+      allow read, write: if isAdmin();
     }
 
-    // SERVICES collection
+    // Services: Admins can read/write
     match /services/{serviceId} {
-       allow read: if request.auth != null; // All authenticated users can read services
-       allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
+      allow read, write: if isAdmin();
     }
-    
-    // CLIENTS collection
+
+    // Hairdressers:
+    match /hairdressers/{hairdresserId} {
+      allow read, write: if isAdmin(); // Admins can manage fully
+      // Hairdressers can read their own profile. Writes are managed by admin or specific cloud functions.
+      allow get: if request.auth != null && request.auth.uid == hairdresserId;
+    }
+
+    // Bookings:
+    match /bookings/{bookingId} {
+      // Admins have full control (covered by global rule)
+      // Hairdressers can read bookings assigned to them
+      allow get: if request.auth != null && (isAdmin() || resource.data.hairdresserId == request.auth.uid);
+      // Authenticated users can create bookings (client details are managed, hairdresser assignment is key)
+      allow create: if request.auth != null;
+      // Hairdressers can update bookings assigned to them (e.g., change status, notes)
+      // Admins can update any booking (covered by global rule)
+      allow update: if request.auth != null && (isAdmin() || resource.data.hairdresserId == request.auth.uid);
+      // Deletion is typically an admin-only action or handled by specific logic (e.g., cancellation)
+      allow delete: if isAdmin();
+    }
+
+    // Rule to allow querying the bookings collection for double-booking checks and views
+    match /bookings {
+      // Admins can list all bookings (covered by global rule)
+      // Hairdressers can list bookings where they are the hairdresserId (for "My Bookings" or calendar view)
+      // Authenticated users can list bookings if querying by hairdresserId (for availability checks) or clientPhone (for client history)
+      allow list: if request.auth != null; // This is broad for simplicity of client-side queries.
+                                          // More restrictive: allow list: if request.auth != null && (isAdmin() || request.query.keys().hasAny(['hairdresserId', 'clientPhone']));
+    }
+
+
+    // Clients:
     match /clients/{clientId} {
-      // Only admins can manage client records
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Admins can read/write individual client docs (covered by global rule)
+      // Allow authenticated users (like hairdressers during booking) to potentially get a client if they have ID,
+      // though list query is more common for autofill.
+      allow get: if request.auth != null; // Any authenticated user can get by ID.
+      allow create, update, delete: if isAdmin(); // Only admins can directly create/update/delete client records outside of booking process.
+    }
+    // Allow authenticated users to query clients by phone for autofill in BookingForm
+    match /clients {
+      allow list: if request.auth != null; // Querying by phone is permitted for any logged-in user.
+    }
+
+
+    // Users collection (for admin role check and profile management)
+    match /users/{userId} {
+      // Admins can manage all user role docs (covered by global rule)
+      // Users can read their own user document (e.g., to confirm their role if needed client-side, though Auth custom claims are better)
+      allow get: if request.auth != null && (isAdmin() || request.auth.uid == userId);
+      // User role creation/update should be admin-only or through secure Cloud Function
+      allow create, update, delete: if isAdmin();
     }
   }
 }
-
-    
