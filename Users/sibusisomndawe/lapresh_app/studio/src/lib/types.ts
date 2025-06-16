@@ -18,16 +18,16 @@ export interface Salon {
   address: string;
   phone?: string;
   operatingHours?: string;
-  createdAt?: Timestamp; 
-  updatedAt?: Timestamp; 
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface Hairdresser {
-  id: string; 
-  userId: string; 
+  id: string;
+  userId: string;
   name: string;
   email: string;
-  assigned_locations: string[]; 
+  assigned_locations: string[];
   specialties: string[];
   availability: string; // General text description
   working_days: DayOfWeek[]; // Kept for now, might be derived from workingHours later
@@ -44,28 +44,28 @@ export interface Service {
   description?: string;
   durationMinutes: number;
   price: number; // Price in Rands
-  salonIds: string[]; 
+  salonIds: string[];
   isActive: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
 
 export interface Booking {
-  id: string; 
+  id: string;
   clientName: string;
   clientEmail?: string;
   clientPhone: string;
   salonId: string;
   hairdresserId: string;
-  serviceId: string; 
-  serviceName?: string; 
-  appointmentDateTime: Date; 
+  serviceId: string;
+  serviceName?: string;
+  appointmentDateTime: Date;
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
-  color?: string; 
-  createdAt?: Timestamp; 
-  updatedAt?: Timestamp; 
+  color?: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface User {
@@ -74,10 +74,22 @@ export interface User {
   email: string | null;
   role: 'admin' | 'hairdresser' | 'unknown';
   avatarUrl?: string;
-  hairdresserDocId?: string; 
-  hairdresserProfileId?: string; 
+  hairdresserDocId?: string;
+  hairdresserProfileId?: string;
   must_reset_password?: boolean;
 }
+
+export interface Client {
+  id: string; // Unique identifier for the client (e.g., phone number for now)
+  name: string;
+  phone: string;
+  email?: string;
+  firstSeen?: Date; // Date of their first booking from the derived data
+  lastSeen?: Date; // Date of their most recent booking from the derived data
+  totalBookings: number;
+  // General notes about the client could be added if a dedicated Client collection is implemented
+}
+
 
 export interface AvailabilitySlot {
   start: string; // HH:mm format
@@ -103,7 +115,7 @@ export interface ServiceDoc {
   description?: string;
   durationMinutes: number;
   price: number;
-  salonIds: string[]; 
+  salonIds: string[];
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -112,10 +124,10 @@ export interface ServiceDoc {
 export interface HairdresserDoc {
   name: string;
   email: string;
-  user_id: string; 
+  user_id: string;
   assigned_locations: string[];
-  working_days: DayOfWeek[]; 
-  availability: string; 
+  working_days: DayOfWeek[];
+  availability: string;
   workingHours?: HairdresserWorkingHours; // Granular working hours
   must_reset_password: boolean;
   specialties?: string[];
@@ -130,12 +142,12 @@ export interface BookingDoc {
   clientPhone: string;
   salonId: string;
   hairdresserId: string;
-  serviceId: string; 
+  serviceId: string;
   appointmentDateTime: Timestamp;
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
-  color?: string; 
+  color?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
