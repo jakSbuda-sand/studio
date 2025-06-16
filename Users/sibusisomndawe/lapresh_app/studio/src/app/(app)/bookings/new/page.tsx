@@ -4,13 +4,52 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
-import type { Salon, Hairdresser, User, BookingDoc, LocationDoc, HairdresserDoc, Service, ServiceDoc } from "@/lib/types";
+import type { Salon, Hairdresser, User, BookingDoc, LocationDoc, HairdresserDoc, ClientDoc } from "@/lib/types";
 import { PlusCircle, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where } from "@/lib/firebase";
+import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, increment, doc, writeBatch } from "@/lib/firebase";
 import { format } from 'date-fns';
+
+async function createOrUpdateClient(
+  clientData: Pick<BookingFormValues, 'clientName' | 'clientPhone' | 'clientEmail'>
+): Promise<string> {
+  const clientsRef = collection(db, "clients");
+  const q = query(clientsRef, where("phone", "==", clientData.clientPhone));
+  const querySnapshot = await getDocs(q);
+
+  if (querySnapshot.empty) {
+    // Client does not exist, create new one
+    const newClientDoc: Omit<ClientDoc, 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
+      name: clientData.clientName,
+      phone: clientData.clientPhone,
+      email: clientData.clientEmail || "",
+      notes: "",
+      firstSeen: serverTimestamp() as Timestamp,
+      lastSeen: serverTimestamp() as Timestamp,
+      totalBookings: 1,
+      createdAt: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp,
+    };
+    const docRef = await addDoc(clientsRef, newClientDoc);
+    return docRef.id;
+  } else {
+    // Client exists, update lastSeen and totalBookings
+    const existingClientDoc = querySnapshot.docs[0];
+    const clientRef = doc(db, "clients", existingClientDoc.id);
+    await updateDoc(clientRef, {
+      lastSeen: serverTimestamp() as Timestamp,
+      totalBookings: increment(1),
+      // Optionally update name/email if they've changed, though this might need more sophisticated logic
+      name: clientData.clientName, 
+      email: clientData.clientEmail || existingClientDoc.data().email,
+      updatedAt: serverTimestamp() as Timestamp,
+    });
+    return existingClientDoc.id;
+  }
+}
+
 
 async function createBookingInFirestore(data: BookingFormValues, currentUser: User | null): Promise<string> {
   if (!currentUser) {
@@ -18,11 +57,9 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     throw new Error("User not authenticated.");
   }
 
-  // Double-booking prevention logic
+  // Double-booking prevention logic (remains the same)
   const newAppointmentStart = data.appointmentDateTime; // This is a JS Date
   const newAppointmentEnd = new Date(newAppointmentStart.getTime() + data.durationMinutes * 60000);
-
-  // Query for potentially conflicting bookings for the hairdresser on the same day
   const dayStart = new Date(newAppointmentStart);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(newAppointmentStart);
@@ -41,20 +78,15 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     const querySnapshot = await getDocs(q);
     for (const docSnap of querySnapshot.docs) {
       const existingBookingData = docSnap.data() as BookingDoc;
-      // Ensure existingBookingData.appointmentDateTime is treated as a Timestamp from Firestore
       let existingAppointmentStart: Date;
       if (existingBookingData.appointmentDateTime instanceof Timestamp) {
         existingAppointmentStart = existingBookingData.appointmentDateTime.toDate();
       } else if (typeof existingBookingData.appointmentDateTime === 'string') {
         existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
       } else {
-        // Fallback or error if the type is unexpected, though Firestore typically returns Timestamps
         existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
       }
-      
       const existingAppointmentEnd = new Date(existingAppointmentStart.getTime() + existingBookingData.durationMinutes * 60000);
-
-      // Overlap condition: (StartA < EndB) and (EndA > StartB)
       if (newAppointmentStart < existingAppointmentEnd && newAppointmentEnd > existingAppointmentStart) {
         const errorMessage = `Booking conflict: This hairdresser is already booked from ${format(existingAppointmentStart, "HH:mm")} to ${format(existingAppointmentEnd, "HH:mm")} on ${format(existingAppointmentStart, "MMM dd, yyyy")}. Please choose a different time or hairdresser.`;
         toast({ title: "Booking Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
@@ -62,23 +94,32 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       }
     }
   } catch (error: any) {
-    // If error is from the overlap check, rethrow it
-    if (error.message.startsWith("Booking conflict:")) {
-      throw error;
-    }
-    // Otherwise, it's an error fetching bookings, log and potentially rethrow or handle
+    if (error.message.startsWith("Booking conflict:")) throw error;
     console.error("Error fetching existing bookings for double-booking check:", error);
-    toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability. Please try again.", variant: "destructive" });
+    toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability.", variant: "destructive" });
     throw new Error("Failed to check for existing bookings.");
   }
 
-  // If no overlap, proceed to create the booking
-  const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
+  // Create or update client record
+  let clientId = "";
+  try {
+    clientId = await createOrUpdateClient({
+      clientName: data.clientName,
+      clientPhone: data.clientPhone,
+      clientEmail: data.clientEmail,
+    });
+  } catch (error: any) {
+    console.error("Error creating/updating client record:", error);
+    toast({ title: "Client Record Error", description: "Could not save client information. Booking not created.", variant: "destructive" });
+    throw new Error("Failed to manage client record.");
+  }
 
+  const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
   const newBookingDoc: Omit<BookingDoc, 'id'> = {
     clientName: data.clientName,
     clientEmail: data.clientEmail || "",
     clientPhone: data.clientPhone,
+    clientId: clientId, // Store the client's Firestore ID
     salonId: data.salonId,
     hairdresserId: data.hairdresserId,
     serviceId: data.serviceId, 
@@ -174,10 +215,7 @@ export default function NewBookingPage() {
       await createBookingInFirestore(data, user);
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error: any) {
-      // Error toast is handled within createBookingInFirestore for overlap errors
-      // or by the catch block in createBookingInFirestore for other Firestore errors.
-      // If it's a generic error from createBookingInFirestore not related to toasts, log it.
-      if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.startsWith("Failed to check")))) {
+      if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.startsWith("Failed to check") || error.message.startsWith("Failed to manage client record")))) {
         console.error("Error during booking creation process:", error);
       }
     } finally {
