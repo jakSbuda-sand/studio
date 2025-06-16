@@ -210,7 +210,16 @@ export default function BookingsPage() {
   return (
     <div className="space-y-8">
       <PageHeader title={pageTitle} description={pageDescription} icon={ClipboardList}
-        actions={ <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"> <Link href="/bookings/new"> <PlusCircle className="mr-2 h-4 w-4" /> New Booking </Link> </Button> }
+        actions={
+          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Link href="/bookings/new">
+              <span className="flex items-center gap-2">
+                <PlusCircle className="h-4 w-4" />
+                New Booking
+              </span>
+            </Link>
+          </Button>
+        }
       />
 
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
