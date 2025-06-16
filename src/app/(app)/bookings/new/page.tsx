@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where } from "@/lib/firebase";
+import { format } from 'date-fns';
 
 async function createBookingInFirestore(data: BookingFormValues, currentUser: User | null): Promise<string> {
   if (!currentUser) {
@@ -17,28 +18,61 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     throw new Error("User not authenticated.");
   }
 
-  // TODO: Implement robust double-booking prevention here or, preferably, in a Cloud Function.
-  // This would involve:
-  // 1. Querying existing bookings for the selected hairdresserId.
-  // 2. Checking if the new booking's (appointmentDateTime + durationMinutes) overlaps with any existing bookings.
-  // 3. If an overlap is found, throw an error or return a specific status to prevent booking creation.
-  // Example check:
-  // const bookingEndDateTime = new Date(data.appointmentDateTime.getTime() + data.durationMinutes * 60000);
-  // const existingBookingsQuery = query(
-  //   collection(db, "bookings"),
-  //   where("hairdresserId", "==", data.hairdresserId),
-  //   where("status", "in", ["Confirmed", "Pending"]) // Consider only active bookings
-  //   // Add time range checks here based on data.appointmentDateTime and bookingEndDateTime
-  //   // This can be complex with Firestore queries alone for overlaps.
-  //   // A common pattern is to check if new_start < existing_end AND new_end > existing_start
-  // );
-  // const existingSnapshot = await getDocs(existingBookingsQuery);
-  // if (!existingSnapshot.empty) {
-  //    // Iterate and perform precise overlap check if Firestore query was broad
-  //    // throw new Error("This time slot is already booked or overlaps with an existing appointment.");
-  // }
+  // Double-booking prevention logic
+  const newAppointmentStart = data.appointmentDateTime; // This is a JS Date
+  const newAppointmentEnd = new Date(newAppointmentStart.getTime() + data.durationMinutes * 60000);
 
+  // Query for potentially conflicting bookings for the hairdresser on the same day
+  const dayStart = new Date(newAppointmentStart);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(newAppointmentStart);
+  dayEnd.setHours(23, 59, 59, 999);
 
+  const bookingsRef = collection(db, "bookings");
+  const q = query(
+    bookingsRef,
+    where("hairdresserId", "==", data.hairdresserId),
+    where("status", "in", ["Confirmed", "Pending"]),
+    where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
+    where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd))
+  );
+
+  try {
+    const querySnapshot = await getDocs(q);
+    for (const docSnap of querySnapshot.docs) {
+      const existingBookingData = docSnap.data() as BookingDoc;
+      // Ensure existingBookingData.appointmentDateTime is treated as a Timestamp from Firestore
+      let existingAppointmentStart: Date;
+      if (existingBookingData.appointmentDateTime instanceof Timestamp) {
+        existingAppointmentStart = existingBookingData.appointmentDateTime.toDate();
+      } else if (typeof existingBookingData.appointmentDateTime === 'string') {
+        existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
+      } else {
+        // Fallback or error if the type is unexpected, though Firestore typically returns Timestamps
+        existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
+      }
+      
+      const existingAppointmentEnd = new Date(existingAppointmentStart.getTime() + existingBookingData.durationMinutes * 60000);
+
+      // Overlap condition: (StartA < EndB) and (EndA > StartB)
+      if (newAppointmentStart < existingAppointmentEnd && newAppointmentEnd > existingAppointmentStart) {
+        const errorMessage = `Booking conflict: This hairdresser is already booked from ${format(existingAppointmentStart, "HH:mm")} to ${format(existingAppointmentEnd, "HH:mm")} on ${format(existingAppointmentStart, "MMM dd, yyyy")}. Please choose a different time or hairdresser.`;
+        toast({ title: "Booking Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
+        throw new Error(errorMessage);
+      }
+    }
+  } catch (error: any) {
+    // If error is from the overlap check, rethrow it
+    if (error.message.startsWith("Booking conflict:")) {
+      throw error;
+    }
+    // Otherwise, it's an error fetching bookings, log and potentially rethrow or handle
+    console.error("Error fetching existing bookings for double-booking check:", error);
+    toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability. Please try again.", variant: "destructive" });
+    throw new Error("Failed to check for existing bookings.");
+  }
+
+  // If no overlap, proceed to create the booking
   const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
 
   const newBookingDoc: Omit<BookingDoc, 'id'> = {
@@ -139,8 +173,13 @@ export default function NewBookingPage() {
     try {
       await createBookingInFirestore(data, user);
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
-    } catch (error) {
-      // Error toast handled in createBookingInFirestore or specific error handling
+    } catch (error: any) {
+      // Error toast is handled within createBookingInFirestore for overlap errors
+      // or by the catch block in createBookingInFirestore for other Firestore errors.
+      // If it's a generic error from createBookingInFirestore not related to toasts, log it.
+      if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.startsWith("Failed to check")))) {
+        console.error("Error during booking creation process:", error);
+      }
     } finally {
       setIsSubmitting(false);
     }
