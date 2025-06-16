@@ -9,7 +9,8 @@ import { PlusCircle, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, increment, doc, writeBatch } from "@/lib/firebase";
+import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch } from "@/lib/firebase";
+import { increment } from "firebase/firestore"; // Import increment directly
 import { format } from 'date-fns';
 
 async function createOrUpdateClient(
@@ -41,7 +42,6 @@ async function createOrUpdateClient(
     await updateDoc(clientRef, {
       lastSeen: serverTimestamp() as Timestamp,
       totalBookings: increment(1),
-      // Optionally update name/email if they've changed, though this might need more sophisticated logic
       name: clientData.clientName, 
       email: clientData.clientEmail || existingClientDoc.data().email,
       updatedAt: serverTimestamp() as Timestamp,
@@ -57,8 +57,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     throw new Error("User not authenticated.");
   }
 
-  // Double-booking prevention logic (remains the same)
-  const newAppointmentStart = data.appointmentDateTime; // This is a JS Date
+  const newAppointmentStart = data.appointmentDateTime; 
   const newAppointmentEnd = new Date(newAppointmentStart.getTime() + data.durationMinutes * 60000);
   const dayStart = new Date(newAppointmentStart);
   dayStart.setHours(0, 0, 0, 0);
@@ -100,7 +99,6 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     throw new Error("Failed to check for existing bookings.");
   }
 
-  // Create or update client record
   let clientId = "";
   try {
     clientId = await createOrUpdateClient({
@@ -119,7 +117,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     clientName: data.clientName,
     clientEmail: data.clientEmail || "",
     clientPhone: data.clientPhone,
-    clientId: clientId, // Store the client's Firestore ID
+    clientId: clientId, 
     salonId: data.salonId,
     hairdresserId: data.hairdresserId,
     serviceId: data.serviceId, 

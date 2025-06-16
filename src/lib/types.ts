@@ -55,6 +55,7 @@ export interface Booking {
   clientName: string;
   clientEmail?: string;
   clientPhone: string;
+  clientId?: string; // Firestore ID of the client from 'clients' collection
   salonId: string;
   hairdresserId: string;
   serviceId: string;
@@ -79,15 +80,16 @@ export interface User {
   must_reset_password?: boolean;
 }
 
+// Represents a client in the UI
 export interface Client {
-  id: string; // Unique identifier for the client (e.g., phone number for now)
+  id: string; // Firestore document ID from 'clients' collection
   name: string;
   phone: string;
   email?: string;
-  firstSeen?: Date; // Date of their first booking from the derived data
-  lastSeen?: Date; // Date of their most recent booking from the derived data
+  notes?: string;
+  firstSeen?: Timestamp; // Timestamp from Firestore
+  lastSeen?: Timestamp;  // Timestamp from Firestore
   totalBookings: number;
-  // General notes about the client could be added if a dedicated Client collection is implemented
 }
 
 
@@ -140,6 +142,7 @@ export interface BookingDoc {
   clientName: string;
   clientEmail?: string;
   clientPhone: string;
+  clientId?: string; // Firestore ID of the client from 'clients' collection
   salonId: string;
   hairdresserId: string;
   serviceId: string;
@@ -157,6 +160,18 @@ export interface UserDoc {
   email: string;
   role: 'admin' | 'hairdresser';
   created_at: Timestamp;
+}
+
+export interface ClientDoc {
+  name: string;
+  phone: string;
+  email?: string;
+  notes?: string;
+  firstSeen: Timestamp;
+  lastSeen: Timestamp;
+  totalBookings: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface NotificationDoc {
