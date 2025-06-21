@@ -125,12 +125,13 @@ export function BookingForm({
       return;
     }
     setIsSearching(true);
+    const searchTerm = name.toLowerCase();
     try {
       const clientsRef = collection(db, "clients");
       const q = query(
         clientsRef,
-        where("name", ">=", name),
-        where("name", "<=", name + "\uf8ff"),
+        where("name_lowercase", ">=", searchTerm),
+        where("name_lowercase", "<=", searchTerm + "\uf8ff"),
         limit(5)
       );
       const querySnapshot = await getDocs(q);
@@ -531,5 +532,3 @@ export function BookingForm({
     </Card>
   );
 }
-
-    

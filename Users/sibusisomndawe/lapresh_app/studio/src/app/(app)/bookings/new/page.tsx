@@ -24,6 +24,7 @@ async function createOrUpdateClient(
     // Client does not exist, create new one
     const newClientDoc: Omit<ClientDoc, 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
       name: clientData.clientName,
+      name_lowercase: clientData.clientName.toLowerCase(),
       phone: clientData.clientPhone,
       email: clientData.clientEmail || "",
       notes: "",
@@ -43,6 +44,7 @@ async function createOrUpdateClient(
       lastSeen: serverTimestamp() as Timestamp,
       totalBookings: increment(1),
       name: clientData.clientName, 
+      name_lowercase: clientData.clientName.toLowerCase(),
       email: clientData.clientEmail || existingClientDoc.data().email,
       updatedAt: serverTimestamp() as Timestamp,
     });
