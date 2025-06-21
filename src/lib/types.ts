@@ -164,6 +164,7 @@ export interface UserDoc {
 
 export interface ClientDoc {
   name: string;
+  name_lowercase: string;
   phone: string;
   email?: string;
   notes?: string;
