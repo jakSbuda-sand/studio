@@ -58,14 +58,6 @@
       "collectionGroup": "bookings",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "hairdresserId", "order": "ASCENDING" },
-        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "bookings",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "clientPhone", "order": "ASCENDING" },
         { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
       ]
@@ -83,16 +75,12 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
-        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "bookings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
+        { "fieldPath": "hairdresserId", "order": "ASCENDING" },
+        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
       ]
     }
   ],
   "fieldOverrides": []
 }
+
+    

@@ -41,7 +41,7 @@ const bookingFormSchema = z.object({
   appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
   appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
   durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
-  status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled'], { required_error: "Booking status is required."}),
+  status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'], { required_error: "Booking status is required."}),
   notes: z.string().optional(),
 });
 
@@ -284,7 +284,7 @@ export function BookingForm({
   const selectedDateFromForm = form.watch("appointmentDateTime");
   const nowForTimeCheck = new Date();
   const isSelectedDateTodayForTimeCheck = selectedDateFromForm ? isSameDay(selectedDateFromForm, nowForTimeCheck) : false;
-  const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
+  const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
   return (
     <Card className="shadow-lg rounded-lg">

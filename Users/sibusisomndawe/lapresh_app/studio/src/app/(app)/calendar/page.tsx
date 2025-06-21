@@ -21,6 +21,7 @@ const getStatusColor = (status: Booking['status']): string => {
     case 'Confirmed': return 'hsl(var(--primary))'; // Lavender
     case 'Pending': return 'hsl(38, 92%, 50%)'; // Orange/Yellow
     case 'Cancelled': return 'hsl(0, 0%, 60%)'; // Gray
+    case 'No-Show': return 'hsl(0, 84%, 60%)'; // Red
     default: return 'hsl(var(--muted-foreground))';
   }
 };
@@ -148,7 +149,8 @@ export default function CalendarPage() {
       case 'Confirmed': return 'default';
       case 'Pending': return 'secondary';
       case 'Completed': return 'outline';
-      case 'Cancelled': return 'destructive';
+      case 'Cancelled': return 'outline';
+      case 'No-Show': return 'destructive';
       default: return 'secondary';
     }
   };
@@ -241,5 +243,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
-    
