@@ -12,7 +12,7 @@ import { format, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
+import { db, collection, getDocs, query, where, orderBy, Timestamp, Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
 const getStatusColor = (status: Booking['status']): string => {
@@ -31,7 +31,7 @@ export default function CalendarPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
-  const [services, setServices] = useState<Service[]>([]); // State for services
+  const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [filterSalonId, setFilterSalonId] = useState<string>("all");
@@ -42,9 +42,8 @@ export default function CalendarPage() {
       setIsLoading(false);
       return;
     }
-
-    const fetchData = async () => {
-      setIsLoading(true);
+    
+    const fetchPrerequisites = async () => {
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
@@ -70,14 +69,40 @@ export default function CalendarPage() {
         const servicesList = serviceSnapshot.docs.map(sDoc => ({id: sDoc.id, ...(sDoc.data() as ServiceDoc)} as Service));
         setServices(servicesList);
 
-        let bookingsQueryBuilder = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-          bookingsQueryBuilder = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
           setFilterHairdresserId(user.hairdresserProfileId);
           const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
           if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
             setFilterSalonId(hairdresserDetails.assigned_locations[0]);
           }
+        }
+      } catch (error: any) {
+        console.error("Error fetching prerequisites:", error);
+        toast({ title: "Error Fetching Data", description: `Could not load base data: ${error.message}.`, variant: "destructive" });
+      }
+    };
+
+    fetchPrerequisites();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (services.length === 0) return; // Don't fetch bookings until services are loaded
+
+    const fetchBookings = async () => {
+      setIsLoading(true);
+      try {
+        let bookingsQueryBuilder: Query = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
+        
+        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+            bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", user.hairdresserProfileId));
+        } else { // Admin filtering
+            if (filterSalonId !== "all") {
+                bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
+            }
+            if (filterHairdresserId !== "all") {
+                bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", filterHairdresserId));
+            }
         }
 
         const bookingSnapshot = await getDocs(bookingsQueryBuilder);
@@ -91,11 +116,11 @@ export default function CalendarPage() {
           } else {
             appointmentDateTimeJS = data.appointmentDateTime; 
           }
-          const serviceDetails = servicesList.find(s => s.id === data.serviceId);
+          const serviceDetails = services.find(s => s.id === data.serviceId);
           return {
             id: bDoc.id, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone,
             salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
-            serviceName: serviceDetails?.name || "Service Not Found", // Populate serviceName
+            serviceName: serviceDetails?.name || "Service Not Found",
             appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
             notes: data.notes, color: getStatusColor(data.status), createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Booking;
@@ -104,29 +129,19 @@ export default function CalendarPage() {
 
       } catch (error: any) {
         console.error("Error fetching calendar data:", error);
-        toast({ title: "Error Fetching Data", description: `Could not load calendar data: ${error.message}.`, variant: "destructive" });
+        toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, [user]);
+    fetchBookings();
+  }, [user, filterSalonId, filterHairdresserId, services]);
   
-  const filteredBookings = bookings
-    .filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true)
-    .filter(booking => filterSalonId === "all" || booking.salonId === filterSalonId)
-    .filter(booking => {
-      if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
-        return booking.hairdresserId === user.hairdresserProfileId;
-      }
-      return filterHairdresserId === "all" || booking.hairdresserId === filterHairdresserId;
-    })
-    .sort((a,b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
+  const filteredBookingsByDate = bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true);
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
   const getHairdresserName = (hairdresserId: string) => hairdressers.find(h => h.id === hairdresserId)?.name || "N/A";
-  // getServiceName not needed if booking.serviceName is populated
 
   const getStatusBadgeVariant = (status: Booking['status']): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
@@ -142,15 +157,6 @@ export default function CalendarPage() {
     ? hairdressers 
     : hairdressers.filter(h => h.assigned_locations.includes(filterSalonId));
   
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2 font-body">Loading calendar...</span>
-      </div>
-    );
-  }
-
   if (!user) return <p className="text-center mt-10 font-body">Please log in to view the calendar.</p>;
 
   return (
@@ -192,11 +198,16 @@ export default function CalendarPage() {
 
         <div className="lg:col-span-2 space-y-6">
           <Card className="shadow-lg rounded-lg">
-            <CardHeader><CardTitle className="font-headline text-xl">Appointments for: {selectedDate ? format(selectedDate, "PPP") : "All Dates"}</CardTitle><CardDescription className="font-body">{filteredBookings.length} appointment(s) found.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="font-headline text-xl">Appointments for: {selectedDate ? format(selectedDate, "PPP") : "All Dates"}</CardTitle><CardDescription className="font-body">{isLoading ? "Loading..." : `${filteredBookingsByDate.length} appointment(s) found.`}</CardDescription></CardHeader>
             <CardContent>
-              {filteredBookings.length > 0 ? (
+              {isLoading ? (
+                 <div className="flex justify-center items-center h-[200px]">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="ml-2 font-body">Loading appointments...</span>
+                </div>
+              ) : filteredBookingsByDate.length > 0 ? (
                 <ul className="space-y-4">
-                  {filteredBookings.map(booking => (
+                  {filteredBookingsByDate.map(booking => (
                     <li key={booking.id} className="p-4 border rounded-lg shadow-sm hover:shadow-md transition-shadow bg-card" style={{ borderLeft: `5px solid ${booking.color || 'hsl(var(--primary))'}` }}>
                       <div className="flex justify-between items-start">
                         <div>
@@ -207,7 +218,7 @@ export default function CalendarPage() {
                       </div>
                       <div className="mt-2 space-y-1 text-sm font-body">
                         <p className="flex items-center gap-1"><ClockIcon size={14} className="text-primary"/> {format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</p>
-                        {(user.role === 'admin' || (user.role === 'hairdresser' && booking.hairdresserId !== user.hairdresserProfileId)) && (user.role === 'admin' && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>)}
+                        {(user.role === 'admin' && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>)}
                         <p className="flex items-center gap-1"><StoreIcon size={14} className="text-primary"/> {getSalonName(booking.salonId)}</p>
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
@@ -230,3 +241,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+    
