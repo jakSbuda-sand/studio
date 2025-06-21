@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, MapPin, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import type { User, Booking, Service, Client, ServiceDoc, BookingDoc, ClientDoc } from "@/lib/types";
+import type { User, Booking, Service, Client, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
 import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns";
@@ -55,6 +56,8 @@ const chartConfig = {
 export default function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [salons, setSalons] = useState<Salon[]>([]);
+  const [filterSalonId, setFilterSalonId] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -70,10 +73,30 @@ export default function DashboardPage() {
         const todayStart = startOfDay(today);
         const sevenDaysAgo = startOfDay(subDays(today, 6));
 
+        // --- Base Queries ---
+        const servicesQuery = query(collection(db, "services"));
+        const locationsQuery = query(collection(db, "locations"), orderBy("name"));
+        
         let bookingsQuery;
-        // Adjust query based on role
+        let clientsQuery = null;
+
         if (user.role === 'admin') {
-           bookingsQuery = query(collection(db, "bookings"), where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)), orderBy("appointmentDateTime", "desc"));
+            const baseBookingsQuery = query(
+              collection(db, "bookings"),
+              where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
+              orderBy("appointmentDateTime", "desc")
+            );
+
+            bookingsQuery = filterSalonId === 'all' 
+                ? baseBookingsQuery 
+                : query(
+                    collection(db, "bookings"), 
+                    where("salonId", "==", filterSalonId),
+                    where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
+                    orderBy("appointmentDateTime", "desc")
+                  );
+            
+            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart)));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
            bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "desc"));
         } else {
@@ -82,17 +105,18 @@ export default function DashboardPage() {
             return;
         }
 
-        const servicesQuery = query(collection(db, "services"));
-        const clientsQuery = user.role === 'admin' ? query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart))) : null;
-
-        const [bookingSnapshot, serviceSnapshot, newClientSnapshot] = await Promise.all([
+        // --- Fetch Data ---
+        const [bookingSnapshot, serviceSnapshot, newClientSnapshot, locationSnapshot] = await Promise.all([
           getDocs(bookingsQuery),
           getDocs(servicesQuery),
           clientsQuery ? getDocs(clientsQuery) : Promise.resolve(null),
+          getDocs(locationsQuery),
         ]);
 
+        // --- Process Data ---
         const servicesMap = new Map<string, Service>(serviceSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as Service]));
-        
+        setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
+
         const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
@@ -141,7 +165,6 @@ export default function DashboardPage() {
                 .sort((a, b) => b.count - a.count)
                 .slice(0, 5);
         } else if (user.role === 'hairdresser') {
-            // Calculate total upcoming bookings for hairdresser
             upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime >= today).length;
         }
 
@@ -163,7 +186,7 @@ export default function DashboardPage() {
     };
 
     fetchDashboardData();
-  }, [user]);
+  }, [user, filterSalonId]);
 
   if (!user) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin"/></div>;
@@ -185,24 +208,46 @@ export default function DashboardPage() {
       { href: "/profile", label: "My Profile", icon: UserCog, roles: ['hairdresser'] },
     ])
   ].filter(action => action.roles.includes(user.role));
+  
+  const selectedSalonName = filterSalonId === 'all' ? 'All Salons' : (salons.find(s => s.id === filterSalonId)?.name || '...');
 
   return (
     <div className="space-y-8">
       <PageHeader title={pageTitle} description={pageDescription} icon={BarChartIcon} />
+      
+      {isAdmin && (
+        <Card>
+            <CardHeader>
+                <CardTitle className="font-headline text-lg flex items-center gap-2"><Filter className="h-5 w-5 text-primary" />Dashboard Filter</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="max-w-xs">
+                    <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon Location</label>
+                    <Select value={filterSalonId} onValueChange={setFilterSalonId}>
+                        <SelectTrigger id="salon-filter"><SelectValue placeholder="Select Salon..." /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Salons</SelectItem>
+                            {salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </CardContent>
+        </Card>
+      )}
 
       {isAdmin ? (
         <>
         <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <StatCard title="Bookings Today" value={stats?.bookingsToday ?? 0} icon={CalendarCheck} isLoading={isLoading} />
-            <StatCard title="Revenue Today" value={`R ${stats?.revenueToday.toFixed(2) ?? '0.00'}`} icon={DollarSign} isLoading={isLoading} />
-            <StatCard title="New Clients Today" value={stats?.newClientsToday ?? 0} icon={Users} isLoading={isLoading} />
+            <StatCard title="Bookings Today" value={stats?.bookingsToday ?? 0} icon={CalendarCheck} description={`For ${selectedSalonName}`} isLoading={isLoading} />
+            <StatCard title="Revenue Today" value={`R ${stats?.revenueToday.toFixed(2) ?? '0.00'}`} icon={DollarSign} description={`Completed for ${selectedSalonName}`} isLoading={isLoading} />
+            <StatCard title="New Clients Today" value={stats?.newClientsToday ?? 0} icon={Users} description="Across all locations" isLoading={isLoading} />
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <Card className="shadow-lg rounded-lg lg:col-span-3">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><BarChartIcon className="h-5 w-5 text-primary"/>Bookings This Week</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Overview of appointments in the last 7 days.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Overview for {selectedSalonName}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
@@ -221,7 +266,7 @@ export default function DashboardPage() {
             <Card className="shadow-lg rounded-lg lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary"/>Popular Services</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Top services based on completed bookings.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Top services for {selectedSalonName}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
