@@ -84,7 +84,7 @@ export default function DashboardPage() {
             const baseBookingsQuery = query(
               collection(db, "bookings"),
               where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
-              orderBy("appointmentDateTime", "desc")
+              orderBy("appointmentDateTime", "asc") // Changed to asc
             );
 
             bookingsQuery = filterSalonId === 'all' 
@@ -93,12 +93,12 @@ export default function DashboardPage() {
                     collection(db, "bookings"), 
                     where("salonId", "==", filterSalonId),
                     where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
-                    orderBy("appointmentDateTime", "desc")
+                    orderBy("appointmentDateTime", "asc") // Changed to asc
                   );
             
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart)));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "desc"));
+           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "asc")); // Changed to asc
         } else {
             setStats({ bookingsToday: 0, revenueToday: 0, newClientsToday: 0, weeklyChartData: [], popularServices: [] });
             setIsLoading(false);
@@ -126,7 +126,7 @@ export default function DashboardPage() {
                 appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
                 price: service?.price || 0
             } as Booking;
-        });
+        }).reverse(); // Reverse the array here to get descending order
 
         // --- Calculate Stats ---
         const bookingsToday = allBookings.filter(b => isSameDay(b.appointmentDateTime, today)).length;
@@ -314,3 +314,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

@@ -34,7 +34,7 @@
       "collectionGroup": "clients",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "firstSeen", "order": "ASCENDING" }
+        { "fieldPath": "firstSeen", "order": "DESCENDING" }
       ]
     },
     {
@@ -75,7 +75,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
-        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
+        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
       ]
     },
     {
@@ -83,7 +83,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
-        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
+        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
       ]
     }
   ],
