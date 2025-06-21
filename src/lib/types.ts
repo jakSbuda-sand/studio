@@ -62,6 +62,7 @@ export interface Booking {
   serviceName?: string;
   appointmentDateTime: Date;
   durationMinutes: number;
+  price?: number; // Price of the service at time of booking
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
   notes?: string;
   color?: string;

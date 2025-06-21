@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, MapPin, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, MapPin, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Client, ServiceDoc, BookingDoc, ClientDoc } from "@/lib/types";
@@ -41,6 +41,7 @@ interface DashboardStats {
   newClientsToday: number;
   weeklyChartData: any[];
   popularServices: { name: string; count: number }[];
+  upcomingBookings?: number; // Added for hairdresser
 }
 
 const chartConfig = {
@@ -57,7 +58,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
+    if (!user) { 
       setIsLoading(false);
       return;
     }
@@ -67,21 +68,29 @@ export default function DashboardPage() {
       try {
         const today = new Date();
         const todayStart = startOfDay(today);
-        const todayEnd = endOfDay(today);
         const sevenDaysAgo = startOfDay(subDays(today, 6));
 
-        // --- Fetch all necessary data in parallel ---
-        const bookingsQuery = query(collection(db, "bookings"), where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)), orderBy("appointmentDateTime", "desc"));
+        let bookingsQuery;
+        // Adjust query based on role
+        if (user.role === 'admin') {
+           bookingsQuery = query(collection(db, "bookings"), where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)), orderBy("appointmentDateTime", "desc"));
+        } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "desc"));
+        } else {
+            setStats({ bookingsToday: 0, revenueToday: 0, newClientsToday: 0, weeklyChartData: [], popularServices: [] });
+            setIsLoading(false);
+            return;
+        }
+
         const servicesQuery = query(collection(db, "services"));
-        const clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart)));
+        const clientsQuery = user.role === 'admin' ? query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart))) : null;
 
         const [bookingSnapshot, serviceSnapshot, newClientSnapshot] = await Promise.all([
           getDocs(bookingsQuery),
           getDocs(servicesQuery),
-          getDocs(clientsQuery),
+          clientsQuery ? getDocs(clientsQuery) : Promise.resolve(null),
         ]);
 
-        // --- Process Data ---
         const servicesMap = new Map<string, Service>(serviceSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as Service]));
         
         const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
@@ -97,35 +106,44 @@ export default function DashboardPage() {
 
         // --- Calculate Stats ---
         const bookingsToday = allBookings.filter(b => isSameDay(b.appointmentDateTime, today)).length;
-        const revenueToday = allBookings
-            .filter(b => b.status === 'Completed' && isSameDay(b.appointmentDateTime, today))
-            .reduce((sum, b) => sum + (b.price || 0), 0);
         
-        const newClientsToday = newClientSnapshot.size;
+        let revenueToday = 0;
+        let newClientsToday = 0;
+        let weeklyChartData: any[] = [];
+        let popularServices: { name: string; count: number }[] = [];
+        let upcomingBookings = 0;
 
-        // --- Prepare Chart Data ---
-        const weeklyChartData = Array.from({ length: 7 }).map((_, i) => {
-            const date = subDays(today, i);
-            return {
-                date: format(date, "MMM d"),
-                bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
-            };
-        }).reverse();
+        if (user.role === 'admin') {
+            revenueToday = allBookings
+                .filter(b => b.status === 'Completed' && isSameDay(b.appointmentDateTime, today))
+                .reduce((sum, b) => sum + (b.price || 0), 0);
+            
+            newClientsToday = newClientSnapshot ? newClientSnapshot.size : 0;
 
-        // --- Calculate Popular Services ---
-        const serviceCounts = new Map<string, number>();
-        allBookings.filter(b => b.status === 'Completed').forEach(b => {
-            serviceCounts.set(b.serviceId, (serviceCounts.get(b.serviceId) || 0) + 1);
-        });
+            weeklyChartData = Array.from({ length: 7 }).map((_, i) => {
+                const date = subDays(today, i);
+                return {
+                    date: format(date, "MMM d"),
+                    bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
+                };
+            }).reverse();
 
-        const popularServices = Array.from(serviceCounts.entries())
-            .map(([serviceId, count]) => ({
-                name: servicesMap.get(serviceId)?.name || 'Unknown Service',
-                count
-            }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 5);
+            const serviceCounts = new Map<string, number>();
+            allBookings.filter(b => b.status === 'Completed').forEach(b => {
+                serviceCounts.set(b.serviceId, (serviceCounts.get(b.serviceId) || 0) + 1);
+            });
 
+            popularServices = Array.from(serviceCounts.entries())
+                .map(([serviceId, count]) => ({
+                    name: servicesMap.get(serviceId)?.name || 'Unknown Service',
+                    count
+                }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 5);
+        } else if (user.role === 'hairdresser') {
+            // Calculate total upcoming bookings for hairdresser
+            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime >= today).length;
+        }
 
         setStats({
           bookingsToday,
@@ -133,6 +151,7 @@ export default function DashboardPage() {
           newClientsToday,
           weeklyChartData,
           popularServices,
+          upcomingBookings
         });
 
       } catch (error: any) {
@@ -146,7 +165,9 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, [user]);
 
-  if (!user) return <p>Loading dashboard...</p>;
+  if (!user) {
+    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin"/></div>;
+  }
 
   const isAdmin = user.role === 'admin';
   const pageTitle = isAdmin ? "Admin Dashboard" : `Welcome, ${user?.name || 'Hairdresser'}!`;
@@ -225,7 +246,7 @@ export default function DashboardPage() {
         // --- Hairdresser-specific dashboard (simplified) ---
         <section className="grid gap-6 md:grid-cols-2">
            <StatCard title="My Bookings Today" value={stats?.bookingsToday ?? 0} icon={CalendarCheck} isLoading={isLoading} />
-           <StatCard title="My Upcoming Appointments" value={0} icon={ClipboardList} description="Feature coming soon" isLoading={isLoading} />
+           <StatCard title="My Upcoming Appointments" value={stats?.upcomingBookings ?? 0} icon={ClipboardList} description="All confirmed future bookings" isLoading={isLoading} />
         </section>
       )}
 
