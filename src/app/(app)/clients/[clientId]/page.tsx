@@ -134,7 +134,8 @@ export default function ClientDetailPage() {
       case 'Confirmed': return 'default';
       case 'Pending': return 'secondary';
       case 'Completed': return 'outline';
-      case 'Cancelled': return 'destructive';
+      case 'Cancelled': return 'outline';
+      case 'No-Show': return 'destructive';
       default: return 'secondary';
     }
   };

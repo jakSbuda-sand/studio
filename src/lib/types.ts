@@ -63,7 +63,7 @@ export interface Booking {
   appointmentDateTime: Date;
   durationMinutes: number;
   price?: number; // Price of the service at time of booking
-  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
+  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
   notes?: string;
   color?: string;
   createdAt?: Timestamp;
@@ -149,7 +149,7 @@ export interface BookingDoc {
   serviceId: string;
   appointmentDateTime: Timestamp;
   durationMinutes: number;
-  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
+  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
   notes?: string;
   color?: string;
   createdAt: Timestamp;

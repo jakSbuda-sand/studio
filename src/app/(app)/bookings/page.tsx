@@ -192,7 +192,8 @@ export default function BookingsPage() {
       case 'Confirmed': return 'default';
       case 'Pending': return 'secondary';
       case 'Completed': return 'outline';
-      case 'Cancelled': return 'destructive';
+      case 'Cancelled': return 'outline';
+      case 'No-Show': return 'destructive';
       default: return 'secondary';
     }
   };
@@ -274,7 +275,7 @@ export default function BookingsPage() {
                   <TableCell><Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                    {booking.status !== 'Cancelled' && booking.status !== 'Completed' && (
+                    {booking.status !== 'Cancelled' && booking.status !== 'Completed' && booking.status !== 'No-Show' && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}><Trash2 className="h-4 w-4" /><span className="sr-only">Cancel</span></Button></AlertDialogTrigger>
                         <AlertDialogContent>
