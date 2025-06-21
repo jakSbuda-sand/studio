@@ -26,7 +26,8 @@ import { format, isSameDay } from "date-fns";
 import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where, limit } from "@/lib/firebase";
+import { db, collection, getDocs, query, where } from "@/lib/firebase";
+import { limit } from "firebase/firestore";
 import { toast } from "@/hooks/use-toast";
 
 
@@ -530,3 +531,5 @@ export function BookingForm({
     </Card>
   );
 }
+
+    
