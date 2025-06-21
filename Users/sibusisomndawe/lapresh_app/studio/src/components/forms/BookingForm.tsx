@@ -24,9 +24,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format, isSameDay } from "date-fns";
 import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck } from "lucide-react";
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where } from "@/lib/firebase";
+import { db, collection, getDocs, query, where, limit } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
 
@@ -70,8 +70,11 @@ export function BookingForm({
   const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isFetchingServices, setIsFetchingServices] = useState(false);
-  const [isFetchingClient, setIsFetchingClient] = useState(false);
-  const [autofillMessage, setAutofillMessage] = useState<string | null>(null);
+
+  const [searchResults, setSearchResults] = useState<Client[]>([]);
+  const [isSearchListOpen, setIsSearchListOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchWrapperRef = useRef<HTMLDivElement>(null);
 
 
   const timeSlots = useMemo(() => Array.from({ length: (19 - 8) * 2 + 1 }, (_, i) => {
@@ -106,39 +109,68 @@ export function BookingForm({
     defaultValues: defaultValues as BookingFormValues,
   });
 
+  const handleClientSelect = (client: Client) => {
+    form.setValue("clientName", client.name, { shouldValidate: true });
+    form.setValue("clientPhone", client.phone, { shouldValidate: true });
+    form.setValue("clientEmail", client.email || "", { shouldValidate: true });
+    setIsSearchListOpen(false);
+    setSearchResults([]);
+  };
 
-  const fetchClientByPhone = useCallback(async (phone: string) => {
-    if (phone.length < 10) { // Basic validation for phone length
-      setAutofillMessage(null);
+  const fetchClientsByName = useCallback(async (name: string) => {
+    if (!name || name.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearchListOpen(false);
       return;
     }
-    setIsFetchingClient(true);
-    setAutofillMessage("Searching for client...");
+    setIsSearching(true);
     try {
       const clientsRef = collection(db, "clients");
-      const q = query(clientsRef, where("phone", "==", phone));
+      const q = query(
+        clientsRef,
+        where("name", ">=", name),
+        where("name", "<=", name + "\uf8ff"),
+        limit(5)
+      );
       const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        const clientData = querySnapshot.docs[0].data() as ClientDoc;
-        form.setValue("clientName", clientData.name, { shouldDirty: true });
-        if (clientData.email) {
-          form.setValue("clientEmail", clientData.email, { shouldDirty: true });
-        }
-        setAutofillMessage(`Existing client found: ${clientData.name}`);
-      } else {
-        setAutofillMessage("New client details will be saved.");
-        // Optionally clear name/email if no client found and they were previously autofilled
-        // form.setValue("clientName", "", { shouldDirty: true });
-        // form.setValue("clientEmail", "", { shouldDirty: true });
-      }
+      const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as ClientDoc) } as Client));
+      setSearchResults(results);
+      setIsSearchListOpen(results.length > 0);
     } catch (error) {
-      console.error("Error fetching client for autofill:", error);
-      setAutofillMessage("Error checking client details.");
-      toast({ title: "Error", description: "Could not check client details.", variant: "destructive"});
+      console.error("Error searching for clients:", error);
+      toast({ title: "Search Error", description: "Could not perform client search.", variant: "destructive" });
     } finally {
-      setIsFetchingClient(false);
+      setIsSearching(false);
     }
-  }, [form]);
+  }, []);
+
+  const clientNameValue = form.watch("clientName");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      // Ensure we don't re-trigger search if a client has just been selected
+      const selectedClient = searchResults.find(r => r.name === clientNameValue);
+      if(!selectedClient){
+        fetchClientsByName(clientNameValue);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [clientNameValue, fetchClientsByName, searchResults]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(event.target as Node)) {
+        setIsSearchListOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -231,21 +263,9 @@ export function BookingForm({
           form.setValue("durationMinutes", selectedService.durationMinutes, { shouldDirty: true });
         }
       }
-      if (name === "appointmentDateTime") {
-        // Date/Time logic... (remains same)
-      }
-      if (name === "clientPhone") {
-        const phoneValue = value.clientPhone || "";
-        // Basic debounce or length check before fetching
-        if (phoneValue.length >= 10 && phoneValue.length <=15) { // Example: Trigger after 10 digits
-          fetchClientByPhone(phoneValue);
-        } else {
-          setAutofillMessage(null); // Clear message if phone is too short/long or cleared
-        }
-      }
     });
     return () => subscription.unsubscribe();
-  }, [form, availableServices, timeSlots, fetchClientByPhone]);
+  }, [form, availableServices]);
 
 
   const handleSubmitInternal = async (data: BookingFormValues) => {
@@ -279,7 +299,37 @@ export function BookingForm({
               <FormField control={form.control} name="clientName" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Client Name</FormLabel>
-                  <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                   <div className="relative" ref={searchWrapperRef}>
+                    <FormControl>
+                      <Input 
+                        placeholder="Search or type new name..." 
+                        {...field} 
+                        onChange={(e) => {
+                          field.onChange(e);
+                          if (!isSearchListOpen) setIsSearchListOpen(true);
+                        }}
+                        autoComplete="off"
+                      />
+                    </FormControl>
+                    {isSearching && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                    {isSearchListOpen && searchResults.length > 0 && (
+                      <div className="absolute z-10 w-full bg-card border rounded-md mt-1 shadow-lg max-h-60 overflow-y-auto">
+                        <ul>
+                          {searchResults.map(client => (
+                            <li
+                              key={client.id}
+                              className="p-3 hover:bg-accent cursor-pointer"
+                              onClick={() => handleClientSelect(client)}
+                              onMouseDown={(e) => e.preventDefault()} // Prevents input blur before click
+                            >
+                              <p className="font-medium text-sm">{client.name}</p>
+                              <p className="text-xs text-muted-foreground">{client.phone}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}/>
@@ -287,8 +337,7 @@ export function BookingForm({
                 <FormItem>
                   <FormLabel>Client Phone</FormLabel>
                   <FormControl><Input type="tel" placeholder="082 123 4567" {...field} /></FormControl>
-                  {isFetchingClient && <FormDescription className="flex items-center gap-1 text-xs"><Loader2 className="h-3 w-3 animate-spin"/> {autofillMessage}</FormDescription>}
-                  {!isFetchingClient && autofillMessage && <FormDescription className="flex items-center gap-1 text-xs"><UserCheck className="h-3 w-3 text-green-600"/> {autofillMessage}</FormDescription>}
+                  <FormDescription>Will be auto-filled from search.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}/>
@@ -300,7 +349,6 @@ export function BookingForm({
                 <FormMessage />
               </FormItem>
             )}/>
-            {/* Other form fields remain largely the same */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField control={form.control} name="salonId" render={({ field }) => (
                 <FormItem>
@@ -472,8 +520,8 @@ export function BookingForm({
                 <FormMessage />
               </FormItem>
             )}/>
-            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || form.formState.isSubmitting || isFetchingClient}>
-              {(isSubmitting || form.formState.isSubmitting || isFetchingClient) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || form.formState.isSubmitting || isSearching}>
+              {(isSubmitting || form.formState.isSubmitting || isSearching) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {initialData ? "Save Changes" : "Create Booking"}
             </Button>
           </form>

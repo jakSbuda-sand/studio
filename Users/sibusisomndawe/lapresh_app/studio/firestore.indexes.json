@@ -40,7 +40,13 @@
         {
           "fieldPath": "phone",
           "order": "ASCENDING"
-        },
+        }
+      ]
+    },
+     {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
         {
           "fieldPath": "name",
           "order": "ASCENDING"
