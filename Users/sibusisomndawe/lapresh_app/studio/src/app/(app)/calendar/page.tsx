@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2 } from "lucide-react";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, CheckCircle } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where, orderBy, Timestamp, Query } from "@/lib/firebase";
+import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, Query, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
 const getStatusColor = (status: Booking['status']): string => {
@@ -154,6 +154,24 @@ export default function CalendarPage() {
       default: return 'secondary';
     }
   };
+
+  const handleMarkAsComplete = async (bookingToComplete: Booking) => {
+    try {
+      const bookingRef = doc(db, "bookings", bookingToComplete.id);
+      await updateDoc(bookingRef, { status: 'Completed', updatedAt: serverTimestamp() as Timestamp });
+      
+      const newColor = getStatusColor('Completed');
+      
+      setBookings(prev => prev.map(b => b.id === bookingToComplete.id 
+        ? { ...b, status: 'Completed' as 'Completed', color: newColor, updatedAt: Timestamp.now() } 
+        : b
+      ));
+      toast({ title: "Booking Completed", description: `Booking for ${bookingToComplete.clientName} has been marked as complete.` });
+    } catch (error: any) {
+      console.error("Error completing booking:", error);
+      toast({ title: "Update Failed", description: `Could not mark booking as complete: ${error.message}`, variant: "destructive" });
+    }
+  };
   
   const availableHairdressersForFilter = filterSalonId === "all" 
     ? hairdressers 
@@ -224,7 +242,12 @@ export default function CalendarPage() {
                         <p className="flex items-center gap-1"><StoreIcon size={14} className="text-primary"/> {getSalonName(booking.salonId)}</p>
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
-                       <div className="mt-3 text-right">
+                       <div className="mt-3 flex justify-end items-center gap-2">
+                          {user.role === 'hairdresser' && booking.status === 'Confirmed' && (
+                            <Button size="sm" onClick={() => handleMarkAsComplete(booking)} className="bg-green-600 hover:bg-green-700 text-white font-body">
+                              <CheckCircle className="mr-2 h-4 w-4" /> Mark Complete
+                            </Button>
+                          )}
                           <Button variant="link" size="sm" asChild className="text-primary font-body"><Link href={`/bookings?edit=${booking.id}`}>View/Edit Booking</Link></Button>
                        </div>
                     </li>
@@ -243,3 +266,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+    
