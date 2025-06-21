@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2 } from "lucide-react";
+import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import {
@@ -178,6 +178,21 @@ export default function BookingsPage() {
       setIsSubmitting(false);
     }
   };
+  
+  const handleMarkAsComplete = async (bookingToComplete: Booking) => {
+    setIsSubmitting(true);
+    try {
+      const bookingRef = doc(db, "bookings", bookingToComplete.id);
+      await updateDoc(bookingRef, { status: 'Completed', updatedAt: serverTimestamp() as Timestamp });
+      setBookings(prev => prev.map(b => b.id === bookingToComplete.id ? { ...b, status: 'Completed' as 'Completed', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      toast({ title: "Booking Completed", description: `Booking for ${bookingToComplete.clientName} has been marked as complete.` });
+    } catch (error: any) {
+      console.error("Error completing booking:", error);
+      toast({ title: "Update Failed", description: `Could not mark booking as complete: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const openEditForm = (booking: Booking) => {
     setEditingBooking(booking);
@@ -274,6 +289,9 @@ export default function BookingsPage() {
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
                   <TableCell><Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge></TableCell>
                   <TableCell className="text-right">
+                    {user.role === 'hairdresser' && booking.status === 'Confirmed' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleMarkAsComplete(booking)} className="hover:text-green-600" disabled={isSubmitting}><CheckCircle className="h-4 w-4" /><span className="sr-only">Mark as Complete</span></Button>
+                    )}
                     <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
                     {booking.status !== 'Cancelled' && booking.status !== 'Completed' && booking.status !== 'No-Show' && (
                       <AlertDialog>
@@ -298,3 +316,5 @@ export default function BookingsPage() {
     </div>
   );
 }
+
+    

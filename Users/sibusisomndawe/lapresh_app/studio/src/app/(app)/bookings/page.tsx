@@ -9,20 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle } from "lucide-react";
+import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle, MoreHorizontal } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import Link from "next/link";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from 'next/navigation';
@@ -36,7 +33,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
-  const [services, setServices] = useState<Service[]>([]); // State for services
+  const [services, setServices] = useState<Service[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +41,8 @@ export default function BookingsPage() {
 
   const [pageTitle, setPageTitle] = useState("All Bookings");
   const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
+  
+  const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
   useEffect(() => {
     if (!user) {
@@ -108,7 +107,7 @@ export default function BookingsPage() {
           return {
             id: bDoc.id, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone,
             salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
-            serviceName: serviceDetails?.name || "Service Not Found", // Populate serviceName
+            serviceName: serviceDetails?.name || "Service Not Found",
             appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
             notes: data.notes, createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Booking;
@@ -126,6 +125,22 @@ export default function BookingsPage() {
 
     fetchData();
   }, [user, viewMode]);
+  
+  const handleStatusUpdate = async (bookingId: string, newStatus: Booking['status']) => {
+    setIsSubmitting(true);
+    try {
+        const bookingRef = doc(db, "bookings", bookingId);
+        await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, updatedAt: Timestamp.now() } : b).sort((a, b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+        toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
+    } catch (error: any) {
+        console.error(`Error updating booking status to ${newStatus}:`, error);
+        toast({ title: "Update Failed", description: `Could not update status: ${error.message}`, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
 
   const handleUpdateBooking = async (data: BookingFormValues) => {
     if (!editingBooking) return;
@@ -145,9 +160,9 @@ export default function BookingsPage() {
 
       const serviceDetails = services.find(s => s.id === data.serviceId);
       const updatedBookingForState: Booking = {
-        ...editingBooking, // Spread existing fields
-        ...data, // Spread form data
-        appointmentDateTime: data.appointmentDateTime, // Ensure JS Date is used
+        ...editingBooking,
+        ...data,
+        appointmentDateTime: data.appointmentDateTime,
         serviceName: serviceDetails?.name || "Service Not Found",
         updatedAt: Timestamp.now(), 
       };
@@ -159,36 +174,6 @@ export default function BookingsPage() {
     } catch (error: any) {
       console.error("Error updating booking:", error);
       toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCancelBooking = async (bookingToCancel: Booking) => {
-    setIsSubmitting(true);
-    try {
-      const bookingRef = doc(db, "bookings", bookingToCancel.id);
-      await updateDoc(bookingRef, { status: 'Cancelled', updatedAt: serverTimestamp() as Timestamp });
-      setBookings(prev => prev.map(b => b.id === bookingToCancel.id ? { ...b, status: 'Cancelled' as 'Cancelled', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
-      toast({ title: "Booking Cancelled", description: `Booking for ${bookingToCancel.clientName} has been cancelled.`, variant: "default" });
-    } catch (error: any) {
-      console.error("Error cancelling booking:", error);
-      toast({ title: "Cancellation Failed", description: `Could not cancel booking: ${error.message}`, variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  const handleMarkAsComplete = async (bookingToComplete: Booking) => {
-    setIsSubmitting(true);
-    try {
-      const bookingRef = doc(db, "bookings", bookingToComplete.id);
-      await updateDoc(bookingRef, { status: 'Completed', updatedAt: serverTimestamp() as Timestamp });
-      setBookings(prev => prev.map(b => b.id === bookingToComplete.id ? { ...b, status: 'Completed' as 'Completed', updatedAt: Timestamp.now() } : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
-      toast({ title: "Booking Completed", description: `Booking for ${bookingToComplete.clientName} has been marked as complete.` });
-    } catch (error: any) {
-      console.error("Error completing booking:", error);
-      toast({ title: "Update Failed", description: `Could not mark booking as complete: ${error.message}`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -243,7 +228,7 @@ export default function BookingsPage() {
           <DialogHeader><DialogTitle className="font-headline text-2xl">{editingBooking ? "Edit Booking" : "New Booking"}</DialogTitle></DialogHeader>
           {(editingBooking || (isFormOpen && !editingBooking)) && (
             <BookingForm initialData={editingBooking} salons={salons} allHairdressers={hairdressers}
-              onSubmit={editingBooking ? handleUpdateBooking : async () => { /* New from dialog not standard */ setIsFormOpen(false); }}
+              onSubmit={editingBooking ? handleUpdateBooking : async () => { setIsFormOpen(false); }}
               isSubmitting={isSubmitting}
             />
           )}
@@ -287,24 +272,32 @@ export default function BookingsPage() {
                   <TableCell>{booking.serviceName || "N/A"}</TableCell>
                   {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
-                  <TableCell><Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge></TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="p-1 h-auto" disabled={isSubmitting}>
+                                <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity">
+                                    {booking.status}
+                                </Badge>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="font-body">
+                            <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {bookingStatusOptions.map((statusOption) => (
+                                <DropdownMenuItem 
+                                    key={statusOption} 
+                                    onClick={() => handleStatusUpdate(booking.id, statusOption)}
+                                    disabled={isSubmitting || booking.status === statusOption}
+                                >
+                                    {statusOption}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                   <TableCell className="text-right">
-                    {user.role === 'hairdresser' && booking.status === 'Confirmed' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleMarkAsComplete(booking)} className="hover:text-green-600" disabled={isSubmitting}><CheckCircle className="h-4 w-4" /><span className="sr-only">Mark as Complete</span></Button>
-                    )}
                     <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                    {booking.status !== 'Cancelled' && booking.status !== 'Completed' && booking.status !== 'No-Show' && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}><Trash2 className="h-4 w-4" /><span className="sr-only">Cancel</span></Button></AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle className="font-headline">Cancel Booking?</AlertDialogTitle><AlertDialogDescription className="font-body">Are you sure you want to cancel this booking for {booking.clientName}?</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="font-body" disabled={isSubmitting}>Keep Booking</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleCancelBooking(booking)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Confirm Cancellation"}</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -316,5 +309,3 @@ export default function BookingsPage() {
     </div>
   );
 }
-
-    

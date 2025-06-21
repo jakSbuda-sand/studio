@@ -8,6 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
 import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, CheckCircle } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { format, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -17,11 +25,11 @@ import { toast } from "@/hooks/use-toast";
 
 const getStatusColor = (status: Booking['status']): string => {
   switch (status) {
-    case 'Completed': return 'hsl(130, 60%, 50%)'; // Green
-    case 'Confirmed': return 'hsl(var(--primary))'; // Lavender
-    case 'Pending': return 'hsl(38, 92%, 50%)'; // Orange/Yellow
-    case 'Cancelled': return 'hsl(0, 0%, 60%)'; // Gray
-    case 'No-Show': return 'hsl(0, 84%, 60%)'; // Red
+    case 'Completed': return 'hsl(130, 60%, 50%)';
+    case 'Confirmed': return 'hsl(var(--primary))';
+    case 'Pending': return 'hsl(38, 92%, 50%)';
+    case 'Cancelled': return 'hsl(0, 0%, 60%)';
+    case 'No-Show': return 'hsl(0, 84%, 60%)';
     default: return 'hsl(var(--muted-foreground))';
   }
 };
@@ -34,9 +42,12 @@ export default function CalendarPage() {
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [filterSalonId, setFilterSalonId] = useState<string>("all");
   const [filterHairdresserId, setFilterHairdresserId] = useState<string>("all");
+  
+  const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
   useEffect(() => {
     if (!user) {
@@ -88,7 +99,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (services.length === 0) return; // Don't fetch bookings until services are loaded
+    if (services.length === 0) return;
 
     const fetchBookings = async () => {
       setIsLoading(true);
@@ -97,7 +108,7 @@ export default function CalendarPage() {
         
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
             bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", user.hairdresserProfileId));
-        } else { // Admin filtering
+        } else {
             if (filterSalonId !== "all") {
                 bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
             }
@@ -112,10 +123,8 @@ export default function CalendarPage() {
           let appointmentDateTimeJS: Date;
           if (data.appointmentDateTime instanceof Timestamp) {
             appointmentDateTimeJS = data.appointmentDateTime.toDate();
-          } else if (typeof data.appointmentDateTime === 'string') {
-            appointmentDateTimeJS = new Date(data.appointmentDateTime);
           } else {
-            appointmentDateTimeJS = data.appointmentDateTime; 
+            appointmentDateTimeJS = new Date(data.appointmentDateTime.toString());
           }
           const serviceDetails = services.find(s => s.id === data.serviceId);
           return {
@@ -139,6 +148,22 @@ export default function CalendarPage() {
     fetchBookings();
   }, [user, filterSalonId, filterHairdresserId, services]);
   
+  const handleStatusUpdate = async (bookingId: string, newStatus: Booking['status']) => {
+    setIsSubmitting(true);
+    try {
+        const bookingRef = doc(db, "bookings", bookingId);
+        await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
+        const newColor = getStatusColor(newStatus);
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+        toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
+    } catch (error: any) {
+        console.error(`Error updating booking status to ${newStatus}:`, error);
+        toast({ title: "Update Failed", description: `Could not update status: ${error.message}`, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+  
   const filteredBookingsByDate = bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true);
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
@@ -155,24 +180,6 @@ export default function CalendarPage() {
     }
   };
 
-  const handleMarkAsComplete = async (bookingToComplete: Booking) => {
-    try {
-      const bookingRef = doc(db, "bookings", bookingToComplete.id);
-      await updateDoc(bookingRef, { status: 'Completed', updatedAt: serverTimestamp() as Timestamp });
-      
-      const newColor = getStatusColor('Completed');
-      
-      setBookings(prev => prev.map(b => b.id === bookingToComplete.id 
-        ? { ...b, status: 'Completed' as 'Completed', color: newColor, updatedAt: Timestamp.now() } 
-        : b
-      ));
-      toast({ title: "Booking Completed", description: `Booking for ${bookingToComplete.clientName} has been marked as complete.` });
-    } catch (error: any) {
-      console.error("Error completing booking:", error);
-      toast({ title: "Update Failed", description: `Could not mark booking as complete: ${error.message}`, variant: "destructive" });
-    }
-  };
-  
   const availableHairdressersForFilter = filterSalonId === "all" 
     ? hairdressers 
     : hairdressers.filter(h => h.assigned_locations.includes(filterSalonId));
@@ -234,7 +241,28 @@ export default function CalendarPage() {
                           <h3 className="font-headline text-lg text-foreground">{booking.serviceName || "Unknown Service"}</h3>
                           <p className="text-sm text-muted-foreground font-body flex items-center gap-1"><UserIcon size={14}/> {booking.clientName} - {booking.clientPhone}</p>
                         </div>
-                        <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body">{booking.status}</Badge>
+                         <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="p-1 h-auto -mt-2 -mr-2" disabled={isSubmitting}>
+                                    <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity">
+                                        {booking.status}
+                                    </Badge>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="font-body">
+                                <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {bookingStatusOptions.map((statusOption) => (
+                                    <DropdownMenuItem 
+                                        key={statusOption} 
+                                        onClick={() => handleStatusUpdate(booking.id, statusOption)}
+                                        disabled={isSubmitting || booking.status === statusOption}
+                                    >
+                                        {statusOption}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                       <div className="mt-2 space-y-1 text-sm font-body">
                         <p className="flex items-center gap-1"><ClockIcon size={14} className="text-primary"/> {format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</p>
@@ -243,11 +271,6 @@ export default function CalendarPage() {
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
                        <div className="mt-3 flex justify-end items-center gap-2">
-                          {user.role === 'hairdresser' && booking.status === 'Confirmed' && (
-                            <Button size="sm" onClick={() => handleMarkAsComplete(booking)} className="bg-green-600 hover:bg-green-700 text-white font-body">
-                              <CheckCircle className="mr-2 h-4 w-4" /> Mark Complete
-                            </Button>
-                          )}
                           <Button variant="link" size="sm" asChild className="text-primary font-body"><Link href={`/bookings?edit=${booking.id}`}>View/Edit Booking</Link></Button>
                        </div>
                     </li>
@@ -266,5 +289,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
-    
