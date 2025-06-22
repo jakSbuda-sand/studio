@@ -29,7 +29,9 @@ import {
   Timestamp,
   deleteDoc,
   writeBatch,
-  serverTimestamp 
+  serverTimestamp,
+  limit,
+  increment
 } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 // import { getStorage, connectStorageEmulator } from "firebase/storage"; // Uncomment if you use Storage
@@ -116,5 +118,7 @@ export {
   deleteDoc,
   writeBatch,
   httpsCallable,
-  serverTimestamp 
+  serverTimestamp,
+  limit,
+  increment
 };
