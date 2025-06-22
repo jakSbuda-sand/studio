@@ -19,15 +19,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Booking, Salon, Hairdresser, Service, ServiceDoc, Client, ClientDoc } from "@/lib/types";
+import type { Booking, Salon, Hairdresser, Service, ServiceDoc, Client, ClientDoc, DayOfWeek, BookingDoc } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { format, isSameDay } from "date-fns";
+import { format, isSameDay, startOfDay, endOfDay, parse, addMinutes } from "date-fns";
 import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where } from "@/lib/firebase";
-import { limit } from "firebase/firestore";
+import { db, collection, getDocs, query, where, Timestamp, limit } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
 
@@ -39,7 +38,7 @@ const bookingFormSchema = z.object({
   serviceId: z.string({ required_error: "Please select a service."}),
   hairdresserId: z.string({ required_error: "Please select a hairdresser." }),
   appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
-  appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
+  appointmentTime: z.string({ required_error: "Please select an available time." }).regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
   durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
   status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'], { required_error: "Booking status is required."}),
   notes: z.string().optional(),
@@ -77,12 +76,8 @@ export function BookingForm({
   const [isSearching, setIsSearching] = useState(false);
   const searchWrapperRef = useRef<HTMLDivElement>(null);
 
-
-  const timeSlots = useMemo(() => Array.from({ length: (19 - 8) * 2 + 1 }, (_, i) => {
-    const hour = Math.floor(i / 2) + 8;
-    const minute = (i % 2) * 30;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }), []);
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
 
   const defaultValues: Partial<BookingFormValues> = initialData ? {
     ...initialData,
@@ -98,7 +93,7 @@ export function BookingForm({
     serviceId: initialDataPreselected?.serviceId || "",
     hairdresserId: initialDataPreselected?.hairdresserId || "",
     appointmentDateTime: new Date(),
-    appointmentTime: format(new Date(), "HH:mm"),
+    appointmentTime: "",
     durationMinutes: 60,
     status: 'Confirmed',
     notes: "",
@@ -109,6 +104,85 @@ export function BookingForm({
     resolver: zodResolver(bookingFormSchema),
     defaultValues: defaultValues as BookingFormValues,
   });
+
+  const selectedHairdresserId = form.watch("hairdresserId");
+  const selectedDate = form.watch("appointmentDateTime");
+  const duration = form.watch("durationMinutes");
+
+  useEffect(() => {
+    const generateAndFilterSlots = async () => {
+        if (!selectedHairdresserId || !selectedDate || !duration) {
+            setTimeSlots([]);
+            return;
+        }
+
+        setIsLoadingTimes(true);
+        form.setValue("appointmentTime", "");
+
+        const hairdresser = allHairdressers.find(h => h.id === selectedHairdresserId);
+        if (!hairdresser?.workingHours) {
+            toast({ title: "Schedule Not Found", description: "This hairdresser does not have defined working hours.", variant: "destructive" });
+            setTimeSlots([]);
+            setIsLoadingTimes(false);
+            return;
+        }
+
+        const dayOfWeek = format(selectedDate, 'EEEE') as DayOfWeek;
+        const schedule = hairdresser.workingHours[dayOfWeek];
+
+        if (!schedule || schedule.isOff || !schedule.start || !schedule.end) {
+            setTimeSlots([]);
+            setIsLoadingTimes(false);
+            return;
+        }
+
+        const potentialSlots: Date[] = [];
+        let currentTime = parse(schedule.start, 'HH:mm', selectedDate);
+        const endTime = parse(schedule.end, 'HH:mm', selectedDate);
+        
+        while (addMinutes(currentTime, duration) <= endTime) {
+            potentialSlots.push(new Date(currentTime));
+            currentTime = addMinutes(currentTime, 30); // Generate slots every 30 minutes
+        }
+
+        const dayStart = startOfDay(selectedDate);
+        const dayEnd = endOfDay(selectedDate);
+        const bookingsRef = collection(db, "bookings");
+        const q = query(
+            bookingsRef,
+            where("hairdresserId", "==", selectedHairdresserId),
+            where("status", "in", ["Confirmed", "Pending"]),
+            where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
+            where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd))
+        );
+        const querySnapshot = await getDocs(q);
+        const existingBookings = querySnapshot.docs.map(docSnap => {
+            const data = docSnap.data() as BookingDoc;
+            return {
+                start: data.appointmentDateTime.toDate(),
+                end: addMinutes(data.appointmentDateTime.toDate(), data.durationMinutes)
+            };
+        });
+        
+        const availableSlots = potentialSlots.filter(slotStart => {
+            const slotEnd = addMinutes(slotStart, duration);
+            // Check if slot is in the past for today's date
+            if (isSameDay(slotStart, new Date()) && slotStart < new Date()) {
+                return false;
+            }
+            // Check for conflicts with existing bookings
+            return !existingBookings.some(booking =>
+                (slotStart < booking.end && slotEnd > booking.start)
+            );
+        });
+
+        setTimeSlots(availableSlots.map(date => format(date, 'HH:mm')));
+        setIsLoadingTimes(false);
+    };
+
+    generateAndFilterSlots();
+  }, [selectedHairdresserId, selectedDate, duration, allHairdressers, form]);
+
 
   const handleClientSelect = (client: Client) => {
     form.setValue("clientName", client.name, { shouldValidate: true });
@@ -281,9 +355,6 @@ export function BookingForm({
   const hairdresserProfileId = user?.hairdresserProfileId;
   const isSalonSelectDisabled = isHairdresserRole && !!initialDataPreselected?.salonId && !!hairdresserProfileId && allHairdressers.find(h => h.id === hairdresserProfileId)?.assigned_locations.includes(initialDataPreselected.salonId);
   const isHairdresserSelectDisabled = (!selectedSalonId || availableHairdressers.length === 0) || (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
-  const selectedDateFromForm = form.watch("appointmentDateTime");
-  const nowForTimeCheck = new Date();
-  const isSelectedDateTodayForTimeCheck = selectedDateFromForm ? isSameDay(selectedDateFromForm, nowForTimeCheck) : false;
   const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
   return (
@@ -448,32 +519,23 @@ export function BookingForm({
               <FormField control={form.control} name="appointmentTime" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Appointment Time</FormLabel>
-                   <Select onValueChange={field.onChange} value={field.value}>
+                   <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingTimes || timeSlots.length === 0}>
                     <FormControl>
                       <SelectTrigger>
-                        <Clock className="mr-2 h-4 w-4 opacity-50" />
-                        <SelectValue placeholder="Select time" />
+                         {isLoadingTimes && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {!isLoadingTimes && <Clock className="mr-2 h-4 w-4 opacity-50" />}
+                        <SelectValue placeholder={isLoadingTimes ? "Loading..." : "Select a time"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {timeSlots.map(slot => {
-                        let isPastTime = false;
-                        if (isSelectedDateTodayForTimeCheck && selectedDateFromForm) {
-                            const [slotHours, slotMinutes] = slot.split(':').map(Number);
-                            const slotDateTimeOnSelectedDate = new Date(selectedDateFromForm);
-                            slotDateTimeOnSelectedDate.setHours(slotHours, slotMinutes, 0, 0);
-                            if (slotDateTimeOnSelectedDate < nowForTimeCheck) {
-                                isPastTime = true;
-                            }
-                        }
-                        return (
-                          <SelectItem key={slot} value={slot} disabled={isPastTime}>
-                            {slot}
-                          </SelectItem>
-                        );
-                      })}
+                       {timeSlots.length > 0 ? (
+                            timeSlots.map(slot => <SelectItem key={slot} value={slot}>{slot}</SelectItem>)
+                        ) : (
+                           <p className="p-2 text-sm text-muted-foreground">No available slots.</p>
+                        )}
                     </SelectContent>
                   </Select>
+                  {!selectedHairdresserId && <FormDescription>Select service and hairdresser first.</FormDescription>}
                   <FormMessage />
                 </FormItem>
               )}/>
@@ -522,8 +584,8 @@ export function BookingForm({
                 <FormMessage />
               </FormItem>
             )}/>
-            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || form.formState.isSubmitting || isSearching}>
-              {(isSubmitting || form.formState.isSubmitting || isSearching) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || form.formState.isSubmitting || isSearching || isLoadingTimes}>
+              {(isSubmitting || form.formState.isSubmitting || isSearching || isLoadingTimes) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {initialData ? "Save Changes" : "Create Booking"}
             </Button>
           </form>
@@ -532,3 +594,5 @@ export function BookingForm({
     </Card>
   );
 }
+
+    
