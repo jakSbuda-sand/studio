@@ -228,7 +228,7 @@ export default function HairdressersPage() {
       />
 
       <Dialog open={isEditFormOpen} onOpenChange={(isOpen) => { setIsEditFormOpen(isOpen); if (!isOpen) setEditingHairdresser(null); }}>
-        <DialogContent className="sm:max-w-2xl font-body"> {/* Increased max-width for longer form */}
+        <DialogContent className="sm:max-w-2xl font-body max-h-[90vh] overflow-y-auto">
           <DialogHeader> <DialogTitle className="font-headline text-2xl">Edit Hairdresser Profile</DialogTitle> </DialogHeader>
           {editingHairdresser && (
             <HairdresserForm

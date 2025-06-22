@@ -66,6 +66,7 @@ export default function BookingsPage() {
             id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
             assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
             availability: data.availability || "", working_days: data.working_days || [],
+            workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Hairdresser;
