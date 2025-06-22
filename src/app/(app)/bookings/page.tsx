@@ -225,7 +225,7 @@ export default function BookingsPage() {
       />
 
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
-        <DialogContent className="sm:max-w-2xl font-body">
+        <DialogContent className="sm:max-w-2xl font-body max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-headline text-2xl">{editingBooking ? "Edit Booking" : "New Booking"}</DialogTitle></DialogHeader>
           {(editingBooking || (isFormOpen && !editingBooking)) && (
             <BookingForm initialData={editingBooking} salons={salons} allHairdressers={hairdressers}

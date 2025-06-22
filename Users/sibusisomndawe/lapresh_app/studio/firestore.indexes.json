@@ -2,39 +2,19 @@
 {
   "indexes": [
     {
-      "collectionGroup": "services",
+      "collectionGroup": "bookings",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "salonIds", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "isActive", "order": "ASCENDING" }
+        { "fieldPath": "clientPhone", "order": "ASCENDING" },
+        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
       ]
     },
     {
-      "collectionGroup": "clients",
+      "collectionGroup": "bookings",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "phone", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "clients",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "name_lowercase", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "clients",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "name", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "clients",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "firstSeen", "order": "DESCENDING" }
+        { "fieldPath": "hairdresserId", "order": "ASCENDING" },
+        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
       ]
     },
     {
@@ -50,22 +30,6 @@
       "collectionGroup": "bookings",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "hairdresserId", "order": "ASCENDING" },
-        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "bookings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "clientPhone", "order": "ASCENDING" },
-        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "bookings",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "salonId", "order": "ASCENDING" },
         { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
       ]
@@ -77,10 +41,72 @@
         { "fieldPath": "salonId", "order": "ASCENDING" },
         { "fieldPath": "hairdresserId", "order": "ASCENDING" },
         { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "firstSeen", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastSeen", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name_lowercase", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "phone", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "hairdressers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "locations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "services",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "services",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salonIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "isActive", "order": "ASCENDING" }
       ]
     }
   ],
   "fieldOverrides": []
 }
-
-    

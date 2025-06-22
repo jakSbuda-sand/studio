@@ -199,7 +199,7 @@ export default function ServicesPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Service
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg font-body">
+            <DialogContent className="sm:max-w-lg font-body max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="font-headline text-2xl">
                   {editingService ? "Edit Service" : "Add New Service"}
@@ -285,4 +285,3 @@ export default function ServicesPage() {
     </div>
   );
 }
-
