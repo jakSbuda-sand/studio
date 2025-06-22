@@ -108,53 +108,55 @@ export function BookingForm({
   const selectedHairdresserId = form.watch("hairdresserId");
   const selectedDate = form.watch("appointmentDateTime");
   const duration = form.watch("durationMinutes");
+  const { setValue } = form;
 
-  useEffect(() => {
-    const generateAndFilterSlots = async () => {
-        if (!selectedHairdresserId || !selectedDate || !duration) {
-            setTimeSlots([]);
-            return;
-        }
+  const generateAndFilterSlots = useCallback(async () => {
+    if (!selectedHairdresserId || !selectedDate || !duration) {
+        setTimeSlots([]);
+        return;
+    }
 
-        setIsLoadingTimes(true);
-        form.setValue("appointmentTime", "");
+    setIsLoadingTimes(true);
+    setValue("appointmentTime", "");
 
-        const hairdresser = allHairdressers.find(h => h.id === selectedHairdresserId);
-        if (!hairdresser?.workingHours) {
-            toast({ title: "Schedule Not Found", description: "This hairdresser does not have defined working hours.", variant: "destructive" });
-            setTimeSlots([]);
-            setIsLoadingTimes(false);
-            return;
-        }
+    const hairdresser = allHairdressers.find(h => h.id === selectedHairdresserId);
+    if (!hairdresser?.workingHours) {
+        toast({ title: "Schedule Not Found", description: "This hairdresser does not have defined working hours.", variant: "destructive" });
+        setTimeSlots([]);
+        setIsLoadingTimes(false);
+        return;
+    }
 
-        const dayOfWeek = format(selectedDate, 'EEEE') as DayOfWeek;
-        const schedule = hairdresser.workingHours[dayOfWeek];
+    const dayOfWeek = format(selectedDate, 'EEEE') as DayOfWeek;
+    const schedule = hairdresser.workingHours[dayOfWeek];
 
-        if (!schedule || schedule.isOff || !schedule.start || !schedule.end) {
-            setTimeSlots([]);
-            setIsLoadingTimes(false);
-            return;
-        }
+    if (!schedule || schedule.isOff || !schedule.start || !schedule.end) {
+        setTimeSlots([]);
+        setIsLoadingTimes(false);
+        return;
+    }
 
-        const potentialSlots: Date[] = [];
-        let currentTime = parse(schedule.start, 'HH:mm', selectedDate);
-        const endTime = parse(schedule.end, 'HH:mm', selectedDate);
-        
-        while (addMinutes(currentTime, duration) <= endTime) {
-            potentialSlots.push(new Date(currentTime));
-            currentTime = addMinutes(currentTime, 30); // Generate slots every 30 minutes
-        }
+    const potentialSlots: Date[] = [];
+    let currentTime = parse(schedule.start, 'HH:mm', selectedDate);
+    const endTime = parse(schedule.end, 'HH:mm', selectedDate);
+    
+    while (addMinutes(currentTime, duration) <= endTime) {
+        potentialSlots.push(new Date(currentTime));
+        currentTime = addMinutes(currentTime, 30);
+    }
 
-        const dayStart = startOfDay(selectedDate);
-        const dayEnd = endOfDay(selectedDate);
-        const bookingsRef = collection(db, "bookings");
-        const q = query(
-            bookingsRef,
-            where("hairdresserId", "==", selectedHairdresserId),
-            where("status", "in", ["Confirmed", "Pending"]),
-            where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
-            where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd))
-        );
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd = endOfDay(selectedDate);
+    const bookingsRef = collection(db, "bookings");
+    const q = query(
+        bookingsRef,
+        where("hairdresserId", "==", selectedHairdresserId),
+        where("status", "in", ["Confirmed", "Pending"]),
+        where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
+        where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd))
+    );
+
+    try {
         const querySnapshot = await getDocs(q);
         const existingBookings = querySnapshot.docs.map(docSnap => {
             const data = docSnap.data() as BookingDoc;
@@ -166,22 +168,27 @@ export function BookingForm({
         
         const availableSlots = potentialSlots.filter(slotStart => {
             const slotEnd = addMinutes(slotStart, duration);
-            // Check if slot is in the past for today's date
             if (isSameDay(slotStart, new Date()) && slotStart < new Date()) {
                 return false;
             }
-            // Check for conflicts with existing bookings
             return !existingBookings.some(booking =>
                 (slotStart < booking.end && slotEnd > booking.start)
             );
         });
 
         setTimeSlots(availableSlots.map(date => format(date, 'HH:mm')));
+    } catch (error) {
+        console.error("Error fetching bookings for time slots:", error);
+        toast({ title: "Error fetching availability", description: "Could not verify available time slots.", variant: "destructive" });
+        setTimeSlots([]);
+    } finally {
         setIsLoadingTimes(false);
-    };
+    }
+  }, [selectedHairdresserId, selectedDate, duration, allHairdressers, setValue]);
 
+  useEffect(() => {
     generateAndFilterSlots();
-  }, [selectedHairdresserId, selectedDate, duration, allHairdressers, form]);
+  }, [generateAndFilterSlots]);
 
 
   const handleClientSelect = (client: Client) => {
@@ -594,5 +601,3 @@ export function BookingForm({
     </Card>
   );
 }
-
-    

@@ -42,6 +42,7 @@ const dailyWorkingHoursSchema = z.object({
     path: ["end"],
 });
 
+const daysOfWeek: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
@@ -51,7 +52,13 @@ const hairdresserFormSchema = z.object({
   specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
   availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
-  workingHours: z.record(z.nativeEnum(DayOfWeek), dailyWorkingHoursSchema).optional() as z.ZodType<HairdresserWorkingHours | undefined>,
+  workingHours: z.object(
+      daysOfWeek.reduce((acc, day) => {
+        acc[day] = dailyWorkingHoursSchema;
+        return acc;
+      }, {} as Record<DayOfWeek, typeof dailyWorkingHoursSchema>)
+    )
+    .optional(),
 });
 
 export type HairdresserFormValues = z.infer<typeof hairdresserFormSchema>;
@@ -63,8 +70,6 @@ interface HairdresserFormProps {
   isEditing?: boolean;
   isLoading?: boolean;
 }
-
-const daysOfWeek: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const defaultWorkingHours = daysOfWeek.reduce((acc, day) => {
   acc[day] = { start: day === "Saturday" || day === "Sunday" ? "" : "09:00", end: day === "Saturday" || day === "Sunday" ? "" : "17:00", isOff: day === "Saturday" || day === "Sunday" };
@@ -81,7 +86,7 @@ export function HairdresserForm({
 }: HairdresserFormProps) {
   
   const getInitialFormValues = React.useCallback(() => {
-    const baseValues = {
+    const baseValues: HairdresserFormValues = {
       name: "",
       email: "",
       initialPassword: "",
@@ -89,19 +94,29 @@ export function HairdresserForm({
       specialties: "",
       availability: "Mon-Fri 9am-5pm, Sat 10am-3pm",
       profilePictureUrl: "",
-      workingHours: JSON.parse(JSON.stringify(defaultWorkingHours)) // Deep copy
+      workingHours: JSON.parse(JSON.stringify(defaultWorkingHours))
     };
 
     if (isEditing && initialData) {
+      const currentWorkingHours = initialData.workingHours 
+        ? { ...defaultWorkingHours, ...initialData.workingHours } 
+        : JSON.parse(JSON.stringify(defaultWorkingHours));
+      
+      daysOfWeek.forEach(day => {
+        if (!currentWorkingHours[day]) {
+          currentWorkingHours[day] = defaultWorkingHours[day];
+        }
+      });
+
       return {
-        ...baseValues,
         name: initialData.name || "",
         email: initialData.email || "",
+        initialPassword: "",
         assigned_locations: initialData.assigned_locations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
         availability: initialData.availability || baseValues.availability,
         profilePictureUrl: initialData.profilePictureUrl || "",
-        workingHours: initialData.workingHours ? { ...defaultWorkingHours, ...initialData.workingHours } : baseValues.workingHours,
+        workingHours: currentWorkingHours,
       };
     }
     return baseValues;
@@ -117,16 +132,16 @@ export function HairdresserForm({
   }, [initialData, getInitialFormValues, form]);
 
   const handleSubmitInternal = async (data: HairdresserFormValues) => {
-    // Filter out days marked as 'isOff' or with empty start/end times from workingHours
     const processedWorkingHours: HairdresserWorkingHours = {};
     if (data.workingHours) {
-      for (const day in data.workingHours) {
-        const dayKey = day as DayOfWeek;
-        const hours = data.workingHours[dayKey];
-        if (hours && !hours.isOff && hours.start && hours.end) {
-          processedWorkingHours[dayKey] = { start: hours.start, end: hours.end, isOff: false };
-        } else if (hours && hours.isOff) {
-          processedWorkingHours[dayKey] = { start: "", end: "", isOff: true };
+      for (const day of daysOfWeek) {
+        const hours = data.workingHours[day];
+        if (hours) {
+          if (!hours.isOff && hours.start && hours.end) {
+            processedWorkingHours[day] = { start: hours.start, end: hours.end, isOff: false };
+          } else {
+            processedWorkingHours[day] = { start: "", end: "", isOff: true };
+          }
         }
       }
     }
@@ -254,6 +269,12 @@ export function HairdresserForm({
                                     if (checked) { // If marked as off, clear times
                                       form.setValue(`workingHours.${day}.start`, "");
                                       form.setValue(`workingHours.${day}.end`, "");
+                                    } else {
+                                        const defaultDaySetting = defaultWorkingHours[day];
+                                        if (defaultDaySetting && !defaultDaySetting.isOff) {
+                                            form.setValue(`workingHours.${day}.start`, defaultDaySetting.start);
+                                            form.setValue(`workingHours.${day}.end`, defaultDaySetting.end);
+                                        }
                                     }
                                   }}
                                 />
@@ -291,7 +312,9 @@ export function HairdresserForm({
                         />
                          {form.formState.errors.workingHours?.[day] && (
                             <FormMessage className="text-xs md:col-span-3">
-                                {form.formState.errors.workingHours?.[day]?.root?.message || form.formState.errors.workingHours?.[day]?.start?.message || form.formState.errors.workingHours?.[day]?.end?.message}
+                                {(form.formState.errors.workingHours?.[day] as any)?.root?.message || 
+                                 (form.formState.errors.workingHours?.[day] as any)?.start?.message || 
+                                 (form.formState.errors.workingHours?.[day] as any)?.end?.message}
                             </FormMessage>
                         )}
                       </div>
