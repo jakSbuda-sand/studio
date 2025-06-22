@@ -70,7 +70,6 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
   const q = query(
     bookingsRef,
     where("hairdresserId", "==", data.hairdresserId),
-    where("status", "in", ["Confirmed", "Pending"]),
     where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
     where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
     orderBy("appointmentDateTime") 
@@ -80,6 +79,9 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     const querySnapshot = await getDocs(q);
     for (const docSnap of querySnapshot.docs) {
       const existingBookingData = docSnap.data() as BookingDoc;
+      // Skip check for cancelled bookings
+      if (existingBookingData.status === 'Cancelled') continue;
+
       let existingAppointmentStart: Date;
       if (existingBookingData.appointmentDateTime instanceof Timestamp) {
         existingAppointmentStart = existingBookingData.appointmentDateTime.toDate();
