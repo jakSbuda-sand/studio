@@ -151,7 +151,6 @@ export function BookingForm({
     const q = query(
         bookingsRef,
         where("hairdresserId", "==", selectedHairdresserId),
-        where("status", "in", ["Confirmed", "Pending"]),
         where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
         where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
         orderBy("appointmentDateTime")
