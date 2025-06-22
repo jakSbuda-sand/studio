@@ -160,11 +160,23 @@ export function BookingForm({
         const querySnapshot = await getDocs(q);
         const existingBookings = querySnapshot.docs.map(docSnap => {
             const data = docSnap.data() as BookingDoc;
+            
+            if (data.status === 'Cancelled') return null;
+
+            let appointmentDateTime: Date;
+            if (data.appointmentDateTime instanceof Timestamp) {
+                appointmentDateTime = data.appointmentDateTime.toDate();
+            } else if (typeof data.appointmentDateTime === 'string') {
+                appointmentDateTime = new Date(data.appointmentDateTime);
+            } else {
+                appointmentDateTime = new Date(data.appointmentDateTime);
+            }
+
             return {
-                start: data.appointmentDateTime.toDate(),
-                end: addMinutes(data.appointmentDateTime.toDate(), data.durationMinutes)
+                start: appointmentDateTime,
+                end: addMinutes(appointmentDateTime, data.durationMinutes)
             };
-        });
+        }).filter(Boolean) as {start: Date, end: Date}[];
         
         const availableSlots = potentialSlots.filter(slotStart => {
             const slotEnd = addMinutes(slotStart, duration);
