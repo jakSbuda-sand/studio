@@ -26,7 +26,7 @@ import { format, isSameDay, startOfDay, endOfDay, parse, addMinutes } from "date
 import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where, Timestamp, limit } from "@/lib/firebase";
+import { db, collection, getDocs, query, where, Timestamp, limit, orderBy } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
 
@@ -151,9 +151,9 @@ export function BookingForm({
     const q = query(
         bookingsRef,
         where("hairdresserId", "==", selectedHairdresserId),
-        where("status", "in", ["Confirmed", "Pending"]),
         where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
-        where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd))
+        where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
+        orderBy("appointmentDateTime")
     );
 
     try {
