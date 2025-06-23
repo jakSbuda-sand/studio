@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, CheckCircle } from "lucide-react";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3 } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -18,10 +18,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { format, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, Query, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
+import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 
 const getStatusColor = (status: Booking['status']): string => {
   switch (status) {
@@ -47,6 +49,9 @@ export default function CalendarPage() {
   const [filterSalonId, setFilterSalonId] = useState<string>("all");
   const [filterHairdresserId, setFilterHairdresserId] = useState<string>("all");
   
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
   useEffect(() => {
@@ -70,6 +75,7 @@ export default function CalendarPage() {
             id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
             assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
             availability: data.availability || "", working_days: data.working_days || [],
+            workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Hairdresser;
@@ -99,7 +105,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (services.length === 0) return;
+    if (salons.length === 0 || hairdressers.length === 0 || services.length === 0) return;
 
     const fetchBookings = async () => {
       setIsLoading(true);
@@ -146,7 +152,7 @@ export default function CalendarPage() {
     };
 
     fetchBookings();
-  }, [user, filterSalonId, filterHairdresserId, services]);
+  }, [user, filterSalonId, filterHairdresserId, services, salons, hairdressers]);
   
   const handleStatusUpdate = async (bookingId: string, newStatus: Booking['status']) => {
     setIsSubmitting(true);
@@ -164,6 +170,87 @@ export default function CalendarPage() {
     }
   };
   
+  const handleUpdateBooking = async (data: BookingFormValues) => {
+    if (!editingBooking) return;
+    setIsSubmitting(true);
+    try {
+       const newAppointmentStart = data.appointmentDateTime;
+        const bookingsRef = collection(db, "bookings");
+        const q = query(
+            bookingsRef,
+            where("hairdresserId", "==", data.hairdresserId)
+        );
+        const querySnapshot = await getDocs(q);
+
+        for (const docSnap of querySnapshot.docs) {
+            if (docSnap.id === editingBooking.id) continue;
+
+            const existingBookingData = docSnap.data() as BookingDoc;
+            if (existingBookingData.status === 'Cancelled') continue;
+
+            let existingAppointmentStart: Date;
+            const rawDate = existingBookingData.appointmentDateTime;
+
+            if (rawDate && typeof (rawDate as any).toDate === 'function') {
+                existingAppointmentStart = (rawDate as Timestamp).toDate();
+            } else if (rawDate) {
+                existingAppointmentStart = new Date(rawDate.toString());
+            } else {
+                continue;
+            }
+
+            if (isSameDay(existingAppointmentStart, newAppointmentStart)) {
+                if (existingBookingData.salonId !== data.salonId) {
+                    const errorMessage = `This hairdresser is already booked at a different location on this day. They cannot be scheduled at two locations on the same day.`;
+                    toast({ title: "Scheduling Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
+                    throw new Error(errorMessage);
+                }
+            }
+        }
+
+      const bookingRef = doc(db, "bookings", editingBooking.id);
+      const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
+
+      const updateData: Partial<BookingDoc> = {
+        clientName: data.clientName, clientEmail: data.clientEmail || "", clientPhone: data.clientPhone,
+        salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+        appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
+        status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
+      };
+
+      await updateDoc(bookingRef, updateData as { [x: string]: any });
+
+      const serviceDetails = services.find(s => s.id === data.serviceId);
+      const updatedBookingForState: Booking = {
+        ...editingBooking,
+        ...data,
+        appointmentDateTime: data.appointmentDateTime,
+        serviceName: serviceDetails?.name || "Service Not Found",
+        color: getStatusColor(data.status),
+        updatedAt: Timestamp.now(), 
+      };
+
+      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
+      setIsFormOpen(false);
+      setEditingBooking(null);
+    } catch (error: any) {
+        if (error instanceof Error && error.message.includes("different location")) {
+            // Toast already shown, do nothing.
+        } else {
+           console.error("Error updating booking:", error);
+           toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
+        }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openEditForm = (booking: Booking) => {
+    setEditingBooking(booking);
+    setIsFormOpen(true);
+  };
+
   const filteredBookingsByDate = bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true);
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
@@ -193,6 +280,21 @@ export default function CalendarPage() {
         description="Visualize and manage appointments."
         icon={CalendarDays}
       />
+      
+      <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
+        <DialogContent className="sm:max-w-2xl font-body max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-headline text-2xl">Edit Booking</DialogTitle></DialogHeader>
+          {editingBooking && (
+            <BookingForm 
+              initialData={editingBooking} 
+              salons={salons} 
+              allHairdressers={hairdressers}
+              onSubmit={handleUpdateBooking}
+              isSubmitting={isSubmitting}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1 shadow-lg rounded-lg">
@@ -271,7 +373,9 @@ export default function CalendarPage() {
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
                        <div className="mt-3 flex justify-end items-center gap-2">
-                          <Button variant="link" size="sm" asChild className="text-primary font-body"><Link href={`/bookings?edit=${booking.id}`}>View/Edit Booking</Link></Button>
+                          <Button variant="outline" size="sm" onClick={() => openEditForm(booking)} className="font-body" disabled={isSubmitting}>
+                            <Edit3 className="mr-2 h-4 w-4"/>Edit
+                          </Button>
                        </div>
                     </li>
                   ))}
@@ -289,3 +393,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+    

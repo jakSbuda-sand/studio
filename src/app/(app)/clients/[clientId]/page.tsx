@@ -11,13 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service } from "@/lib/types";
+import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues } from "@/lib/types";
 import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import Link from "next/link";
+import { format, isSameDay } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import BookingForm from "@/components/forms/BookingForm";
+
 
 export default function ClientDetailPage() {
   const { user } = useAuth();
@@ -34,6 +36,10 @@ export default function ClientDetailPage() {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [clientNotes, setClientNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
 
 
   useEffect(() => {
@@ -68,7 +74,24 @@ export default function ClientDetailPage() {
         setSalons(locationsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Salon)));
         
         const hairdressersSnap = await getDocs(collection(db, "hairdressers"));
-        setHairdressers(hairdressersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hairdresser)));
+        setHairdressers(hairdressersSnap.docs.map(hDoc => {
+          const data = hDoc.data() as any; // Firestore data
+          return {
+              id: hDoc.id,
+              userId: data.user_id,
+              name: data.name,
+              email: data.email,
+              assigned_locations: data.assigned_locations || [],
+              specialties: data.specialties || [],
+              availability: data.availability || "",
+              working_days: data.working_days || [],
+              workingHours: data.workingHours || {},
+              profilePictureUrl: data.profilePictureUrl || "",
+              must_reset_password: data.must_reset_password || false,
+              createdAt: data.createdAt,
+              updatedAt: data.updatedAt
+          } as Hairdresser;
+      }));
 
         const servicesSnap = await getDocs(collection(db, "services"));
         const servicesList = servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
@@ -124,6 +147,82 @@ export default function ClientDetailPage() {
     } finally {
       setIsSavingNotes(false);
     }
+  };
+
+  const handleUpdateBooking = async (data: BookingFormValues) => {
+    if (!editingBooking) return;
+    setIsSubmittingBooking(true);
+    try {
+      const newAppointmentStart = data.appointmentDateTime;
+      const bookingsRef = collection(db, "bookings");
+      const q = query(
+          bookingsRef,
+          where("hairdresserId", "==", data.hairdresserId)
+      );
+      const querySnapshot = await getDocs(q);
+
+      for (const docSnap of querySnapshot.docs) {
+          if (docSnap.id === editingBooking.id) continue;
+          const existingBookingData = docSnap.data() as BookingDoc;
+          if (existingBookingData.status === 'Cancelled') continue;
+          let existingAppointmentStart: Date;
+          const rawDate = existingBookingData.appointmentDateTime;
+
+          if (rawDate && typeof (rawDate as any).toDate === 'function') {
+              existingAppointmentStart = (rawDate as Timestamp).toDate();
+          } else if (rawDate) {
+              existingAppointmentStart = new Date(rawDate.toString());
+          } else {
+              continue;
+          }
+
+          if (isSameDay(existingAppointmentStart, newAppointmentStart)) {
+              if (existingBookingData.salonId !== data.salonId) {
+                  const errorMessage = `This hairdresser is already booked at a different location on this day.`;
+                  toast({ title: "Scheduling Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
+                  throw new Error(errorMessage);
+              }
+          }
+      }
+
+      const bookingRef = doc(db, "bookings", editingBooking.id);
+      const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
+
+      const updateData: Partial<BookingDoc> = {
+        clientName: data.clientName, clientEmail: data.clientEmail || "", clientPhone: data.clientPhone,
+        salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+        appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
+        status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
+      };
+
+      await updateDoc(bookingRef, updateData as { [x: string]: any });
+
+      const serviceDetails = services.find(s => s.id === data.serviceId);
+      const updatedBookingForState: Booking = {
+        ...editingBooking,
+        ...data,
+        appointmentDateTime: data.appointmentDateTime,
+        serviceName: serviceDetails?.name || "Service Not Found",
+        updatedAt: Timestamp.now(), 
+      };
+
+      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime()));
+      toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
+      setIsBookingFormOpen(false);
+      setEditingBooking(null);
+    } catch (error: any) {
+        if (!(error instanceof Error && error.message.includes("different location"))) {
+           console.error("Error updating booking:", error);
+           toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
+        }
+    } finally {
+      setIsSubmittingBooking(false);
+    }
+  };
+  
+  const openEditForm = (booking: Booking) => {
+    setEditingBooking(booking);
+    setIsBookingFormOpen(true);
   };
 
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
@@ -193,6 +292,21 @@ export default function ClientDetailPage() {
             </Button>
         }
       />
+
+      <Dialog open={isBookingFormOpen} onOpenChange={(isOpen) => { setIsBookingFormOpen(isOpen); if (!isOpen) setEditingBooking(null); }}>
+          <DialogContent className="sm:max-w-2xl font-body max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-headline text-2xl">Edit Booking</DialogTitle></DialogHeader>
+          {editingBooking && (
+              <BookingForm
+              initialData={editingBooking}
+              salons={salons}
+              allHairdressers={hairdressers}
+              onSubmit={handleUpdateBooking}
+              isSubmitting={isSubmittingBooking}
+              />
+          )}
+          </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
@@ -288,8 +402,8 @@ export default function ClientDetailPage() {
                             <TableCell>{getSalonName(booking.salonId)}</TableCell>
                             <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
                             <TableCell className="text-right">
-                            <Button variant="link" size="sm" asChild className="text-primary">
-                                <Link href={`/bookings?edit=${booking.id}`}>View</Link>
+                            <Button variant="outline" size="sm" onClick={() => openEditForm(booking)}>
+                                <Edit3 className="mr-2 h-4 w-4" />Edit
                             </Button>
                             </TableCell>
                         </TableRow>
@@ -304,3 +418,5 @@ export default function ClientDetailPage() {
     </div>
   );
 }
+
+    
