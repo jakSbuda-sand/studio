@@ -145,19 +145,21 @@ export function BookingForm({
         currentTime = addMinutes(currentTime, 30);
     }
 
-    const dayStart = startOfDay(selectedDate);
-    const dayEnd = endOfDay(selectedDate);
+    // Simplified query to avoid complex indexes. Fetch all bookings for the hairdresser.
     const bookingsRef = collection(db, "bookings");
     const q = query(
         bookingsRef,
         where("hairdresserId", "==", selectedHairdresserId),
-        where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
-        where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
         orderBy("appointmentDateTime")
     );
 
     try {
         const querySnapshot = await getDocs(q);
+
+        // Filter bookings for the selected date on the client side.
+        const dayStart = startOfDay(selectedDate);
+        const dayEnd = endOfDay(selectedDate);
+
         const existingBookings = querySnapshot.docs.map(docSnap => {
             const data = docSnap.data() as BookingDoc;
             if (data.status === 'Cancelled') return null;
@@ -176,6 +178,11 @@ export function BookingForm({
             
             if (isNaN(appointmentDateTime.getTime())) {
                 console.warn("Invalid date found for booking:", docSnap.id, "from raw value:", rawDate);
+                return null;
+            }
+
+            // Client-side date check
+            if (appointmentDateTime < dayStart || appointmentDateTime > dayEnd) {
                 return null;
             }
 
