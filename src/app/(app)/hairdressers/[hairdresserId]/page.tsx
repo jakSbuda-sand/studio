@@ -90,7 +90,7 @@ export default function HairdresserDetailPage() {
         const bookingsQuery = query(
           collection(db, "bookings"), 
           where("hairdresserId", "==", hairdresserId),
-          orderBy("appointmentDateTime", "asc") // Use ascending order to match index
+          orderBy("appointmentDateTime", "desc")
         );
         const bookingSnapshot = await getDocs(bookingsQuery);
         
@@ -103,7 +103,7 @@ export default function HairdresserDetailPage() {
             appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
             serviceName: serviceDetails?.name || "N/A",
           } as Booking;
-        }).reverse(); // Reverse the array to show newest bookings first
+        });
         setBookings(hairdresserBookings);
 
       } catch (error: any) {
