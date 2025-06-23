@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -146,22 +145,32 @@ export function BookingForm({
         currentTime = addMinutes(currentTime, 30);
     }
 
-    // Simplified query to avoid complex indexes. Fetch all bookings for the hairdresser.
     const bookingsRef = collection(db, "bookings");
+    // SIMPLIFIED QUERY: Remove orderBy to prevent failures on mixed data types.
+    // Sorting will be handled on the client.
     const q = query(
         bookingsRef,
-        where("hairdresserId", "==", selectedHairdresserId),
-        orderBy("appointmentDateTime")
+        where("hairdresserId", "==", selectedHairdresserId)
     );
 
     try {
         const querySnapshot = await getDocs(q);
 
+        // ROBUST SORTING: Sort documents on the client to handle potential data inconsistencies.
+        const sortedDocs = querySnapshot.docs.sort((a, b) => {
+            const dateA = a.data().appointmentDateTime;
+            const dateB = b.data().appointmentDateTime;
+            // Handle both Timestamp and string dates gracefully
+            const timeA = dateA?.toDate ? dateA.toDate().getTime() : new Date(dateA).getTime() || 0;
+            const timeB = dateB?.toDate ? dateB.toDate().getTime() : new Date(dateB).getTime() || 0;
+            return timeA - timeB;
+        });
+
         // Filter bookings for the selected date on the client side.
         const dayStart = startOfDay(selectedDate);
         const dayEnd = endOfDay(selectedDate);
 
-        const existingBookings = querySnapshot.docs.map(docSnap => {
+        const existingBookings = sortedDocs.map(docSnap => {
             const data = docSnap.data() as BookingDoc;
             if (data.status === 'Cancelled') return null;
 

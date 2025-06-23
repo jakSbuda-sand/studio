@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
 import { increment } from "firebase/firestore"; // Import increment directly
-import { format, addMinutes } from 'date-fns';
+import { format, addMinutes, isSameDay, startOfDay, endOfDay } from 'date-fns';
 
 async function createOrUpdateClient(
   clientData: Pick<BookingFormValues, 'clientName' | 'clientPhone' | 'clientEmail'>
@@ -61,22 +61,18 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
 
   const newAppointmentStart = data.appointmentDateTime; 
   const newAppointmentEnd = addMinutes(newAppointmentStart, data.durationMinutes);
-  const dayStart = new Date(newAppointmentStart);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(newAppointmentStart);
-  dayEnd.setHours(23, 59, 59, 999);
 
   const bookingsRef = collection(db, "bookings");
+  // SIMPLER QUERY: Only filter by hairdresser to avoid complex index/data type issues on date field.
   const q = query(
     bookingsRef,
-    where("hairdresserId", "==", data.hairdresserId),
-    where("appointmentDateTime", ">=", Timestamp.fromDate(dayStart)),
-    where("appointmentDateTime", "<=", Timestamp.fromDate(dayEnd)),
-    orderBy("appointmentDateTime") 
+    where("hairdresserId", "==", data.hairdresserId)
   );
 
   try {
     const querySnapshot = await getDocs(q);
+    
+    // Perform date and conflict checks on the client side for robustness
     for (const docSnap of querySnapshot.docs) {
       const existingBookingData = docSnap.data() as BookingDoc;
       if (existingBookingData.status === 'Cancelled') continue;
@@ -87,14 +83,15 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       if (rawDate && typeof (rawDate as any).toDate === 'function') {
         existingAppointmentStart = (rawDate as Timestamp).toDate();
       } else if (rawDate) {
+        // Handle string or other formats
         existingAppointmentStart = new Date(rawDate.toString());
       } else {
         console.warn("Booking has no appointmentDateTime during final validation:", docSnap.id);
         continue;
       }
-
-      if (isNaN(existingAppointmentStart.getTime())) {
-          console.warn("Invalid date found for booking during final validation:", docSnap.id, "from raw value:", rawDate);
+      
+      // Check if the date is valid and on the same day as the new booking
+      if (isNaN(existingAppointmentStart.getTime()) || !isSameDay(existingAppointmentStart, newAppointmentStart)) {
           continue;
       }
 
