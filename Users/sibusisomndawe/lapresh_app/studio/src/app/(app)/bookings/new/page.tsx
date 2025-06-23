@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
+import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Salon, Hairdresser, User, BookingDoc, LocationDoc, HairdresserDoc, ClientDoc } from "@/lib/types";
 import { PlusCircle, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
 import { increment } from "firebase/firestore"; // Import increment directly
-import { format, addMinutes, isSameDay, startOfDay, endOfDay } from 'date-fns';
+import { format, addMinutes, isSameDay } from 'date-fns';
 
 async function createOrUpdateClient(
   clientData: Pick<BookingFormValues, 'clientName' | 'clientPhone' | 'clientEmail'>

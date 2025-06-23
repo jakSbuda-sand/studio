@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,7 +54,7 @@ interface BookingFormProps {
   isSubmitting?: boolean;
 }
 
-export function BookingForm({
+export default function BookingForm({
   initialData,
   initialDataPreselected,
   salons,
@@ -146,8 +145,7 @@ export function BookingForm({
     }
 
     const bookingsRef = collection(db, "bookings");
-    // SIMPLIFIED QUERY: Remove orderBy to prevent failures on mixed data types.
-    // Sorting will be handled on the client.
+    // ROBUST QUERY: Fetch all for the hairdresser and sort/filter client-side
     const q = query(
         bookingsRef,
         where("hairdresserId", "==", selectedHairdresserId)
@@ -156,19 +154,13 @@ export function BookingForm({
     try {
         const querySnapshot = await getDocs(q);
 
-        // ROBUST SORTING: Sort documents on the client to handle potential data inconsistencies.
         const sortedDocs = querySnapshot.docs.sort((a, b) => {
             const dateA = a.data().appointmentDateTime;
             const dateB = b.data().appointmentDateTime;
-            // Handle both Timestamp and string dates gracefully
             const timeA = dateA?.toDate ? dateA.toDate().getTime() : new Date(dateA).getTime() || 0;
             const timeB = dateB?.toDate ? dateB.toDate().getTime() : new Date(dateB).getTime() || 0;
             return timeA - timeB;
         });
-
-        // Filter bookings for the selected date on the client side.
-        const dayStart = startOfDay(selectedDate);
-        const dayEnd = endOfDay(selectedDate);
 
         const existingBookings = sortedDocs.map(docSnap => {
             const data = docSnap.data() as BookingDoc;
@@ -192,7 +184,7 @@ export function BookingForm({
             }
 
             // Client-side date check
-            if (appointmentDateTime < dayStart || appointmentDateTime > dayEnd) {
+            if (!isSameDay(appointmentDateTime, selectedDate)) {
                 return null;
             }
 

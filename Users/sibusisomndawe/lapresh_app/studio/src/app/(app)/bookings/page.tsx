@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -7,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
+import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
 import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle, MoreHorizontal } from "lucide-react";
 import {
