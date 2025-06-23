@@ -5,10 +5,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import type { User, Booking, Service, Client, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
+import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
 import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns";
@@ -42,7 +42,8 @@ interface DashboardStats {
   newClientsToday: number;
   weeklyChartData: any[];
   popularServices: { name: string; count: number }[];
-  upcomingBookings?: number; // Added for hairdresser
+  topHairdressers: { name: string; count: number }[];
+  upcomingBookings?: number;
 }
 
 const chartConfig = {
@@ -76,6 +77,7 @@ export default function DashboardPage() {
         // --- Base Queries ---
         const servicesQuery = query(collection(db, "services"));
         const locationsQuery = query(collection(db, "locations"), orderBy("name"));
+        const hairdressersQuery = query(collection(db, "hairdressers"));
         
         let bookingsQuery;
         let clientsQuery = null;
@@ -84,7 +86,7 @@ export default function DashboardPage() {
             const baseBookingsQuery = query(
               collection(db, "bookings"),
               where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
-              orderBy("appointmentDateTime", "asc") // Changed to asc
+              orderBy("appointmentDateTime", "asc")
             );
 
             bookingsQuery = filterSalonId === 'all' 
@@ -93,28 +95,30 @@ export default function DashboardPage() {
                     collection(db, "bookings"), 
                     where("salonId", "==", filterSalonId),
                     where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
-                    orderBy("appointmentDateTime", "asc") // Changed to asc
+                    orderBy("appointmentDateTime", "asc")
                   );
             
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart)));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "asc")); // Changed to asc
+           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "asc"));
         } else {
-            setStats({ bookingsToday: 0, revenueToday: 0, newClientsToday: 0, weeklyChartData: [], popularServices: [] });
+            setStats({ bookingsToday: 0, revenueToday: 0, newClientsToday: 0, weeklyChartData: [], popularServices: [], topHairdressers: [] });
             setIsLoading(false);
             return;
         }
 
         // --- Fetch Data ---
-        const [bookingSnapshot, serviceSnapshot, newClientSnapshot, locationSnapshot] = await Promise.all([
+        const [bookingSnapshot, serviceSnapshot, newClientSnapshot, locationSnapshot, hairdresserSnapshot] = await Promise.all([
           getDocs(bookingsQuery),
           getDocs(servicesQuery),
           clientsQuery ? getDocs(clientsQuery) : Promise.resolve(null),
           getDocs(locationsQuery),
+          getDocs(hairdressersQuery),
         ]);
 
         // --- Process Data ---
         const servicesMap = new Map<string, Service>(serviceSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as Service]));
+        const hairdressersMap = new Map<string, Hairdresser>(hairdresserSnapshot.docs.map(doc => [doc.id, {id: doc.id, ...doc.data()} as Hairdresser]));
         setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
 
         const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
@@ -126,7 +130,7 @@ export default function DashboardPage() {
                 appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
                 price: service?.price || 0
             } as Booking;
-        }).reverse(); // Reverse the array here to get descending order
+        }).reverse();
 
         // --- Calculate Stats ---
         const bookingsToday = allBookings.filter(b => isSameDay(b.appointmentDateTime, today)).length;
@@ -135,6 +139,7 @@ export default function DashboardPage() {
         let newClientsToday = 0;
         let weeklyChartData: any[] = [];
         let popularServices: { name: string; count: number }[] = [];
+        let topHairdressers: { name: string; count: number }[] = [];
         let upcomingBookings = 0;
 
         if (user.role === 'admin') {
@@ -164,6 +169,20 @@ export default function DashboardPage() {
                 }))
                 .sort((a, b) => b.count - a.count)
                 .slice(0, 5);
+
+            const hairdresserCounts = new Map<string, number>();
+            allBookings.filter(b => b.status === 'Completed').forEach(b => {
+                hairdresserCounts.set(b.hairdresserId, (hairdresserCounts.get(b.hairdresserId) || 0) + 1);
+            });
+
+            topHairdressers = Array.from(hairdresserCounts.entries())
+                .map(([hairdresserId, count]) => ({
+                    name: hairdressersMap.get(hairdresserId)?.name || 'Unknown Hairdresser',
+                    count
+                }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 5);
+
         } else if (user.role === 'hairdresser') {
             upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime >= today).length;
         }
@@ -174,6 +193,7 @@ export default function DashboardPage() {
           newClientsToday,
           weeklyChartData,
           popularServices,
+          topHairdressers,
           upcomingBookings
         });
 
@@ -243,27 +263,30 @@ export default function DashboardPage() {
             <StatCard title="New Clients Today" value={stats?.newClientsToday ?? 0} icon={Users} description="Across all locations" isLoading={isLoading} />
         </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <Card className="shadow-lg rounded-lg lg:col-span-3">
-                <CardHeader>
-                    <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><BarChartIcon className="h-5 w-5 text-primary"/>Bookings This Week</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Overview for {selectedSalonName}.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
-                    <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                        <BarChart data={stats?.weeklyChartData} margin={{ top: 20, right: 20, bottom: 5, left: -10 }}>
-                            <CartesianGrid vertical={false} />
-                            <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
-                            <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
-                            <ChartTooltip content={<ChartTooltipContent />} />
-                            <Bar dataKey="bookings" fill="var(--color-bookings)" radius={4} />
-                        </BarChart>
-                    </ChartContainer>
-                    )}
-                </CardContent>
-            </Card>
-            <Card className="shadow-lg rounded-lg lg:col-span-2">
+        <section className="grid grid-cols-1 gap-6">
+          <Card className="shadow-lg rounded-lg">
+              <CardHeader>
+                  <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><BarChartIcon className="h-5 w-5 text-primary"/>Bookings This Week</CardTitle>
+                  <CardDescription className="font-body text-muted-foreground">Overview for {selectedSalonName}.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                  {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                  <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                      <BarChart data={stats?.weeklyChartData} margin={{ top: 20, right: 20, bottom: 5, left: -10 }}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
+                          <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                          <Bar dataKey="bookings" fill="var(--color-bookings)" radius={4} />
+                      </BarChart>
+                  </ChartContainer>
+                  )}
+              </CardContent>
+          </Card>
+        </section>
+        
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary"/>Popular Services</CardTitle>
                     <CardDescription className="font-body text-muted-foreground">Top services for {selectedSalonName}.</CardDescription>
@@ -279,6 +302,28 @@ export default function DashboardPage() {
                                     <span className="font-body text-foreground">{service.name}</span>
                                 </div>
                                 <span className="font-bold font-headline text-primary">{service.count}</span>
+                            </li>
+                        )) : <p className="text-center text-muted-foreground font-body py-10">No completed bookings data yet.</p>}
+                    </ul>
+                    )}
+                </CardContent>
+            </Card>
+             <Card className="shadow-lg rounded-lg">
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><Award className="h-5 w-5 text-primary"/>Top Hairdressers</CardTitle>
+                    <CardDescription className="font-body text-muted-foreground">Based on completed bookings for {selectedSalonName}.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                    <ul className="space-y-4">
+                        {stats?.topHairdressers && stats.topHairdressers.length > 0 ? stats.topHairdressers.map((dresser, index) => (
+                            <li key={dresser.name} className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    {index === 0 && <Crown className="h-5 w-5 text-yellow-500"/>}
+                                    {index > 0 && <span className="font-headline text-lg text-muted-foreground w-5 text-center">{index + 1}</span>}
+                                    <span className="font-body text-foreground">{dresser.name}</span>
+                                </div>
+                                <span className="font-bold font-headline text-primary">{dresser.count}</span>
                             </li>
                         )) : <p className="text-center text-muted-foreground font-body py-10">No completed bookings data yet.</p>}
                     </ul>
