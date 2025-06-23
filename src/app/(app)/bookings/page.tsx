@@ -1,3 +1,4 @@
+
 "use client";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -17,7 +18,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -146,6 +147,40 @@ export default function BookingsPage() {
     if (!editingBooking) return;
     setIsSubmitting(true);
     try {
+       const newAppointmentStart = data.appointmentDateTime;
+        const bookingsRef = collection(db, "bookings");
+        const q = query(
+            bookingsRef,
+            where("hairdresserId", "==", data.hairdresserId)
+        );
+        const querySnapshot = await getDocs(q);
+
+        for (const docSnap of querySnapshot.docs) {
+            if (docSnap.id === editingBooking.id) continue;
+
+            const existingBookingData = docSnap.data() as BookingDoc;
+            if (existingBookingData.status === 'Cancelled') continue;
+
+            let existingAppointmentStart: Date;
+            const rawDate = existingBookingData.appointmentDateTime;
+
+            if (rawDate && typeof (rawDate as any).toDate === 'function') {
+                existingAppointmentStart = (rawDate as Timestamp).toDate();
+            } else if (rawDate) {
+                existingAppointmentStart = new Date(rawDate.toString());
+            } else {
+                continue;
+            }
+
+            if (isSameDay(existingAppointmentStart, newAppointmentStart)) {
+                if (existingBookingData.salonId !== data.salonId) {
+                    const errorMessage = `This hairdresser is already booked at a different location on this day. They cannot be scheduled at two locations on the same day.`;
+                    toast({ title: "Scheduling Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
+                    throw new Error(errorMessage);
+                }
+            }
+        }
+
       const bookingRef = doc(db, "bookings", editingBooking.id);
       const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
 
@@ -172,8 +207,12 @@ export default function BookingsPage() {
       setIsFormOpen(false);
       setEditingBooking(null);
     } catch (error: any) {
-      console.error("Error updating booking:", error);
-      toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
+        if (error instanceof Error && error.message.includes("different location")) {
+            // Toast already shown, do nothing.
+        } else {
+           console.error("Error updating booking:", error);
+           toast({ title: "Update Failed", description: `Could not update booking: ${error.message}`, variant: "destructive" });
+        }
     } finally {
       setIsSubmitting(false);
     }

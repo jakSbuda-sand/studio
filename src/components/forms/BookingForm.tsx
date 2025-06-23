@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -110,7 +111,7 @@ export default function BookingForm({
   const { setValue } = form;
 
   const generateAndFilterSlots = useCallback(async () => {
-    if (!selectedHairdresserId || !selectedDate || !duration) {
+    if (!selectedHairdresserId || !selectedDate || !duration || !selectedSalonId) {
         setTimeSlots([]);
         return;
     }
@@ -145,7 +146,6 @@ export default function BookingForm({
     }
 
     const bookingsRef = collection(db, "bookings");
-    // ROBUST QUERY: Fetch all for the hairdresser and sort/filter client-side
     const q = query(
         bookingsRef,
         where("hairdresserId", "==", selectedHairdresserId)
@@ -154,15 +154,8 @@ export default function BookingForm({
     try {
         const querySnapshot = await getDocs(q);
 
-        const sortedDocs = querySnapshot.docs.sort((a, b) => {
-            const dateA = a.data().appointmentDateTime;
-            const dateB = b.data().appointmentDateTime;
-            const timeA = dateA?.toDate ? dateA.toDate().getTime() : new Date(dateA).getTime() || 0;
-            const timeB = dateB?.toDate ? dateB.toDate().getTime() : new Date(dateB).getTime() || 0;
-            return timeA - timeB;
-        });
-
-        const existingBookings = sortedDocs.map(docSnap => {
+        const bookingsOnSelectedDay = querySnapshot.docs
+          .map(docSnap => {
             const data = docSnap.data() as BookingDoc;
             if (data.status === 'Cancelled') return null;
 
@@ -178,21 +171,32 @@ export default function BookingForm({
                 return null;
             }
             
-            if (isNaN(appointmentDateTime.getTime())) {
-                console.warn("Invalid date found for booking:", docSnap.id, "from raw value:", rawDate);
+            if (isNaN(appointmentDateTime.getTime()) || !isSameDay(appointmentDateTime, selectedDate)) {
                 return null;
             }
 
-            // Client-side date check
-            if (!isSameDay(appointmentDateTime, selectedDate)) {
-                return null;
-            }
+            return { ...data, id: docSnap.id, appointmentDateTime };
+          })
+          .filter((b): b is (BookingDoc & { id: string, appointmentDateTime: Date }) => b !== null);
+        
+        const otherSalonBooking = bookingsOnSelectedDay.find(b => b.salonId !== selectedSalonId);
+        if (otherSalonBooking) {
+            const otherSalon = salons.find(s => s.id === otherSalonBooking.salonId);
+            toast({
+                title: "Scheduling Conflict",
+                description: `This hairdresser is already booked at ${otherSalon?.name || 'another location'} on this day. Please select a different date.`,
+                variant: "destructive",
+                duration: 7000
+            });
+            setTimeSlots([]);
+            setIsLoadingTimes(false);
+            return;
+        }
 
-            return {
-                start: appointmentDateTime,
-                end: addMinutes(appointmentDateTime, data.durationMinutes)
-            };
-        }).filter(Boolean) as {start: Date, end: Date}[];
+        const existingBookings = bookingsOnSelectedDay.map(booking => ({
+            start: booking.appointmentDateTime,
+            end: addMinutes(booking.appointmentDateTime, booking.durationMinutes)
+        }));
         
         const availableSlots = potentialSlots.filter(slotStart => {
             const slotEnd = addMinutes(slotStart, duration);
@@ -212,7 +216,7 @@ export default function BookingForm({
     } finally {
         setIsLoadingTimes(false);
     }
-  }, [selectedHairdresserId, selectedDate, duration, allHairdressers, setValue]);
+  }, [selectedHairdresserId, selectedDate, duration, allHairdressers, setValue, selectedSalonId, salons]);
 
   useEffect(() => {
     generateAndFilterSlots();
@@ -259,7 +263,6 @@ export default function BookingForm({
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      // Ensure we don't re-trigger search if a client has just been selected
       const selectedClient = searchResults.find(r => r.name === clientNameValue);
       if(!selectedClient){
         fetchClientsByName(clientNameValue);
