@@ -1,260 +1,631 @@
-
 "use client";
 
-import { useState, useEffect } from "react";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { BookingForm, type BookingFormValues } from "@/components/forms/BookingForm";
-import type { Salon, Hairdresser, User, BookingDoc, LocationDoc, HairdresserDoc, ClientDoc } from "@/lib/types";
-import { PlusCircle, Loader2 } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-import { useRouter } from 'next/navigation';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Booking, Salon, Hairdresser, Service, ServiceDoc, Client, ClientDoc, DayOfWeek, BookingDoc } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { format, isSameDay, startOfDay, endOfDay, parse, addMinutes } from "date-fns";
+import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
-import { increment } from "firebase/firestore"; // Import increment directly
-import { format, addMinutes, isSameDay, startOfDay, endOfDay } from 'date-fns';
+import { db, collection, getDocs, query, where, Timestamp, limit, orderBy } from "@/lib/firebase";
+import { toast } from "@/hooks/use-toast";
 
-async function createOrUpdateClient(
-  clientData: Pick<BookingFormValues, 'clientName' | 'clientPhone' | 'clientEmail'>
-): Promise<string> {
-  const clientsRef = collection(db, "clients");
-  const q = query(clientsRef, where("phone", "==", clientData.clientPhone));
-  const querySnapshot = await getDocs(q);
 
-  if (querySnapshot.empty) {
-    // Client does not exist, create new one
-    const newClientDoc: Omit<ClientDoc, 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
-      name: clientData.clientName,
-      name_lowercase: clientData.clientName.toLowerCase(),
-      phone: clientData.clientPhone,
-      email: clientData.clientEmail || "",
-      notes: "",
-      firstSeen: serverTimestamp() as Timestamp,
-      lastSeen: serverTimestamp() as Timestamp,
-      totalBookings: 1,
-      createdAt: serverTimestamp() as Timestamp,
-      updatedAt: serverTimestamp() as Timestamp,
-    };
-    const docRef = await addDoc(clientsRef, newClientDoc);
-    return docRef.id;
-  } else {
-    // Client exists, update lastSeen and totalBookings
-    const existingClientDoc = querySnapshot.docs[0];
-    const clientRef = doc(db, "clients", existingClientDoc.id);
-    await updateDoc(clientRef, {
-      lastSeen: serverTimestamp() as Timestamp,
-      totalBookings: increment(1),
-      name: clientData.clientName, 
-      name_lowercase: clientData.clientName.toLowerCase(),
-      email: clientData.clientEmail || existingClientDoc.data().email,
-      updatedAt: serverTimestamp() as Timestamp,
-    });
-    return existingClientDoc.id;
-  }
+const bookingFormSchema = z.object({
+  clientName: z.string().min(2, "Client name is required."),
+  clientPhone: z.string().min(10, "A valid phone number is required.").max(15, "Phone number seems too long."),
+  clientEmail: z.string().email("Invalid email address.").optional().or(z.literal('')),
+  salonId: z.string({ required_error: "Please select a salon." }),
+  serviceId: z.string({ required_error: "Please select a service."}),
+  hairdresserId: z.string({ required_error: "Please select a hairdresser." }),
+  appointmentDateTime: z.date({ required_error: "Appointment date is required." }),
+  appointmentTime: z.string({ required_error: "Please select an available time." }).regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
+  durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
+  status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'], { required_error: "Booking status is required."}),
+  notes: z.string().optional(),
+});
+
+export type BookingFormValues = z.infer<typeof bookingFormSchema>;
+
+interface BookingFormProps {
+  initialData?: Booking | null;
+  initialDataPreselected?: Partial<BookingFormValues>;
+  salons: Salon[];
+  allHairdressers: Hairdresser[];
+  onSubmit: (data: BookingFormValues) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
-
-async function createBookingInFirestore(data: BookingFormValues, currentUser: User | null): Promise<string> {
-  if (!currentUser) {
-    toast({ title: "Authentication Error", description: "You must be logged in to create a booking.", variant: "destructive" });
-    throw new Error("User not authenticated.");
-  }
-
-  const newAppointmentStart = data.appointmentDateTime; 
-  const newAppointmentEnd = addMinutes(newAppointmentStart, data.durationMinutes);
-
-  const bookingsRef = collection(db, "bookings");
-  // SIMPLER QUERY: Only filter by hairdresser to avoid complex index/data type issues on date field.
-  const q = query(
-    bookingsRef,
-    where("hairdresserId", "==", data.hairdresserId)
+export default function BookingForm({
+  initialData,
+  initialDataPreselected,
+  salons,
+  allHairdressers,
+  onSubmit,
+  isSubmitting = false
+}: BookingFormProps) {
+  const { user } = useAuth();
+  const [selectedSalonId, setSelectedSalonId] = useState<string | undefined>(
+    initialData?.salonId || initialDataPreselected?.salonId
   );
+  const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
+  const [availableServices, setAvailableServices] = useState<Service[]>([]);
+  const [isFetchingServices, setIsFetchingServices] = useState(false);
 
-  try {
-    const querySnapshot = await getDocs(q);
-    
-    // Perform date and conflict checks on the client side for robustness
-    for (const docSnap of querySnapshot.docs) {
-      const existingBookingData = docSnap.data() as BookingDoc;
-      if (existingBookingData.status === 'Cancelled') continue;
+  const [searchResults, setSearchResults] = useState<Client[]>([]);
+  const [isSearchListOpen, setIsSearchListOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchWrapperRef = useRef<HTMLDivElement>(null);
 
-      let existingAppointmentStart: Date;
-      const rawDate = existingBookingData.appointmentDateTime;
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
 
-      if (rawDate && typeof (rawDate as any).toDate === 'function') {
-        existingAppointmentStart = (rawDate as Timestamp).toDate();
-      } else if (rawDate) {
-        // Handle string or other formats
-        existingAppointmentStart = new Date(rawDate.toString());
-      } else {
-        console.warn("Booking has no appointmentDateTime during final validation:", docSnap.id);
-        continue;
-      }
-      
-      // Check if the date is valid and on the same day as the new booking
-      if (isNaN(existingAppointmentStart.getTime()) || !isSameDay(existingAppointmentStart, newAppointmentStart)) {
-          continue;
-      }
-
-      const existingAppointmentEnd = addMinutes(existingAppointmentStart, existingBookingData.durationMinutes);
-      
-      if (newAppointmentStart < existingAppointmentEnd && newAppointmentEnd > existingAppointmentStart) {
-        const errorMessage = `Booking conflict: This hairdresser is already booked from ${format(existingAppointmentStart, "HH:mm")} to ${format(existingAppointmentEnd, "HH:mm")} on ${format(existingAppointmentStart, "MMM dd, yyyy")}. Please choose a different time or hairdresser.`;
-        toast({ title: "Booking Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
-        throw new Error(errorMessage);
-      }
-    }
-  } catch (error: any) {
-    if (error.message.startsWith("Booking conflict:")) throw error;
-    console.error("Error fetching existing bookings for double-booking check:", error);
-    toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability.", variant: "destructive" });
-    throw new Error("Failed to check for existing bookings.");
-  }
-
-  let clientId = "";
-  try {
-    clientId = await createOrUpdateClient({
-      clientName: data.clientName,
-      clientPhone: data.clientPhone,
-      clientEmail: data.clientEmail,
-    });
-  } catch (error: any) {
-    console.error("Error creating/updating client record:", error);
-    toast({ title: "Client Record Error", description: "Could not save client information. Booking not created.", variant: "destructive" });
-    throw new Error("Failed to manage client record.");
-  }
-
-  const appointmentDateForFirestore = Timestamp.fromDate(data.appointmentDateTime);
-  const newBookingDoc: Omit<BookingDoc, 'id'> = {
-    clientName: data.clientName,
-    clientEmail: data.clientEmail || "",
-    clientPhone: data.clientPhone,
-    clientId: clientId, 
-    salonId: data.salonId,
-    hairdresserId: data.hairdresserId,
-    serviceId: data.serviceId, 
-    appointmentDateTime: appointmentDateForFirestore,
-    durationMinutes: data.durationMinutes,
-    status: 'Confirmed', 
-    notes: data.notes || "",
-    createdAt: serverTimestamp() as Timestamp,
-    updatedAt: serverTimestamp() as Timestamp,
+  const defaultValues: Partial<BookingFormValues> = initialData ? {
+    ...initialData,
+    appointmentDateTime: new Date(initialData.appointmentDateTime),
+    appointmentTime: format(new Date(initialData.appointmentDateTime), "HH:mm"),
+    status: initialData.status,
+    serviceId: initialData.serviceId,
+  } : {
+    clientName: "",
+    clientPhone: "",
+    clientEmail: "",
+    salonId: initialDataPreselected?.salonId || "",
+    serviceId: initialDataPreselected?.serviceId || "",
+    hairdresserId: initialDataPreselected?.hairdresserId || "",
+    appointmentDateTime: new Date(),
+    appointmentTime: "",
+    durationMinutes: 60,
+    status: 'Confirmed',
+    notes: "",
+    ...initialDataPreselected,
   };
 
-  try {
-    if (!db) throw new Error("Firestore DB instance not available.");
-    const docRef = await addDoc(collection(db, "bookings"), newBookingDoc);
-    toast({ title: "Booking Created", description: `Appointment for ${data.clientName} has been successfully scheduled.` });
-    return docRef.id;
-  } catch (error: any) {
-    console.error("Error writing booking document to Firestore:", error);
-    toast({ title: "Booking Creation Failed", description: `Could not save booking: ${error.message}.`, variant: "destructive" });
-    throw error;
-  }
-}
+  const form = useForm<BookingFormValues>({
+    resolver: zodResolver(bookingFormSchema),
+    defaultValues: defaultValues as BookingFormValues,
+  });
+
+  const selectedHairdresserId = form.watch("hairdresserId");
+  const selectedDate = form.watch("appointmentDateTime");
+  const duration = form.watch("durationMinutes");
+  const { setValue } = form;
+
+  const generateAndFilterSlots = useCallback(async () => {
+    if (!selectedHairdresserId || !selectedDate || !duration) {
+        setTimeSlots([]);
+        return;
+    }
+
+    setIsLoadingTimes(true);
+    setValue("appointmentTime", "");
+
+    const hairdresser = allHairdressers.find(h => h.id === selectedHairdresserId);
+    if (!hairdresser?.workingHours) {
+        toast({ title: "Schedule Not Found", description: "This hairdresser does not have defined working hours.", variant: "destructive" });
+        setTimeSlots([]);
+        setIsLoadingTimes(false);
+        return;
+    }
+
+    const dayOfWeek = format(selectedDate, 'EEEE') as DayOfWeek;
+    const schedule = hairdresser.workingHours[dayOfWeek];
+
+    if (!schedule || schedule.isOff || !schedule.start || !schedule.end) {
+        setTimeSlots([]);
+        setIsLoadingTimes(false);
+        return;
+    }
+
+    const potentialSlots: Date[] = [];
+    let currentTime = parse(schedule.start, 'HH:mm', selectedDate);
+    const endTime = parse(schedule.end, 'HH:mm', selectedDate);
+    
+    while (addMinutes(currentTime, duration) <= endTime) {
+        potentialSlots.push(new Date(currentTime));
+        currentTime = addMinutes(currentTime, 30);
+    }
+
+    const bookingsRef = collection(db, "bookings");
+    // ROBUST QUERY: Fetch all for the hairdresser and sort/filter client-side
+    const q = query(
+        bookingsRef,
+        where("hairdresserId", "==", selectedHairdresserId)
+    );
+
+    try {
+        const querySnapshot = await getDocs(q);
+
+        const sortedDocs = querySnapshot.docs.sort((a, b) => {
+            const dateA = a.data().appointmentDateTime;
+            const dateB = b.data().appointmentDateTime;
+            const timeA = dateA?.toDate ? dateA.toDate().getTime() : new Date(dateA).getTime() || 0;
+            const timeB = dateB?.toDate ? dateB.toDate().getTime() : new Date(dateB).getTime() || 0;
+            return timeA - timeB;
+        });
+
+        const existingBookings = sortedDocs.map(docSnap => {
+            const data = docSnap.data() as BookingDoc;
+            if (data.status === 'Cancelled') return null;
+
+            let appointmentDateTime: Date;
+            const rawDate = data.appointmentDateTime;
+
+            if (rawDate && typeof (rawDate as any).toDate === 'function') {
+                appointmentDateTime = (rawDate as Timestamp).toDate();
+            } else if (rawDate) {
+                appointmentDateTime = new Date(rawDate.toString());
+            } else {
+                console.warn("Booking has no appointmentDateTime:", docSnap.id);
+                return null;
+            }
+            
+            if (isNaN(appointmentDateTime.getTime())) {
+                console.warn("Invalid date found for booking:", docSnap.id, "from raw value:", rawDate);
+                return null;
+            }
+
+            // Client-side date check
+            if (!isSameDay(appointmentDateTime, selectedDate)) {
+                return null;
+            }
+
+            return {
+                start: appointmentDateTime,
+                end: addMinutes(appointmentDateTime, data.durationMinutes)
+            };
+        }).filter(Boolean) as {start: Date, end: Date}[];
+        
+        const availableSlots = potentialSlots.filter(slotStart => {
+            const slotEnd = addMinutes(slotStart, duration);
+            if (isSameDay(slotStart, new Date()) && slotStart < new Date()) {
+                return false;
+            }
+            return !existingBookings.some(booking =>
+                (slotStart < booking.end && slotEnd > booking.start)
+            );
+        });
+
+        setTimeSlots(availableSlots.map(date => format(date, 'HH:mm')));
+    } catch (error) {
+        console.error("Error fetching bookings for time slots:", error);
+        toast({ title: "Error fetching availability", description: "Could not verify available time slots.", variant: "destructive" });
+        setTimeSlots([]);
+    } finally {
+        setIsLoadingTimes(false);
+    }
+  }, [selectedHairdresserId, selectedDate, duration, allHairdressers, setValue]);
+
+  useEffect(() => {
+    generateAndFilterSlots();
+  }, [generateAndFilterSlots]);
 
 
-export default function NewBookingPage() {
-  const { user } = useAuth();
-  const [salons, setSalons] = useState<Salon[]>([]);
-  const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
-  const [initialFormValues, setInitialFormValues] = useState<Partial<BookingFormValues>>({});
+  const handleClientSelect = (client: Client) => {
+    form.setValue("clientName", client.name, { shouldValidate: true });
+    form.setValue("clientPhone", client.phone, { shouldValidate: true });
+    form.setValue("clientEmail", client.email || "", { shouldValidate: true });
+    setIsSearchListOpen(false);
+    setSearchResults([]);
+  };
+
+  const fetchClientsByName = useCallback(async (name: string) => {
+    if (!name || name.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearchListOpen(false);
+      return;
+    }
+    setIsSearching(true);
+    const searchTerm = name.toLowerCase();
+    try {
+      const clientsRef = collection(db, "clients");
+      const q = query(
+        clientsRef,
+        where("name_lowercase", ">=", searchTerm),
+        where("name_lowercase", "<=", searchTerm + "\uf8ff"),
+        limit(5)
+      );
+      const querySnapshot = await getDocs(q);
+      const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as ClientDoc) } as Client));
+      setSearchResults(results);
+      setIsSearchListOpen(results.length > 0);
+    } catch (error) {
+      console.error("Error searching for clients:", error);
+      toast({ title: "Search Error", description: "Could not perform client search.", variant: "destructive" });
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  const clientNameValue = form.watch("clientName");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      // Ensure we don't re-trigger search if a client has just been selected
+      const selectedClient = searchResults.find(r => r.name === clientNameValue);
+      if(!selectedClient){
+        fetchClientsByName(clientNameValue);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [clientNameValue, fetchClientsByName, searchResults]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(event.target as Node)) {
+        setIsSearchListOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
 
   useEffect(() => {
-    if (!user) {
-      setIsLoading(false);
-      return;
+    form.reset(defaultValues as BookingFormValues);
+    const initialSalonToSet = initialData?.salonId || initialDataPreselected?.salonId;
+    if (initialSalonToSet) {
+      setSelectedSalonId(initialSalonToSet);
+      form.setValue("salonId", initialSalonToSet, { shouldDirty: !!initialDataPreselected?.salonId });
+      const initialServiceToSet = initialData?.serviceId || initialDataPreselected?.serviceId;
+      if(initialServiceToSet){
+        form.setValue("serviceId", initialServiceToSet, { shouldDirty: !!initialDataPreselected?.serviceId });
+      }
+      const initialHairdresserToSet = initialData?.hairdresserId || initialDataPreselected?.hairdresserId;
+      if (initialHairdresserToSet) {
+         form.setValue("hairdresserId", initialHairdresserToSet, { shouldDirty: !!initialDataPreselected?.hairdresserId });
+      }
+    } else {
+      setSelectedSalonId(undefined);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData, initialDataPreselected, form.reset]);
 
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const locationsCol = collection(db, "locations");
-        const locationSnapshot = await getDocs(locationsCol);
-        const salonsList = locationSnapshot.docs.map(sDoc => ({ id: sDoc.id, ...(sDoc.data() as LocationDoc) } as Salon));
-        setSalons(salonsList);
 
-        const hairdressersCol = collection(db, "hairdressers");
-        const hairdresserSnapshot = await getDocs(hairdressersCol);
-        const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
-          const data = hDoc.data() as HairdresserDoc;
-          return {
-            id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
-            assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
-            availability: data.availability || "", working_days: data.working_days || [],
-            workingHours: data.workingHours || {},
-            profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
-            createdAt: data.createdAt, updatedAt: data.updatedAt,
-          } as Hairdresser;
-        });
-        setHairdressers(hairdressersList);
-
-        const prefillValues: Partial<BookingFormValues> = {};
-        if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
-            prefillValues.hairdresserId = user.hairdresserProfileId;
-            const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
-            if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
-                prefillValues.salonId = hairdresserDetails.assigned_locations[0];
-            }
+  useEffect(() => {
+    if (selectedSalonId) {
+      const filtered = allHairdressers.filter(h => h.assigned_locations.includes(selectedSalonId));
+      setAvailableHairdressers(filtered);
+      const currentHairdresserId = form.getValues("hairdresserId");
+      const isCurrentHairdresserValidForSalon = filtered.some(h => h.id === currentHairdresserId);
+      if (user?.role === 'hairdresser' && user.hairdresserProfileId && filtered.some(h => h.id === user.hairdresserProfileId)) {
+        if (form.getValues("hairdresserId") !== user.hairdresserProfileId) {
+            form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
         }
-        setInitialFormValues(prefillValues);
-
-      } catch (error: any) {
-        console.error("Error fetching data for new booking:", error);
-        toast({ title: "Error Loading Data", description: `Could not load required data: ${error.message}.`, variant: "destructive" });
-      } finally {
-        setIsLoading(false);
+      } else if (currentHairdresserId && !isCurrentHairdresserValidForSalon) {
+        form.setValue("hairdresserId", "", { shouldDirty: true });
       }
-    };
-
-    fetchData();
-  }, [user]);
-
-  const handleCreateBooking = async (data: BookingFormValues) => {
-    if (!user) {
-        toast({ title: "Authentication Error", description: "User not authenticated.", variant: "destructive" });
-        setIsSubmitting(false);
-        return;
-    }
-    setIsSubmitting(true);
-    try {
-      await createBookingInFirestore(data, user);
-      router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
-    } catch (error: any) {
-      if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.startsWith("Failed to check") || error.message.startsWith("Failed to manage client record")))) {
-        console.error("Error during booking creation process:", error);
+    } else {
+      setAvailableHairdressers([]);
+      if (form.getValues("hairdresserId") !== "") {
+        form.setValue("hairdresserId", "", { shouldDirty: true });
       }
-    } finally {
-      setIsSubmitting(false);
     }
+  }, [selectedSalonId, allHairdressers, user, form]);
+
+
+  useEffect(() => {
+    if (selectedSalonId) {
+      setIsFetchingServices(true);
+      const fetchServices = async () => {
+        try {
+          const servicesCol = collection(db, "services");
+          const servicesQuery = query(servicesCol, where("salonIds", "array-contains", selectedSalonId), where("isActive", "==", true));
+          const serviceSnapshot = await getDocs(servicesQuery);
+          const servicesList = serviceSnapshot.docs.map(sDoc => ({
+            id: sDoc.id,
+            ...(sDoc.data() as ServiceDoc)
+          } as Service));
+          setAvailableServices(servicesList);
+          const currentServiceId = form.getValues("serviceId");
+          if(currentServiceId && !servicesList.some(s => s.id === currentServiceId)){
+            form.setValue("serviceId", "", { shouldDirty: true });
+            form.setValue("durationMinutes", 60); 
+          }
+        } catch (error) {
+          console.error("Error fetching services for salon:", error);
+          toast({ title: "Error", description: "Could not load services for the selected salon.", variant: "destructive"});
+          setAvailableServices([]);
+        } finally {
+          setIsFetchingServices(false);
+        }
+      };
+      fetchServices();
+    } else {
+      setAvailableServices([]);
+      form.setValue("serviceId", "", { shouldDirty: true });
+      form.setValue("durationMinutes", 60);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSalonId, form.setValue]);
+
+
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "salonId") {
+        setSelectedSalonId(value.salonId);
+      }
+      if (name === "serviceId" && value.serviceId) {
+        const selectedService = availableServices.find(s => s.id === value.serviceId);
+        if (selectedService) {
+          form.setValue("durationMinutes", selectedService.durationMinutes, { shouldDirty: true });
+        }
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form, availableServices]);
+
+
+  const handleSubmitInternal = async (data: BookingFormValues) => {
+    const [hours, minutes] = data.appointmentTime.split(':').map(Number);
+    const combinedDateTime = new Date(data.appointmentDateTime);
+    combinedDateTime.setHours(hours, minutes, 0, 0);
+    await onSubmit({ ...data, appointmentDateTime: combinedDateTime });
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2 font-body">Loading booking form...</span>
-      </div>
-    );
-  }
+  const isHairdresserRole = user?.role === 'hairdresser';
+  const hairdresserProfileId = user?.hairdresserProfileId;
+  const isSalonSelectDisabled = isHairdresserRole && !!initialDataPreselected?.salonId && !!hairdresserProfileId && allHairdressers.find(h => h.id === hairdresserProfileId)?.assigned_locations.includes(initialDataPreselected.salonId);
+  const isHairdresserSelectDisabled = (!selectedSalonId || availableHairdressers.length === 0) || (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
+  const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="New Booking"
-        description="Schedule a new appointment for a client."
-        icon={PlusCircle}
-      />
-      <BookingForm
-        salons={salons}
-        allHairdressers={hairdressers}
-        onSubmit={handleCreateBooking}
-        initialDataPreselected={initialFormValues}
-        isSubmitting={isSubmitting}
-      />
-    </div>
+    <Card className="shadow-lg rounded-lg">
+      <CardHeader>
+        <CardTitle className="font-headline text-xl flex items-center gap-2">
+            <ClipboardList className="h-6 w-6 text-primary" />
+            {initialData ? "Edit Booking" : "Create New Booking"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmitInternal)} className="space-y-6 font-body">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField control={form.control} name="clientName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client Name</FormLabel>
+                   <div className="relative" ref={searchWrapperRef}>
+                    <FormControl>
+                      <Input 
+                        placeholder="Search or type new name..." 
+                        {...field} 
+                        onChange={(e) => {
+                          field.onChange(e);
+                          if (!isSearchListOpen) setIsSearchListOpen(true);
+                        }}
+                        autoComplete="off"
+                      />
+                    </FormControl>
+                    {isSearching && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                    {isSearchListOpen && searchResults.length > 0 && (
+                      <div className="absolute z-10 w-full bg-card border rounded-md mt-1 shadow-lg max-h-60 overflow-y-auto">
+                        <ul>
+                          {searchResults.map(client => (
+                            <li
+                              key={client.id}
+                              className="p-3 hover:bg-accent cursor-pointer"
+                              onClick={() => handleClientSelect(client)}
+                              onMouseDown={(e) => e.preventDefault()} // Prevents input blur before click
+                            >
+                              <p className="font-medium text-sm">{client.name}</p>
+                              <p className="text-xs text-muted-foreground">{client.phone}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="clientPhone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client Phone</FormLabel>
+                  <FormControl><Input type="tel" placeholder="082 123 4567" {...field} /></FormControl>
+                  <FormDescription>Will be auto-filled from search.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+            </div>
+            <FormField control={form.control} name="clientEmail" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Client Email (Optional)</FormLabel>
+                <FormControl><Input type="email" placeholder="john.doe@example.com" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField control={form.control} name="salonId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Salon Location</FormLabel>
+                  <Select
+                    onValueChange={(value) => { field.onChange(value); setSelectedSalonId(value); form.setValue("serviceId", ""); form.setValue("hairdresserId", ""); }}
+                    value={field.value}
+                    disabled={isSalonSelectDisabled}
+                  >
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select a salon" /></SelectTrigger></FormControl>
+                    <SelectContent>{salons.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="serviceId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Service</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      const selectedService = availableServices.find(s => s.id === value);
+                      if (selectedService) {
+                        form.setValue("durationMinutes", selectedService.durationMinutes);
+                      }
+                    }}
+                    value={field.value}
+                    disabled={!selectedSalonId || isFetchingServices || availableServices.length === 0}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <Settings2 className="mr-2 h-4 w-4 opacity-50" />
+                        <SelectValue placeholder={isFetchingServices ? "Loading services..." : "Select a service"} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {!isFetchingServices && availableServices.length === 0 && <p className="p-2 text-sm text-muted-foreground">No services for this salon.</p>}
+                      {availableServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R{s.price.toFixed(2)})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
+                  {selectedSalonId && !isFetchingServices && availableServices.length === 0 && <FormDescription>No active services found for the selected salon.</FormDescription>}
+                  <FormMessage />
+                </FormItem>
+              )}/>
+            </div>
+
+            <FormField control={form.control} name="hairdresserId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Hairdresser</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isHairdresserSelectDisabled}
+                >
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select a hairdresser" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {availableHairdressers.map(h => (
+                        <SelectItem key={h.id} value={h.id}>
+                          {h.name}
+                          {isHairdresserRole && h.id === hairdresserProfileId && " (You)"}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
+                {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No hairdressers available for this salon.</FormDescription>}
+                {isHairdresserRole && !!hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId && <FormDescription>Booking for yourself.</FormDescription>}
+                <FormMessage />
+              </FormItem>
+            )}/>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <FormField control={form.control} name="appointmentDateTime" render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Appointment Date</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                          {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus
+                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) }
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="appointmentTime" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Appointment Time</FormLabel>
+                   <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingTimes || timeSlots.length === 0}>
+                    <FormControl>
+                      <SelectTrigger>
+                         {isLoadingTimes && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {!isLoadingTimes && <Clock className="mr-2 h-4 w-4 opacity-50" />}
+                        <SelectValue placeholder={isLoadingTimes ? "Loading..." : "Select a time"} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                       {timeSlots.length > 0 ? (
+                            timeSlots.map(slot => <SelectItem key={slot} value={slot}>{slot}</SelectItem>)
+                        ) : (
+                           <p className="p-2 text-sm text-muted-foreground">No available slots.</p>
+                        )}
+                    </SelectContent>
+                  </Select>
+                  {!selectedHairdresserId && <FormDescription>Select service and hairdresser first.</FormDescription>}
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="durationMinutes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Duration (minutes)</FormLabel>
+                  <FormControl><Input type="number" placeholder="60" {...field} readOnly className="bg-muted/50" /></FormControl>
+                  <FormDescription>Auto-filled based on selected service.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+            </div>
+
+            {initialData && (
+                <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Booking Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <Info className="mr-2 h-4 w-4 opacity-50" />
+                            <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                        {bookingStatusOptions.map(statusValue => (
+                            <SelectItem key={statusValue} value={statusValue}>
+                            {statusValue}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+            )}
+
+            <FormField control={form.control} name="notes" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Notes (Optional)</FormLabel>
+                <FormControl><Textarea placeholder="e.g., Client has very long hair, allergic to certain products." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <Button type="submit" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || form.formState.isSubmitting || isSearching || isLoadingTimes}>
+              {(isSubmitting || form.formState.isSubmitting || isSearching || isLoadingTimes) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {initialData ? "Save Changes" : "Create Booking"}
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }

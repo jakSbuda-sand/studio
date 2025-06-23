@@ -63,7 +63,6 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
   const newAppointmentEnd = addMinutes(newAppointmentStart, data.durationMinutes);
 
   const bookingsRef = collection(db, "bookings");
-  // SIMPLER QUERY: Only filter by hairdresser to avoid complex index/data type issues on date field.
   const q = query(
     bookingsRef,
     where("hairdresserId", "==", data.hairdresserId)
@@ -83,17 +82,22 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       if (rawDate && typeof (rawDate as any).toDate === 'function') {
         existingAppointmentStart = (rawDate as Timestamp).toDate();
       } else if (rawDate) {
-        // Handle string or other formats
         existingAppointmentStart = new Date(rawDate.toString());
       } else {
         console.warn("Booking has no appointmentDateTime during final validation:", docSnap.id);
         continue;
       }
       
-      // Check if the date is valid and on the same day as the new booking
       if (isNaN(existingAppointmentStart.getTime()) || !isSameDay(existingAppointmentStart, newAppointmentStart)) {
           continue;
       }
+
+      // **NEW CHECK**: Ensure hairdresser isn't booked at another location on the same day.
+      if (existingBookingData.salonId !== data.salonId) {
+            const errorMessage = `This hairdresser is already booked at a different location on ${format(newAppointmentStart, "MMM dd, yyyy")}. They cannot work at two locations on the same day.`;
+             toast({ title: "Scheduling Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
+            throw new Error(errorMessage);
+        }
 
       const existingAppointmentEnd = addMinutes(existingAppointmentStart, existingBookingData.durationMinutes);
       
@@ -104,7 +108,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
       }
     }
   } catch (error: any) {
-    if (error.message.startsWith("Booking conflict:")) throw error;
+    if (error.message.startsWith("Booking conflict:") || error.message.includes("different location")) throw error;
     console.error("Error fetching existing bookings for double-booking check:", error);
     toast({ title: "Error Checking Availability", description: "Could not verify hairdresser availability.", variant: "destructive" });
     throw new Error("Failed to check for existing bookings.");
@@ -224,7 +228,7 @@ export default function NewBookingPage() {
       await createBookingInFirestore(data, user);
       router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
     } catch (error: any) {
-      if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.startsWith("Failed to check") || error.message.startsWith("Failed to manage client record")))) {
+      if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.includes("different location") || error.message.startsWith("Failed to check") || error.message.startsWith("Failed to manage client record")))) {
         console.error("Error during booking creation process:", error);
       }
     } finally {
