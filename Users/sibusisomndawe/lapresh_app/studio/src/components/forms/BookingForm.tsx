@@ -160,16 +160,23 @@ export function BookingForm({
         const querySnapshot = await getDocs(q);
         const existingBookings = querySnapshot.docs.map(docSnap => {
             const data = docSnap.data() as BookingDoc;
-            
             if (data.status === 'Cancelled') return null;
 
             let appointmentDateTime: Date;
-            if (data.appointmentDateTime instanceof Timestamp) {
-                appointmentDateTime = data.appointmentDateTime.toDate();
-            } else if (typeof data.appointmentDateTime === 'string') {
-                appointmentDateTime = new Date(data.appointmentDateTime);
+            const rawDate = data.appointmentDateTime;
+
+            if (rawDate && typeof (rawDate as any).toDate === 'function') {
+                appointmentDateTime = (rawDate as Timestamp).toDate();
+            } else if (rawDate) {
+                appointmentDateTime = new Date(rawDate.toString());
             } else {
-                appointmentDateTime = new Date(data.appointmentDateTime);
+                console.warn("Booking has no appointmentDateTime:", docSnap.id);
+                return null;
+            }
+            
+            if (isNaN(appointmentDateTime.getTime())) {
+                console.warn("Invalid date found for booking:", docSnap.id, "from raw value:", rawDate);
+                return null;
             }
 
             return {

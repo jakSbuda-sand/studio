@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
 import { increment } from "firebase/firestore"; // Import increment directly
-import { format } from 'date-fns';
+import { format, addMinutes } from 'date-fns';
 
 async function createOrUpdateClient(
   clientData: Pick<BookingFormValues, 'clientName' | 'clientPhone' | 'clientEmail'>
@@ -60,7 +60,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
   }
 
   const newAppointmentStart = data.appointmentDateTime; 
-  const newAppointmentEnd = new Date(newAppointmentStart.getTime() + data.durationMinutes * 60000);
+  const newAppointmentEnd = addMinutes(newAppointmentStart, data.durationMinutes);
   const dayStart = new Date(newAppointmentStart);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(newAppointmentStart);
@@ -79,18 +79,27 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     const querySnapshot = await getDocs(q);
     for (const docSnap of querySnapshot.docs) {
       const existingBookingData = docSnap.data() as BookingDoc;
-      // Skip check for cancelled bookings
       if (existingBookingData.status === 'Cancelled') continue;
 
       let existingAppointmentStart: Date;
-      if (existingBookingData.appointmentDateTime instanceof Timestamp) {
-        existingAppointmentStart = existingBookingData.appointmentDateTime.toDate();
-      } else if (typeof existingBookingData.appointmentDateTime === 'string') {
-        existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
+      const rawDate = existingBookingData.appointmentDateTime;
+
+      if (rawDate && typeof (rawDate as any).toDate === 'function') {
+        existingAppointmentStart = (rawDate as Timestamp).toDate();
+      } else if (rawDate) {
+        existingAppointmentStart = new Date(rawDate.toString());
       } else {
-        existingAppointmentStart = new Date(existingBookingData.appointmentDateTime);
+        console.warn("Booking has no appointmentDateTime during final validation:", docSnap.id);
+        continue;
       }
-      const existingAppointmentEnd = new Date(existingAppointmentStart.getTime() + existingBookingData.durationMinutes * 60000);
+
+      if (isNaN(existingAppointmentStart.getTime())) {
+          console.warn("Invalid date found for booking during final validation:", docSnap.id, "from raw value:", rawDate);
+          continue;
+      }
+
+      const existingAppointmentEnd = addMinutes(existingAppointmentStart, existingBookingData.durationMinutes);
+      
       if (newAppointmentStart < existingAppointmentEnd && newAppointmentEnd > existingAppointmentStart) {
         const errorMessage = `Booking conflict: This hairdresser is already booked from ${format(existingAppointmentStart, "HH:mm")} to ${format(existingAppointmentEnd, "HH:mm")} on ${format(existingAppointmentStart, "MMM dd, yyyy")}. Please choose a different time or hairdresser.`;
         toast({ title: "Booking Conflict", description: errorMessage, variant: "destructive", duration: 7000 });
