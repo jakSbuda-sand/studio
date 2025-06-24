@@ -19,23 +19,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { HairdresserForm } from "@/components/forms/HairdresserForm";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-const formatWorkingHours = (workingHours?: HairdresserWorkingHours): string => {
-  if (!workingHours) return "Not set";
-  const days: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const parts: string[] = [];
-  days.forEach(day => {
-    const wh = workingHours[day];
-    if (wh) {
-      if (wh.isOff) {
-        // Omitting for brevity on this detailed view
-      } else if (wh.start && wh.end) {
-        parts.push(`${day.substring(0,3)}: ${wh.start}-${wh.end}`);
-      }
-    }
-  });
-  return parts.length > 0 ? parts.join(" | ") : "Not set";
-};
-
 export default function HairdresserDetailPage() {
   const { user, sendPasswordReset } = useAuth();
   const router = useRouter();
@@ -51,6 +34,7 @@ export default function HairdresserDetailPage() {
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const daysOfWeek: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 
   useEffect(() => {
@@ -287,7 +271,33 @@ export default function HairdresserDetailPage() {
                     <div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span className="text-foreground">{hairdresser.email}</span></div>
                     <div className="flex items-start gap-2"><Store className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Salons:</strong><div className="flex flex-wrap mt-1">{hairdresser.assigned_locations.map(id => {const salon = salons.find(s=>s.id===id); return <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon?.name || 'Unknown'}</Badge>})}</div></div></div>
                     <div className="flex items-start gap-2"><Sparkles className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Specialties:</strong> {hairdresser.specialties?.join(", ") || "N/A"}</div></div>
-                    <div className="flex items-start gap-2"><Clock className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Working Hours:</strong> {formatWorkingHours(hairdresser.workingHours)}</div></div>
+                    
+                    <div className="flex items-start gap-2">
+                        <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                        <div>
+                            <strong className="font-medium">Working Hours:</strong>
+                            {hairdresser.workingHours ? (
+                                <ul className="mt-1 space-y-1 text-xs">
+                                {daysOfWeek.map((day) => {
+                                    const hours = hairdresser.workingHours?.[day];
+                                    return (
+                                    <li key={day} className="flex justify-between items-center">
+                                        <span className="w-12 text-muted-foreground">{day.substring(0, 3)}:</span>
+                                        {hours && !hours.isOff && hours.start && hours.end ? (
+                                        <span className="font-mono text-foreground text-right flex-1">{hours.start} - {hours.end}</span>
+                                        ) : (
+                                        <span className="text-muted-foreground/70 text-right flex-1">Day Off</span>
+                                        )}
+                                    </li>
+                                    );
+                                })}
+                                </ul>
+                            ) : (
+                                <p className="text-muted-foreground text-xs mt-1">Not Set</p>
+                            )}
+                        </div>
+                    </div>
+
                 </CardContent>
                  <CardFooter className="border-t flex justify-end gap-2 p-4">
                     <Button variant="outline" onClick={() => setIsEditFormOpen(true)} disabled={isSubmitting || isResettingPassword}><Edit3 className="mr-2 h-4 w-4"/>Edit</Button>
