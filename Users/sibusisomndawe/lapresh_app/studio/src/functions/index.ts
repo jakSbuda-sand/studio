@@ -8,7 +8,7 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentDeleted} from "firebase-functions/v2/firestore"; // Added for Firestore triggers
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "lib/types";
+import type {HairdresserWorkingHours, DayOfWeek} from "../lib/types";
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
@@ -23,7 +23,6 @@ interface CreateHairdresserData {
   password?: string;
   displayName: string;
   assigned_locations: string[];
-  availability: string;
   working_days: DayOfWeek[];
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
@@ -212,7 +211,7 @@ export const createHairdresserUser = onCall(
     }
 
     const data = request.data;
-    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "availability", "working_days"];
+    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "working_days"];
     for (const field of requiredFields) {
       if (!data[field]) {
         logger.error(`[createHairdresserUser] Missing required field: ${field}.`, {data: JSON.stringify(data)});
@@ -248,7 +247,6 @@ export const createHairdresserUser = onCall(
         email: data.email,
         assigned_locations: data.assigned_locations || [],
         working_days: data.working_days || [],
-        availability: data.availability,
         workingHours: data.workingHours || {},
         must_reset_password: true,
         specialties: data.specialties || [],

@@ -50,7 +50,6 @@ const hairdresserFormSchema = z.object({
   initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
   assigned_locations: z.array(z.string()).nonempty({ message: "Please select at least one salon." }),
   specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
-  availability: z.string().min(5, {message: "Please describe working days/hours (e.g., Mon-Fri 9am-5pm)."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
   workingHours: z.object(
       daysOfWeek.reduce((acc, day) => {
@@ -86,13 +85,12 @@ export function HairdresserForm({
 }: HairdresserFormProps) {
   
   const getInitialFormValues = React.useCallback(() => {
-    const baseValues: HairdresserFormValues = {
+    const baseValues: Partial<HairdresserFormValues> = {
       name: "",
       email: "",
       initialPassword: "",
       assigned_locations: [],
       specialties: "",
-      availability: "Mon-Fri 9am-5pm, Sat 10am-3pm",
       profilePictureUrl: "",
       workingHours: JSON.parse(JSON.stringify(defaultWorkingHours))
     };
@@ -114,12 +112,11 @@ export function HairdresserForm({
         initialPassword: "",
         assigned_locations: initialData.assigned_locations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
-        availability: initialData.availability || baseValues.availability,
         profilePictureUrl: initialData.profilePictureUrl || "",
         workingHours: currentWorkingHours,
       };
     }
-    return baseValues;
+    return baseValues as HairdresserFormValues;
   }, [initialData, isEditing]);
 
   const form = useForm<HairdresserFormValues>({
@@ -331,18 +328,6 @@ export function HairdresserForm({
                     <FormLabel>Specialties</FormLabel>
                     <FormControl><Input placeholder="e.g., Coloring, Extensions, Bridal Hair" {...field} /></FormControl>
                     <FormDescription>Comma-separated list of specialties.</FormDescription>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-                <FormField
-                control={form.control}
-                name="availability" 
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>General Availability Notes (Text)</FormLabel>
-                    <FormControl><Textarea placeholder="e.g., Flexible on weekends, Prefers morning appointments." {...field} /></FormControl>
-                    <FormDescription>General notes about availability or preferences (this is separate from the structured working hours).</FormDescription>
                     <FormMessage />
                     </FormItem>
                 )}

@@ -110,17 +110,22 @@ export default function HairdresserDetailPage() {
     if (!hairdresser) return;
     setIsSubmitting(true);
     
-    const parsedWorkingDays: DayOfWeek[] = [];
-    if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
-    // ... add other days
+    const workingDays: DayOfWeek[] = [];
+    if (data.workingHours) {
+        for (const day of daysOfWeek) {
+            const hours = data.workingHours[day];
+            if (hours && !hours.isOff) {
+                workingDays.push(day);
+            }
+        }
+    }
     
     const hairdresserRef = doc(db, "hairdressers", hairdresser.id);
     const updateData: Partial<HairdresserDoc> = {
       name: data.name,
       assigned_locations: data.assigned_locations,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
-      availability: data.availability,
-      working_days: parsedWorkingDays,
+      working_days: workingDays,
       workingHours: data.workingHours || {},
       profilePictureUrl: data.profilePictureUrl || "",
       updatedAt: serverTimestamp() as Timestamp,
