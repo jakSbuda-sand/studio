@@ -89,8 +89,7 @@ export default function HairdresserDetailPage() {
         // Fetch bookings for this specific hairdresser
         const bookingsQuery = query(
           collection(db, "bookings"), 
-          where("hairdresserId", "==", hairdresserId),
-          orderBy("appointmentDateTime", "asc") // Use ascending order to match index
+          where("hairdresserId", "==", hairdresserId)
         );
         const bookingSnapshot = await getDocs(bookingsQuery);
         
@@ -103,7 +102,11 @@ export default function HairdresserDetailPage() {
             appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
             serviceName: serviceDetails?.name || "N/A",
           } as Booking;
-        }).reverse(); // Reverse the array to show newest bookings first
+        });
+
+        // Sort on the client side to prevent index issues and handle data inconsistencies gracefully
+        hairdresserBookings.sort((a, b) => b.appointmentDateTime.getTime() - a.appointmentDateTime.getTime());
+        
         setBookings(hairdresserBookings);
 
       } catch (error: any) {
