@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Booking, BookingDoc, Hairdresser, HairdresserDoc, User, Salon, Service, HairdresserFormValues, DayOfWeek, HairdresserWorkingHours } from "@/lib/types";
-import { Users, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Trash2, Store, Sparkles, Clock } from "lucide-react";
+import { Users, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Trash2, Store, Sparkles, Clock, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp, deleteDoc } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
@@ -36,7 +37,7 @@ const formatWorkingHours = (workingHours?: HairdresserWorkingHours): string => {
 };
 
 export default function HairdresserDetailPage() {
-  const { user } = useAuth();
+  const { user, sendPasswordReset } = useAuth();
   const router = useRouter();
   const params = useParams();
   const hairdresserId = typeof params.hairdresserId === 'string' ? params.hairdresserId : undefined;
@@ -49,6 +50,7 @@ export default function HairdresserDetailPage() {
 
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
 
   useEffect(() => {
@@ -149,6 +151,27 @@ export default function HairdresserDetailPage() {
       toast({ title: "Update Failed", description: "Could not update hairdresser.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!hairdresser?.email) {
+        toast({ title: "Error", description: "Hairdresser email not found.", variant: "destructive" });
+        return;
+    }
+    setIsResettingPassword(true);
+    try {
+        const success = await sendPasswordReset(hairdresser.email);
+        if (success) {
+            toast({
+                title: "Password Reset Sent",
+                description: `A password reset link has been sent to ${hairdresser.name}.`,
+            });
+        }
+    } catch (error) {
+        toast({ title: "Error", description: "Failed to send password reset link.", variant: "destructive" });
+    } finally {
+        setIsResettingPassword(false);
     }
   };
 
@@ -267,10 +290,27 @@ export default function HairdresserDetailPage() {
                     <div className="flex items-start gap-2"><Clock className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Working Hours:</strong> {formatWorkingHours(hairdresser.workingHours)}</div></div>
                 </CardContent>
                  <CardFooter className="border-t flex justify-end gap-2 p-4">
-                     <Button variant="outline" onClick={() => setIsEditFormOpen(true)} disabled={isSubmitting}><Edit3 className="mr-2 h-4 w-4"/>Edit Profile</Button>
+                    <Button variant="outline" onClick={() => setIsEditFormOpen(true)} disabled={isSubmitting || isResettingPassword}><Edit3 className="mr-2 h-4 w-4"/>Edit</Button>
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="secondary" disabled={isSubmitting || isResettingPassword}><KeyRound className="mr-2 h-4 w-4"/>Reset Password</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="font-headline">Reset Password for {hairdresser.name}?</AlertDialogTitle>
+                                <AlertDialogDescription className="font-body">This will send a password reset link to {hairdresser.email}. They will be able to set a new password by following the link. Are you sure?</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter> 
+                                <AlertDialogCancel disabled={isResettingPassword}>Cancel</AlertDialogCancel> 
+                                <AlertDialogAction onClick={handlePasswordReset} className="bg-primary hover:bg-primary/90" disabled={isResettingPassword}>
+                                    {isResettingPassword ? <Loader2 className="h-4 w-4 animate-spin"/> : "Send Reset Link"}
+                                </AlertDialogAction> 
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" disabled={isSubmitting}><Trash2 className="mr-2 h-4 w-4"/>Delete</Button>
+                        <Button variant="destructive" disabled={isSubmitting || isResettingPassword}><Trash2 className="mr-2 h-4 w-4"/>Delete</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This will permanently delete the profile for "{hairdresser.name}" and their associated login account. This action cannot be undone. </AlertDialogDescription> </AlertDialogHeader>
