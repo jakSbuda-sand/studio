@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { db, collection, getDocs, query, orderBy } from "@/lib/firebase";
+import { db, collection, getDocs } from "@/lib/firebase";
 
 const formatWorkingHours = (workingHours?: HairdresserWorkingHours): string => {
   if (!workingHours) return "Not set";
@@ -58,8 +58,7 @@ export default function HairdressersPage() {
         setSalons(salonsList);
 
         const hairdressersCol = collection(db, "hairdressers");
-        const hairdressersQuery = query(hairdressersCol, orderBy("name", "asc"));
-        const hairdresserSnapshot = await getDocs(hairdressersQuery);
+        const hairdresserSnapshot = await getDocs(hairdressersCol);
         
         const hairdressersList = hairdresserSnapshot.docs.map(hDoc => { 
           const data = hDoc.data() as HairdresserDoc;
@@ -79,7 +78,7 @@ export default function HairdressersPage() {
             updatedAt: data.updatedAt,
           } as Hairdresser;
         });
-        setHairdressers(hairdressersList);
+        setHairdressers(hairdressersList.sort((a,b) => a.name.localeCompare(b.name)));
 
       } catch (error: any) {
         console.error("Error fetching data: ", error);
