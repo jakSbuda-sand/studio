@@ -29,9 +29,8 @@ export interface Hairdresser {
   email: string;
   assigned_locations: string[];
   specialties: string[];
-  availability: string; // General text description
-  working_days: DayOfWeek[]; // Kept for now, might be derived from workingHours later
-  workingHours?: HairdresserWorkingHours; // Granular working hours
+  working_days: DayOfWeek[];
+  workingHours?: HairdresserWorkingHours;
   profilePictureUrl?: string;
   must_reset_password?: boolean;
   createdAt?: Timestamp | Date | string;
@@ -130,8 +129,7 @@ export interface HairdresserDoc {
   user_id: string;
   assigned_locations: string[];
   working_days: DayOfWeek[];
-  availability: string;
-  workingHours?: HairdresserWorkingHours; // Granular working hours
+  workingHours?: HairdresserWorkingHours;
   must_reset_password: boolean;
   specialties?: string[];
   profilePictureUrl?: string;

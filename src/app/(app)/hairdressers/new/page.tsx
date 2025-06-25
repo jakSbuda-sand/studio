@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { HairdresserForm, type HairdresserFormValues } from "@/components/forms/HairdresserForm";
-import type { Salon, DayOfWeek, HairdresserDoc, LocationDoc, User } from "@/lib/types"; // Added User
+import type { Salon, DayOfWeek, HairdresserDoc, LocationDoc, User, HairdresserWorkingHours } from "@/lib/types"; // Added User
 import { UserPlus, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { functions, db, httpsCallable, collection, getDocs, Timestamp } from "@/lib/firebase";
@@ -28,7 +28,7 @@ interface CreateHairdresserFunctionData {
   displayName: string;
   assigned_locations: string[];
   working_days: DayOfWeek[];
-  availability: string;
+  workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
 }
@@ -81,24 +81,23 @@ export default function NewHairdresserPage() {
     setIsLoading(true);
     const tempPassword = data.initialPassword || generateTemporaryPassword();
     
-    // Simple parsing of working_days from availability string.
-    const parsedWorkingDays: DayOfWeek[] = [];
-    if (data.availability.toLowerCase().includes("mon")) parsedWorkingDays.push("Monday");
-    if (data.availability.toLowerCase().includes("tue")) parsedWorkingDays.push("Tuesday");
-    if (data.availability.toLowerCase().includes("wed")) parsedWorkingDays.push("Wednesday");
-    if (data.availability.toLowerCase().includes("thu")) parsedWorkingDays.push("Thursday");
-    if (data.availability.toLowerCase().includes("fri")) parsedWorkingDays.push("Friday");
-    if (data.availability.toLowerCase().includes("sat")) parsedWorkingDays.push("Saturday");
-    if (data.availability.toLowerCase().includes("sun")) parsedWorkingDays.push("Sunday");
-
+    // Derive working_days from the structured workingHours
+    const workingDays: DayOfWeek[] = [];
+    if (data.workingHours) {
+        for (const day in data.workingHours) {
+            if (data.workingHours[day as DayOfWeek]?.isOff === false) {
+                workingDays.push(day as DayOfWeek);
+            }
+        }
+    }
 
     const hairdresserDataForFunction: CreateHairdresserFunctionData = {
       email: data.email,
       password: tempPassword,
       displayName: data.name,
       assigned_locations: data.assigned_locations,
-      availability: data.availability,
-      working_days: parsedWorkingDays,
+      working_days: workingDays,
+      workingHours: data.workingHours,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
       profilePictureUrl: data.profilePictureUrl || undefined,
     };

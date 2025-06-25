@@ -50,7 +50,6 @@ export default function HairdresserDetailPage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch hairdresser details
         const hairdresserDocRef = doc(db, "hairdressers", hairdresserId);
         const hairdresserDocSnap = await getDoc(hairdresserDocRef);
 
@@ -59,11 +58,22 @@ export default function HairdresserDetailPage() {
           router.push('/hairdressers');
           return;
         }
+        
         const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
-        const fetchedHairdresser: Hairdresser = { id: hairdresserDocSnap.id, userId: hairdresserData.user_id, ...hairdresserData } as Hairdresser;
+        const fetchedHairdresser: Hairdresser = {
+            id: hairdresserDocSnap.id,
+            userId: hairdresserData.user_id,
+            name: hairdresserData.name,
+            email: hairdresserData.email,
+            assigned_locations: hairdresserData.assigned_locations || [],
+            specialties: hairdresserData.specialties || [],
+            working_days: hairdresserData.working_days || [],
+            workingHours: hairdresserData.workingHours || {},
+            profilePictureUrl: hairdresserData.profilePictureUrl || "",
+            must_reset_password: hairdresserData.must_reset_password || false,
+        };
         setHairdresser(fetchedHairdresser);
 
-        // Fetch related data (salons, services)
         const locationsSnap = await getDocs(collection(db, "locations"));
         const salonsList = locationsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Salon));
         setSalons(salonsList);
@@ -72,7 +82,6 @@ export default function HairdresserDetailPage() {
         const servicesList = servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
         setServices(servicesList);
 
-        // Fetch bookings for this specific hairdresser
         const bookingsQuery = query(
           collection(db, "bookings"), 
           where("hairdresserId", "==", hairdresserId)
@@ -90,7 +99,6 @@ export default function HairdresserDetailPage() {
           } as Booking;
         });
 
-        // Sort on the client side to prevent index issues and handle data inconsistencies gracefully
         hairdresserBookings.sort((a, b) => b.appointmentDateTime.getTime() - a.appointmentDateTime.getTime());
         
         setBookings(hairdresserBookings);
