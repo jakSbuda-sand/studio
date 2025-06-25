@@ -70,7 +70,6 @@ export default function HairdressersPage() {
             email: data.email, 
             assigned_locations: data.assigned_locations || [],
             specialties: data.specialties || [],
-            availability: data.availability || "",
             working_days: data.working_days || [],
             workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "",
