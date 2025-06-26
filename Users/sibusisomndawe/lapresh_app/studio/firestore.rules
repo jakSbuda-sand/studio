@@ -3,76 +3,73 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny all access unless explicitly allowed
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Helper function to check if the user is an admin.
+    // It checks the 'role' field in the user's document in the 'users' collection.
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // USERS collection (for admin role check and user profile management)
+    // Helper function to check if a user is authenticated.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Rules for the 'users' collection (admins).
+    // Only other admins can read or write these documents.
     match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      // Allow admin to manage any user document (useful for setup or recovery)
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      // Allow creation of user docs, e.g., during signup if you have a separate user profile collection
-      allow create: if request.auth != null; 
+      allow read, write: if isAdmin();
     }
 
-    // HAIRDRESSERS collection
+    // Rules for the 'hairdressers' collection.
     match /hairdressers/{hairdresserId} {
-      // Hairdresser can manage their own profile
-      allow read, update, delete: if request.auth != null && request.auth.uid == hairdresserId;
-      // Admins can manage all hairdresser profiles
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Any authenticated user can read hairdresser profiles (e.g., for dropdowns).
+      allow read: if isAuthenticated();
+      // Only admins can create new hairdresser documents.
+      allow create: if isAdmin();
+      // An admin can update any hairdresser's profile.
+      // A hairdresser can only update their own profile.
+      allow update: if isAdmin() || request.auth.uid == hairdresserId;
+      // Only admins can delete hairdressers.
+      allow delete: if isAdmin();
     }
 
-    // BOOKINGS collection
-    // Rules for LISTING bookings (applies to queries on the collection, e.g., the double-booking check)
-    match /bookings {
-      // Allow authenticated users to perform list operations.
-      // Security relies on:
-      // 1. Client-side queries being correctly restricted (e.g., hairdresser queries for their own ID).
-      // 2. Individual document read rules (match /bookings/{bookingId} { allow get: ... }) ensuring
-      //    that even if a broader list is attempted, only permitted documents are actually read.
-      // Admins are covered by their specific rule allowing broader list access.
-      allow list: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow list: if request.auth != null; // Hairdressers (and any auth user) can attempt to list.
-                                          // The query from the client for a hairdresser should be filtered by their UID.
-    }
-
-    // Rules for accessing INDIVIDUAL booking documents (get, create, update, delete)
-    match /bookings/{bookingId} {
-      // Any authenticated user can create a booking (client-side logic should validate booking details).
-      allow create: if request.auth != null; 
-
-      // Admins can read/write any specific booking document.
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      
-      // Hairdressers can get/update their own specific booking documents.
-      // The 'get' permission here is important: if a 'list' operation returns documents,
-      // Firestore will then check if the user has 'get' permission for each of those documents.
-      allow get, update: if request.auth != null && resource.data.hairdresserId == request.auth.uid;
-                          // Optionally, be more granular for updates by hairdressers:
-                          // && (request.method == 'get' || (request.method == 'update' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'notes', 'updatedAt'])));
-    }
-
-    // LOCATIONS collection
+    // Rules for salon locations.
+    // Any authenticated user can read, but only admins can make changes.
     match /locations/{locationId} {
-      allow read: if request.auth != null; // All authenticated users can read locations
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // SERVICES collection
+    // Rules for services.
+    // Any authenticated user can read, but only admins can make changes.
     match /services/{serviceId} {
-       allow read: if request.auth != null; // All authenticated users can read services
-       allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
-    
-    // CLIENTS collection
+
+    // Rules for the 'clients' collection.
     match /clients/{clientId} {
-      // Only admins can manage client records
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Only admins can read the full client list or delete clients.
+      allow read, delete: if isAdmin();
+      // Any authenticated user can create or update a client.
+      // This is required for the booking form where client details are saved.
+      allow create, update: if isAuthenticated();
+    }
+
+    // Rules for the 'bookings' collection.
+    match /bookings/{bookingId} {
+      // Admins can read any booking.
+      // Hairdressers can only read bookings assigned to them.
+      allow read: if isAdmin() || request.auth.uid == resource.data.hairdresserId;
+      // Any authenticated user can create a booking.
+      // This allows both admins and hairdressers to use the new booking form.
+      allow create: if isAuthenticated();
+      // Admins can update any booking.
+      // Hairdressers can only update bookings assigned to them.
+      allow update: if isAdmin() || (request.auth.uid == resource.data.hairdresserId);
+      // Only admins can delete bookings.
+      allow delete: if isAdmin();
     }
   }
 }
-
-    
