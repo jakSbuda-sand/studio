@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Badge } from "@/components/ui/badge";
 
 const StatCard = ({ title, value, icon: Icon, description, isLoading }: { title: string, value: string | number, icon: React.ElementType, description?: string, isLoading: boolean }) => {
   return (
@@ -44,6 +45,7 @@ interface DashboardStats {
   popularServices: { name: string; count: number }[];
   topHairdressers: { name: string; count: number }[];
   upcomingBookings?: number;
+  todaysSchedule?: Booking[];
 }
 
 const chartConfig = {
@@ -128,12 +130,14 @@ export default function DashboardPage() {
                 ...data,
                 id: doc.id,
                 appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
-                price: service?.price || 0
+                price: service?.price || 0,
+                serviceName: service?.name || "Unknown Service",
             } as Booking;
-        }).reverse();
+        });
 
         // --- Calculate Stats ---
-        const bookingsToday = allBookings.filter(b => isSameDay(b.appointmentDateTime, today)).length;
+        const bookingsTodayList = allBookings.filter(b => isSameDay(b.appointmentDateTime, today));
+        const bookingsToday = bookingsTodayList.length;
         
         let revenueToday = 0;
         let newClientsToday = 0;
@@ -141,6 +145,7 @@ export default function DashboardPage() {
         let popularServices: { name: string; count: number }[] = [];
         let topHairdressers: { name: string; count: number }[] = [];
         let upcomingBookings = 0;
+        let todaysSchedule: Booking[] = [];
 
         if (user.role === 'admin') {
             revenueToday = allBookings
@@ -184,9 +189,12 @@ export default function DashboardPage() {
                 .slice(0, 5);
 
         } else if (user.role === 'hairdresser') {
-            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime >= today).length;
+            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && !isSameDay(b.appointmentDateTime, today) && b.appointmentDateTime > today).length;
+            todaysSchedule = bookingsTodayList
+                .filter(b => b.status === 'Confirmed' || b.status === 'Completed')
+                .sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
         }
-
+        
         setStats({
           bookingsToday,
           revenueToday,
@@ -194,7 +202,8 @@ export default function DashboardPage() {
           weeklyChartData,
           popularServices,
           topHairdressers,
-          upcomingBookings
+          upcomingBookings,
+          todaysSchedule
         });
 
       } catch (error: any) {
@@ -230,6 +239,15 @@ export default function DashboardPage() {
   ].filter(action => action.roles.includes(user.role));
   
   const selectedSalonName = filterSalonId === 'all' ? 'All Salons' : (salons.find(s => s.id === filterSalonId)?.name || '...');
+  
+  const getStatusBadgeVariant = (status: Booking['status']): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status) {
+      case 'Confirmed': return 'default';
+      case 'Completed': return 'outline';
+      default: return 'secondary';
+    }
+  };
+
 
   return (
     <div className="space-y-8">
@@ -333,11 +351,52 @@ export default function DashboardPage() {
         </section>
         </>
       ) : (
-        // --- Hairdresser-specific dashboard (simplified) ---
+        <>
         <section className="grid gap-6 md:grid-cols-2">
            <StatCard title="My Bookings Today" value={stats?.bookingsToday ?? 0} icon={CalendarCheck} isLoading={isLoading} />
-           <StatCard title="My Upcoming Appointments" value={stats?.upcomingBookings ?? 0} icon={ClipboardList} description="All confirmed future bookings" isLoading={isLoading} />
+           <StatCard title="My Upcoming Appointments" value={stats?.upcomingBookings ?? 0} icon={ClipboardList} description="All other confirmed bookings" isLoading={isLoading} />
         </section>
+        <section className="mt-6">
+            <Card className="shadow-lg rounded-lg">
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary"/>Today's Schedule</CardTitle>
+                    <CardDescription className="font-body">Your confirmed and completed appointments for today.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                {isLoading ? (
+                    <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
+                ) : stats?.todaysSchedule && stats.todaysSchedule.length > 0 ? (
+                    <ul className="space-y-4">
+                    {stats.todaysSchedule.map(booking => (
+                        <li key={booking.id} className="flex items-start gap-4 p-3 rounded-lg bg-muted/50 border">
+                        <div className="text-lg font-bold font-headline text-primary pt-1 w-20 text-center">
+                            {format(booking.appointmentDateTime, "p")}
+                        </div>
+                        <div className="flex-1 border-l pl-4">
+                            <div className="flex justify-between items-center">
+                            <p className="font-semibold text-foreground font-body">{booking.clientName}</p>
+                            <Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+                                <Scissors size={14}/> {booking.serviceName}
+                            </p>
+                            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                <Store size={14}/> {salons.find(s => s.id === booking.salonId)?.name || 'N/A'}
+                            </p>
+                        </div>
+                        </li>
+                    ))}
+                    </ul>
+                ) : (
+                    <div className="text-center py-10">
+                    <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <p className="mt-4 font-body text-muted-foreground">You have no appointments scheduled for today.</p>
+                    </div>
+                )}
+                </CardContent>
+            </Card>
+        </section>
+        </>
       )}
 
        <Card className="shadow-lg rounded-lg">

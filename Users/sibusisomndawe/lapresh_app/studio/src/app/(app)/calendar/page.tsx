@@ -74,7 +74,7 @@ export default function CalendarPage() {
           return {
             id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
             assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
-            availability: data.availability || "", working_days: data.working_days || [],
+            working_days: data.working_days || [],
             workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
@@ -373,9 +373,11 @@ export default function CalendarPage() {
                       </div>
                        {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
                        <div className="mt-3 flex justify-end items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditForm(booking)} className="font-body" disabled={isSubmitting}>
-                            <Edit3 className="mr-2 h-4 w-4"/>Edit
-                          </Button>
+                          {user.role === 'admin' && (
+                            <Button variant="outline" size="sm" onClick={() => openEditForm(booking)} className="font-body" disabled={isSubmitting}>
+                                <Edit3 className="mr-2 h-4 w-4"/>Edit
+                            </Button>
+                          )}
                        </div>
                     </li>
                   ))}
@@ -393,5 +395,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
-    
