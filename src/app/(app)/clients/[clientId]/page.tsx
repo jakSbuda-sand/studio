@@ -106,8 +106,8 @@ export default function ClientDetailPage() {
 
         const bookingsQuery = query(
           collection(db, "bookings"), 
-          where("clientId", "==", clientId),
-          orderBy("appointmentDateTime", "desc")
+          where("clientId", "==", clientId)
+          // orderBy("appointmentDateTime", "desc") // This requires a composite index that may not be deployed.
         );
         const bookingSnapshot = await getDocs(bookingsQuery);
         
@@ -121,6 +121,10 @@ export default function ClientDetailPage() {
             serviceName: serviceDetails?.name || "N/A",
           } as Booking;
         });
+
+        // Sort bookings on the client-side to avoid index dependency
+        clientBookings.sort((a, b) => b.appointmentDateTime.getTime() - a.appointmentDateTime.getTime());
+
         setBookings(clientBookings);
 
       } catch (error: any) {
