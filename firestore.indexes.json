@@ -5,6 +5,14 @@
       "collectionGroup": "bookings",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "clientPhone", "order": "ASCENDING" },
         { "fieldPath": "appointmentDateTime", "order": "DESCENDING" }
       ]
