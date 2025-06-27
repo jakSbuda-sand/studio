@@ -83,7 +83,6 @@ export default function ClientDetailPage() {
               email: data.email,
               assigned_locations: data.assigned_locations || [],
               specialties: data.specialties || [],
-              availability: data.availability || "",
               working_days: data.working_days || [],
               workingHours: data.workingHours || {},
               profilePictureUrl: data.profilePictureUrl || "",
@@ -402,9 +401,11 @@ export default function ClientDetailPage() {
                             <TableCell>{getSalonName(booking.salonId)}</TableCell>
                             <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
                             <TableCell className="text-right">
-                            <Button variant="outline" size="sm" onClick={() => openEditForm(booking)}>
-                                <Edit3 className="mr-2 h-4 w-4" />Edit
-                            </Button>
+                            {user.role === 'admin' && (
+                                <Button variant="outline" size="sm" onClick={() => openEditForm(booking)}>
+                                    <Edit3 className="mr-2 h-4 w-4" />Edit
+                                </Button>
+                            )}
                             </TableCell>
                         </TableRow>
                         ))}
@@ -418,5 +419,3 @@ export default function ClientDetailPage() {
     </div>
   );
 }
-
-    

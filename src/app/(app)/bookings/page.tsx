@@ -65,7 +65,7 @@ export default function BookingsPage() {
           return {
             id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
             assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
-            availability: data.availability || "", working_days: data.working_days || [],
+            working_days: data.working_days || [],
             workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
@@ -336,7 +336,12 @@ export default function BookingsPage() {
                     </DropdownMenu>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
+                    {user.role === 'admin' && (
+                        <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}>
+                            <Edit3 className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                        </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
