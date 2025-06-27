@@ -9,10 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues } from "@/lib/types";
-import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText } from "lucide-react";
+import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
@@ -33,10 +34,18 @@ export default function ClientDetailPage() {
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // States for editing client info
+  const [isEditingClientInfo, setIsEditingClientInfo] = useState(false);
+  const [editableClientData, setEditableClientData] = useState<{name: string, phone: string, email: string}>({name: "", phone: "", email: ""});
+  const [isSavingClientInfo, setIsSavingClientInfo] = useState(false);
+  
+  // States for editing notes
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [clientNotes, setClientNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
+  // States for booking form
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
@@ -55,7 +64,6 @@ export default function ClientDetailPage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch client details
         const clientDocRef = doc(db, "clients", clientId);
         const clientDocSnap = await getDoc(clientDocRef);
 
@@ -68,14 +76,14 @@ export default function ClientDetailPage() {
         const fetchedClient = { id: clientDocSnap.id, ...clientData } as Client;
         setClient(fetchedClient);
         setClientNotes(fetchedClient.notes || "");
+        setEditableClientData({ name: fetchedClient.name, phone: fetchedClient.phone, email: fetchedClient.email || "" });
 
-        // Fetch related data for bookings (salons, hairdressers, services)
         const locationsSnap = await getDocs(collection(db, "locations"));
         setSalons(locationsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Salon)));
         
         const hairdressersSnap = await getDocs(collection(db, "hairdressers"));
         setHairdressers(hairdressersSnap.docs.map(hDoc => {
-          const data = hDoc.data() as any; // Firestore data
+          const data = hDoc.data() as any;
           return {
               id: hDoc.id,
               userId: data.user_id,
@@ -96,8 +104,6 @@ export default function ClientDetailPage() {
         const servicesList = servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
         setServices(servicesList);
 
-
-        // Fetch bookings for this specific client ID
         const bookingsQuery = query(
           collection(db, "bookings"), 
           where("clientId", "==", clientId),
@@ -107,7 +113,7 @@ export default function ClientDetailPage() {
         
         const clientBookings = bookingSnapshot.docs.map(doc => {
           const data = doc.data() as BookingDoc;
-          const serviceDetails = servicesList.find(s => s.id === data.serviceId); // Use servicesList
+          const serviceDetails = servicesList.find(s => s.id === data.serviceId);
           return {
             id: doc.id,
             ...data,
@@ -127,6 +133,55 @@ export default function ClientDetailPage() {
 
     fetchData();
   }, [user, clientId, router]);
+
+  const handleSaveClientInfo = async () => {
+    if (!client) return;
+    if (!editableClientData.name || !editableClientData.phone) {
+      toast({title: "Validation Error", description: "Name and phone number cannot be empty.", variant: "destructive"});
+      return;
+    }
+    
+    setIsSavingClientInfo(true);
+    try {
+      // Check if phone number is being changed and if it already exists for another client
+      if (editableClientData.phone !== client.phone) {
+        const clientsRef = collection(db, "clients");
+        const q = query(clientsRef, where("phone", "==", editableClientData.phone));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          toast({title: "Duplicate Phone Number", description: "This phone number is already registered to another client.", variant: "destructive"});
+          setIsSavingClientInfo(false);
+          return;
+        }
+      }
+
+      const clientRef = doc(db, "clients", client.id);
+      await updateDoc(clientRef, {
+        name: editableClientData.name,
+        name_lowercase: editableClientData.name.toLowerCase(),
+        phone: editableClientData.phone,
+        email: editableClientData.email,
+        updatedAt: serverTimestamp(),
+      });
+
+      const updatedClient = {
+        ...client,
+        name: editableClientData.name,
+        phone: editableClientData.phone,
+        email: editableClientData.email,
+        updatedAt: Timestamp.now(),
+      };
+      setClient(updatedClient);
+      setIsEditingClientInfo(false);
+      toast({ title: "Client Info Updated", description: "Client details have been saved successfully." });
+    } catch (error: any) {
+      console.error("Error saving client info:", error);
+      toast({ title: "Error Saving Info", description: `Could not save details: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsSavingClientInfo(false);
+    }
+  };
+
 
   const handleSaveNotes = async () => {
     if (!client) return;
@@ -311,27 +366,70 @@ export default function ClientDetailPage() {
         <div className="lg:col-span-1 space-y-6">
             <Card className="shadow-lg rounded-lg">
                 <CardHeader className="bg-secondary/30">
-                <div className="flex items-center gap-4">
-                    <Avatar className="h-16 w-16 border-2 border-primary">
-                        <AvatarImage src={`https://placehold.co/64x64.png?text=${client.name.charAt(0)}`} alt={client.name} data-ai-hint="letter avatar"/>
-                        <AvatarFallback className="bg-primary/20 text-primary font-headline text-xl">
-                            {client.name.split(" ").map(n => n[0]).join("").toUpperCase() || "?"}
-                        </AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <CardTitle className="font-headline text-2xl text-foreground">{client.name}</CardTitle>
-                        <CardDescription className="font-body text-muted-foreground">
-                            Client since: {client.firstSeen ? format(client.firstSeen.toDate(), "MMM dd, yyyy") : "N/A"}
-                        </CardDescription>
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-4">
+                        <Avatar className="h-16 w-16 border-2 border-primary">
+                            <AvatarImage src={`https://placehold.co/64x64.png?text=${client.name.charAt(0)}`} alt={client.name} data-ai-hint="letter avatar"/>
+                            <AvatarFallback className="bg-primary/20 text-primary font-headline text-xl">
+                                {client.name.split(" ").map(n => n[0]).join("").toUpperCase() || "?"}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div>
+                            {isEditingClientInfo ? (
+                              <Input 
+                                value={editableClientData.name}
+                                onChange={(e) => setEditableClientData({...editableClientData, name: e.target.value})}
+                                className="text-2xl font-headline"
+                              />
+                            ) : (
+                              <CardTitle className="font-headline text-2xl text-foreground">{client.name}</CardTitle>
+                            )}
+                            <CardDescription className="font-body text-muted-foreground">
+                                Client since: {client.firstSeen ? format(client.firstSeen.toDate(), "MMM dd, yyyy") : "N/A"}
+                            </CardDescription>
+                        </div>
                     </div>
-                </div>
+                    {!isEditingClientInfo && (
+                        <Button variant="outline" size="icon" onClick={() => setIsEditingClientInfo(true)}>
+                            <Edit3 className="h-4 w-4"/>
+                        </Button>
+                    )}
+                   </div>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-3 font-body">
-                    <div className="flex items-center gap-2"><Phone className="h-5 w-5 text-primary" /><span className="text-foreground">{client.phone}</span></div>
-                    {client.email && (<div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span className="text-foreground">{client.email}</span></div>)}
-                    <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Total Bookings: {client.totalBookings}</span></div>
-                    <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Last Visit: {client.lastSeen ? format(client.lastSeen.toDate(), "MMM dd, yyyy") : "N/A"}</span></div>
+                    <div className="flex items-center gap-3">
+                      <Phone className="h-5 w-5 text-primary" />
+                      {isEditingClientInfo ? (
+                         <Input value={editableClientData.phone} onChange={(e) => setEditableClientData({...editableClientData, phone: e.target.value})} />
+                      ) : (
+                         <span className="text-foreground">{client.phone}</span>
+                      )}
+                    </div>
+                     <div className="flex items-center gap-3">
+                      <Mail className="h-5 w-5 text-primary" />
+                      {isEditingClientInfo ? (
+                         <Input type="email" value={editableClientData.email} onChange={(e) => setEditableClientData({...editableClientData, email: e.target.value})} />
+                      ) : (
+                         <span className="text-foreground">{client.email || 'No email provided'}</span>
+                      )}
+                    </div>
+
+                    {!isEditingClientInfo && (
+                      <>
+                        <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Total Bookings: {client.totalBookings}</span></div>
+                        <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Last Visit: {client.lastSeen ? format(client.lastSeen.toDate(), "MMM dd, yyyy") : "N/A"}</span></div>
+                      </>
+                    )}
                 </CardContent>
+                {isEditingClientInfo && (
+                  <CardFooter className="flex justify-end gap-2 border-t pt-4">
+                      <Button variant="ghost" onClick={() => { setIsEditingClientInfo(false); setEditableClientData({name: client.name, phone: client.phone, email: client.email || ""}); }} disabled={isSavingClientInfo}><X className="h-4 w-4 mr-2"/>Cancel</Button>
+                      <Button onClick={handleSaveClientInfo} disabled={isSavingClientInfo}>
+                        {isSavingClientInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                        Save
+                      </Button>
+                  </CardFooter>
+                )}
             </Card>
 
             <Card className="shadow-lg rounded-lg">
