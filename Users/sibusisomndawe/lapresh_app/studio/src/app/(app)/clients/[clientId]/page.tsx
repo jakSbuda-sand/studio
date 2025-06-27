@@ -97,10 +97,10 @@ export default function ClientDetailPage() {
         setServices(servicesList);
 
 
-        // Fetch bookings for this specific client phone number
+        // Fetch bookings for this specific client ID
         const bookingsQuery = query(
           collection(db, "bookings"), 
-          where("clientPhone", "==", clientData.phone), // Use phone from fetched clientData
+          where("clientId", "==", clientId),
           orderBy("appointmentDateTime", "desc")
         );
         const bookingSnapshot = await getDocs(bookingsQuery);
