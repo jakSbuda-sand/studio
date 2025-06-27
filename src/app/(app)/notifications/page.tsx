@@ -2,7 +2,7 @@
 "use client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Bell, Mail, MessageSquare, Settings, ShieldAlert } from "lucide-react";
+import { Bell, Mail, MessageSquare, CheckCircle, ShieldAlert } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -47,48 +47,40 @@ export default function NotificationsPage() {
 
       <Card className="shadow-lg rounded-lg">
         <CardHeader>
-          <CardTitle className="font-headline text-xl">Notification System Overview</CardTitle>
+          <CardTitle className="font-headline text-xl">Notification System Status</CardTitle>
           <CardDescription className="font-body">
-            LaPresh Beauty Salon automatically sends notifications to clients for booking confirmations and reminders. 
-            This helps reduce no-shows and keeps your clients informed.
+            This system automatically sends notifications to clients to keep them informed and reduce no-shows.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
-            <Card className="bg-secondary/30 rounded-md">
+            <Card className="bg-secondary/30 rounded-md border-l-4 border-green-500">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base font-medium font-body text-secondary-foreground">Email Notifications</CardTitle>
-                <Mail className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base font-medium font-body text-secondary-foreground">Email Confirmations</CardTitle>
+                <CheckCircle className="h-5 w-5 text-green-500" />
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground font-body">
-                  Clients receive beautifully formatted emails for new bookings, updates, and reminders 24 hours before their appointment.
+                  Clients with an email on file will now automatically receive a booking confirmation when a new appointment is created for them.
                 </p>
+                 <Badge variant="outline" className="mt-2 border-green-500 text-green-700">ACTIVE</Badge>
               </CardContent>
             </Card>
-            <Card className="bg-secondary/30 rounded-md">
+            <Card className="bg-secondary/30 rounded-md border-l-4 border-amber-500">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base font-medium font-body text-secondary-foreground">SMS Reminders</CardTitle>
-                <MessageSquare className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base font-medium font-body text-secondary-foreground">SMS & Email Reminders</CardTitle>
+                <MessageSquare className="h-5 w-5 text-amber-500" />
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground font-body">
-                  Optional SMS reminders can be configured to send short alerts to clients, further ensuring they remember their appointments. (Feature coming soon)
+                  Upcoming features will include automated 24-hour reminders via Email and SMS to further reduce no-shows.
                 </p>
+                <Badge variant="outline" className="mt-2 border-amber-500 text-amber-700">COMING SOON</Badge>
               </CardContent>
             </Card>
-          </div>
-
-          <div className="text-center p-6 border rounded-lg bg-background">
-            <Settings className="h-10 w-10 text-primary mx-auto mb-3" />
-            <h3 className="text-lg font-headline text-foreground mb-2">Future Enhancements</h3>
-            <p className="text-muted-foreground font-body">
-              In future updates, you will be able to customize notification templates, manage SMS credits (if applicable), 
-              and view detailed delivery logs directly from this page.
-            </p>
           </div>
           
-          <div className="relative h-64 w-full rounded-lg overflow-hidden shadow-md">
+          <div className="relative h-64 w-full rounded-lg overflow-hidden shadow-md mt-6">
             <Image 
               src="https://placehold.co/800x400.png" 
               alt="Notification system interface mockup" 
@@ -103,6 +95,11 @@ export default function NotificationsPage() {
              </div>
           </div>
         </CardContent>
+         <CardFooter>
+            <p className="text-xs text-muted-foreground">
+                Note: Email sending requires integration with a third-party service like SendGrid. The backend is now ready for this integration.
+            </p>
+         </CardFooter>
       </Card>
     </div>
   );

@@ -5,7 +5,7 @@
 
 import {onCall, HttpsError, type CallableRequest} from "firebase-functions/v2/https";
 import {onRequest} from "firebase-functions/v2/https";
-import {onDocumentDeleted} from "firebase-functions/v2/firestore"; // Added for Firestore triggers
+import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import type {HairdresserWorkingHours, DayOfWeek} from "../lib/types";
@@ -305,6 +305,53 @@ export const onHairdresserDeleted = onDocumentDeleted(
       }
       // Re-throwing the error will cause the function to report a failure if it's not a 'user-not-found' error.
       throw new HttpsError("internal", `Failed to delete Auth user ${hairdresserId}: ${error.message}`);
+    }
+  }
+);
+
+export const onBookingCreated = onDocumentCreated(
+  {
+    document: "bookings/{bookingId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+      logger.log("[onBookingCreated] No data associated with the event.");
+      return;
+    }
+    const bookingData = snapshot.data();
+    const bookingId = event.params.bookingId;
+
+    logger.log(`[onBookingCreated] Triggered for new booking ID: ${bookingId}`, {bookingData});
+
+    if (!bookingData.clientEmail) {
+      logger.log(`[onBookingCreated] Booking ${bookingId} has no client email. Skipping notification.`);
+      return;
+    }
+
+    try {
+      const notificationRef = db.collection("notifications");
+      await notificationRef.add({
+        booking_id: bookingId,
+        type: "email",
+        recipient_email: bookingData.clientEmail,
+        status: "pending", // In a real app, another function would process this queue
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        template_id: "booking_confirmation",
+      });
+      logger.log(`[onBookingCreated] Successfully created 'pending' notification record for booking ${bookingId}.`);
+
+      // In a real implementation, you would now integrate with an email service like SendGrid
+      // to send the actual email using the data from `bookingData`.
+      // For now, we are just logging the intent.
+      logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
+
+    } catch (error: any) {
+      logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
+        errorMessage: error.message,
+        errorStack: error.stack,
+      });
     }
   }
 );
