@@ -50,35 +50,41 @@ interface UpdateUserProfileResult {
 export const createAdminUser = onCall(
   {region: "us-central1"},
   async (request: CallableRequest<CreateAdminData>) => {
-    logger.log("[createAdminUser] Function started.");
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
-    }
-    const callerUid = request.auth.uid;
-    const adminUserDocRef = db.collection("users").doc(callerUid);
     try {
+      logger.log("[createAdminUser] V2: Function started.", {data: request.data});
+
+      if (!request.auth || !request.auth.uid) {
+        logger.warn("[createAdminUser] V2: Unauthenticated call.");
+        throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
+      }
+      const callerUid = request.auth.uid;
+
+      logger.log("[createAdminUser] V2: Verifying caller's admin role for UID:", callerUid);
+      const adminUserDocRef = db.collection("users").doc(callerUid);
       const adminUserDoc = await adminUserDocRef.get();
-      if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
+
+      if (!adminUserDoc.exists() || adminUserDoc.data()?.role !== "admin") {
+        logger.error("[createAdminUser] V2: Caller is not an admin.", {uid: callerUid, role: adminUserDoc.data()?.role});
         throw new HttpsError("permission-denied", "Caller does not have admin privileges.");
       }
-    } catch (error) {
-      logger.error("[createAdminUser] Error verifying admin role:", error);
-      throw new HttpsError("internal", "Failed to verify admin privileges.");
-    }
+      logger.log("[createAdminUser] V2: Admin role verified.");
 
-    const {email, password, name} = request.data;
-    if (!email || !name) {
-      throw new HttpsError("invalid-argument", "Missing required fields: email and name.");
-    }
+      const {email, password, name} = request.data;
+      if (!email || !name) {
+        logger.error("[createAdminUser] V2: Missing required fields.", {email, name});
+        throw new HttpsError("invalid-argument", "Missing required fields: email and name.");
+      }
 
-    try {
+      logger.log("[createAdminUser] V2: Creating new Auth user for email:", email);
       const newUserRecord = await admin.auth().createUser({
         email,
         password: password || Math.random().toString(36).slice(-10),
         displayName: name,
         emailVerified: true,
       });
-      logger.log("[createAdminUser] Successfully created Auth user:", newUserRecord.uid);
+      logger.log("[createAdminUser] V2: Auth user created successfully with UID:", newUserRecord.uid);
+
+      logger.log("[createAdminUser] V2: Creating new Firestore user document for UID:", newUserRecord.uid);
       await db.collection("users").doc(newUserRecord.uid).set({
         name: name,
         email: email,
@@ -86,14 +92,21 @@ export const createAdminUser = onCall(
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      logger.log("[createAdminUser] Successfully created Firestore user doc:", newUserRecord.uid);
+      logger.log("[createAdminUser] V2: Firestore doc created successfully.");
+
       return {status: "success", message: `Admin user ${name} created successfully.`};
     } catch (error: any) {
-      logger.error("[createAdminUser] Error creating new admin:", error);
-      if (error.code === "auth/email-already-exists") {
-        throw new HttpsError("already-exists", "The email address is already in use.");
+      logger.error("[createAdminUser] V2: An unexpected error occurred.", {
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorStack: error.stack,
+      });
+
+      if (error instanceof HttpsError) {
+        throw error;
       }
-      throw new HttpsError("internal", "An error occurred while creating the admin user.");
+      
+      throw new HttpsError("internal", `An internal error occurred: ${error.message}`);
     }
   }
 );
