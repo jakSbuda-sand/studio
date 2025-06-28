@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { LocationForm } from "@/components/forms/LocationForm";
 import type { Salon, LocationDoc } from "@/lib/types"; // LocationDoc for Firestore data
@@ -35,7 +36,8 @@ import {
   Timestamp,
   query,
   where,
-  limit
+  limit,
+  orderBy
 } from "firebase/firestore";
 
 export default function LocationsPage() {
@@ -49,8 +51,6 @@ export default function LocationsPage() {
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      // router.replace('/dashboard');
-      // No need to fetch data if not admin
       setIsLoading(false);
       return;
     }
@@ -59,12 +59,13 @@ export default function LocationsPage() {
       setIsLoading(true);
       try {
         const locationsCol = collection(db, "locations");
-        const locationSnapshot = await getDocs(locationsCol);
+        const locationsQuery = query(locationsCol, orderBy("name", "asc"));
+        const locationSnapshot = await getDocs(locationsQuery);
         const locationsList = locationSnapshot.docs.map(doc => ({
           id: doc.id,
           ...(doc.data() as LocationDoc)
-        } as Salon)); // Cast to Salon, ensuring Timestamps are handled if needed by UI
-        setSalons(locationsList.sort((a,b) => a.name.localeCompare(b.name)));
+        } as Salon));
+        setSalons(locationsList);
       } catch (error) {
         console.error("Error fetching salons: ", error);
         toast({ title: "Error Fetching Salons", description: "Could not load salon locations from the database.", variant: "destructive" });
@@ -147,7 +148,6 @@ export default function LocationsPage() {
   const handleDeleteSalon = async (id: string, name: string) => {
     setIsSubmitting(true);
     try {
-      // Safety checks before deletion
       const hairdressersQuery = query(collection(db, "hairdressers"), where("assigned_locations", "array-contains", id), limit(1));
       const servicesQuery = query(collection(db, "services"), where("salonIds", "array-contains", id), limit(1));
       const bookingsQuery = query(collection(db, "bookings"), where("salonId", "==", id), limit(1));
@@ -225,79 +225,78 @@ export default function LocationsPage() {
         <div className="flex justify-center items-center py-12">
           <Loader2 className="h-10 w-10 animate-spin text-primary" /> <span className="ml-3 text-lg font-body">Loading Salons...</span>
         </div>
-      ) : salons.length === 0 ? (
-         <Card className="text-center py-12 shadow-lg rounded-lg">
+      ) : (
+        <Card className="shadow-lg rounded-lg">
           <CardHeader>
-            <Store className="mx-auto h-16 w-16 text-muted-foreground" />
-            <CardTitle className="mt-4 text-2xl font-headline">No Salon Locations Yet</CardTitle>
+            <CardTitle className="font-headline">Salon List</CardTitle>
+            <CardDescription className="font-body">A list of all registered salon locations.</CardDescription>
           </CardHeader>
           <CardContent>
-            <CardDescription className="font-body text-lg">
-              Start by adding your first salon location to manage its details and staff.
-            </CardDescription>
-          </CardContent>
-          <CardFooter className="justify-center">
-             <Button onClick={() => setIsFormOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add First Location
-              </Button>
-          </CardFooter>
-        </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {salons.map((salon) => (
-            <Card key={salon.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg overflow-hidden">
-              <CardHeader className="bg-secondary/30">
-                <CardTitle className="font-headline text-xl text-foreground">{salon.name}</CardTitle>
-                <CardDescription className="font-body text-muted-foreground">{salon.address}</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-2 font-body flex-grow">
-                {salon.phone && (
-                  <div className="flex items-center text-sm">
-                    <Phone className="mr-2 h-4 w-4 text-primary" />
-                    <span>{salon.phone}</span>
-                  </div>
-                )}
-                {salon.operatingHours && (
-                  <div className="flex items-center text-sm">
-                    <Clock className="mr-2 h-4 w-4 text-primary" />
-                    <span>{salon.operatingHours}</span>
-                  </div>
-                )}
-                 {salon.createdAt && (
-                  <p className="text-xs text-muted-foreground pt-2">
-                    Added: {(salon.createdAt as Timestamp).toDate().toLocaleDateString()}
-                  </p>
-                )}
-              </CardContent>
-              <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                <Button variant="outline" size="sm" onClick={() => openEditForm(salon)} className="font-body" disabled={isSubmitting}>
-                  <Edit3 className="mr-2 h-4 w-4" /> Edit
+            {salons.length === 0 ? (
+              <div className="text-center py-12">
+                <Store className="mx-auto h-16 w-16 text-muted-foreground" />
+                <CardTitle className="mt-4 text-2xl font-headline">No Salon Locations Yet</CardTitle>
+                <CardDescription className="font-body text-lg mt-2">
+                  Start by adding your first salon location to manage its details and staff.
+                </CardDescription>
+                <Button onClick={() => setIsFormOpen(true)} className="mt-6 bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add First Location
                 </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" className="font-body" disabled={isSubmitting}>
-                      <Trash2 className="mr-2 h-4 w-4" /> Delete
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle>
-                      <AlertDialogDescription className="font-body">
-                        This action cannot be undone. This will permanently delete the salon location "{salon.name}".
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDeleteSalon(salon.id, salon.name)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete"}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="font-headline">Name</TableHead>
+                    <TableHead className="font-headline">Address</TableHead>
+                    <TableHead className="font-headline">Contact</TableHead>
+                    <TableHead className="font-headline text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {salons.map((salon) => (
+                    <TableRow key={salon.id} className="font-body">
+                      <TableCell className="font-medium text-foreground">{salon.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{salon.address}</TableCell>
+                      <TableCell>
+                        {salon.phone && <div className="text-muted-foreground">{salon.phone}</div>}
+                        {salon.operatingHours && <div className="text-xs text-muted-foreground">{salon.operatingHours}</div>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => openEditForm(salon)} className="hover:text-primary" disabled={isSubmitting}>
+                          <Edit3 className="h-4 w-4" />
+                          <span className="sr-only">Edit</span>
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}>
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription className="font-body">
+                                This action cannot be undone. This will permanently delete the salon location "{salon.name}".
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteSalon(salon.id, salon.name)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
