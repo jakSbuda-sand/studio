@@ -37,15 +37,12 @@ async function createOrUpdateClient(
     const docRef = await addDoc(clientsRef, newClientDoc);
     return docRef.id;
   } else {
-    // Client exists, update lastSeen and totalBookings
+    // Client exists, only update lastSeen and totalBookings to preserve master record integrity.
     const existingClientDoc = querySnapshot.docs[0];
     const clientRef = doc(db, "clients", existingClientDoc.id);
     await updateDoc(clientRef, {
       lastSeen: serverTimestamp() as Timestamp,
       totalBookings: increment(1),
-      name: clientData.clientName, 
-      name_lowercase: clientData.clientName.toLowerCase(),
-      email: clientData.clientEmail || existingClientDoc.data().email,
       updatedAt: serverTimestamp() as Timestamp,
     });
     return existingClientDoc.id;
