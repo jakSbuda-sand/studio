@@ -347,7 +347,7 @@ export default function BookingsPage() {
                     </DropdownMenu>
                   </TableCell>
                   <TableCell className="text-right">
-                    {user.role === 'admin' && (
+                    {(user.role === 'admin' || user.role === 'hairdresser') && (
                         <Button variant="ghost" size="icon" onClick={() => openEditForm(booking)} className="hover:text-primary" disabled={isSubmitting}>
                             <Edit3 className="h-4 w-4" />
                             <span className="sr-only">Edit</span>
