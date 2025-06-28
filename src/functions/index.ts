@@ -18,6 +18,12 @@ if (admin.apps.length === 0) {
 
 const db = admin.firestore();
 
+interface CreateAdminData {
+  email: string;
+  password?: string;
+  displayName: string;
+}
+
 interface CreateHairdresserData {
   email: string;
   password?: string;
@@ -40,6 +46,57 @@ interface UpdateUserProfileResult {
   updatedName?: string;
   updatedAvatarUrl?: string;
 }
+
+export const createAdminUser = onCall(
+  {region: "us-central1"},
+  async (request: CallableRequest<CreateAdminData>) => {
+    logger.log("[createAdminUser] Function started.");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
+    }
+    const callerUid = request.auth.uid;
+    const adminUserDocRef = db.collection("users").doc(callerUid);
+    try {
+      const adminUserDoc = await adminUserDocRef.get();
+      if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
+        throw new HttpsError("permission-denied", "Caller does not have admin privileges.");
+      }
+    } catch (error) {
+      logger.error("[createAdminUser] Error verifying admin role:", error);
+      throw new HttpsError("internal", "Failed to verify admin privileges.");
+    }
+
+    const {email, password, displayName} = request.data;
+    if (!email || !displayName) {
+      throw new HttpsError("invalid-argument", "Missing required fields: email and displayName.");
+    }
+
+    try {
+      const newUserRecord = await admin.auth().createUser({
+        email,
+        password: password || Math.random().toString(36).slice(-10),
+        displayName,
+        emailVerified: true,
+      });
+      logger.log("[createAdminUser] Successfully created Auth user:", newUserRecord.uid);
+      await db.collection("users").doc(newUserRecord.uid).set({
+        name: displayName,
+        email: email,
+        role: "admin",
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      logger.log("[createAdminUser] Successfully created Firestore user doc:", newUserRecord.uid);
+      return {status: "success", message: `Admin user ${displayName} created successfully.`};
+    } catch (error: any) {
+      logger.error("[createAdminUser] Error creating new admin:", error);
+      if (error.code === "auth/email-already-exists") {
+        throw new HttpsError("already-exists", "The email address is already in use.");
+      }
+      throw new HttpsError("internal", "An error occurred while creating the admin user.");
+    }
+  }
+);
+
 
 export const updateUserProfile = onCall(
   {region: "us-central1"},
