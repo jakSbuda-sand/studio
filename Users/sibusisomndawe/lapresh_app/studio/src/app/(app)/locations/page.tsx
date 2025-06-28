@@ -32,7 +32,10 @@ import {
   updateDoc, 
   deleteDoc, 
   serverTimestamp, 
-  Timestamp 
+  Timestamp,
+  query,
+  where,
+  limit
 } from "firebase/firestore";
 
 export default function LocationsPage() {
@@ -142,11 +145,37 @@ export default function LocationsPage() {
   };
 
   const handleDeleteSalon = async (id: string, name: string) => {
-    setIsSubmitting(true); // Use isSubmitting to disable buttons during delete
+    setIsSubmitting(true);
     try {
+      // Safety checks before deletion
+      const hairdressersQuery = query(collection(db, "hairdressers"), where("assigned_locations", "array-contains", id), limit(1));
+      const servicesQuery = query(collection(db, "services"), where("salonIds", "array-contains", id), limit(1));
+      const bookingsQuery = query(collection(db, "bookings"), where("salonId", "==", id), limit(1));
+
+      const [hairdresserSnapshot, serviceSnapshot, bookingSnapshot] = await Promise.all([
+        getDocs(hairdressersQuery),
+        getDocs(servicesQuery),
+        getDocs(bookingsQuery)
+      ]);
+
+      let dependencies = [];
+      if (!hairdresserSnapshot.empty) dependencies.push("hairdressers");
+      if (!serviceSnapshot.empty) dependencies.push("services");
+      if (!bookingSnapshot.empty) dependencies.push("bookings");
+
+      if (dependencies.length > 0) {
+        toast({
+          title: "Deletion Blocked",
+          description: `Cannot delete "${name}" because it is still associated with active ${dependencies.join(', ')}. Please reassign or remove them first.`,
+          variant: "destructive",
+          duration: 7000
+        });
+        return;
+      }
+
       await deleteDoc(doc(db, "locations", id));
       setSalons(prev => prev.filter(s => s.id !== id));
-      toast({ title: "Salon Deleted", description: `Salon "${name}" has been successfully deleted.`, variant: "destructive" });
+      toast({ title: "Salon Deleted", description: `Salon "${name}" has been successfully deleted.`, variant: "default" });
     } catch (error) {
       console.error("Error deleting salon: ", error);
       toast({ title: "Error Deleting Salon", description: "Could not delete salon from the database.", variant: "destructive" });
