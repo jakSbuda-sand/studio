@@ -170,7 +170,7 @@ export default function DashboardPage() {
             totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
             
             newClients = newClientSnapshot ? newClientSnapshot.size : 0;
-
+            
             const daysInRange = dateRangeFilter === '30d' ? 30 : (dateRangeFilter === '7d' ? 7 : 1);
             chartData = Array.from({ length: daysInRange }).map((_, i) => {
                 const date = subDays(today, (daysInRange - 1) - i);
@@ -463,5 +463,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
