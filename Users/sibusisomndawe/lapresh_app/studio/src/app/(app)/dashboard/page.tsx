@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
@@ -171,14 +171,14 @@ export default function DashboardPage() {
             
             newClients = newClientSnapshot ? newClientSnapshot.size : 0;
 
-            const daysInRange = dateRangeFilter === '30d' ? 30 : 7;
-            chartData = Array.from({ length: dateRangeFilter === 'today' ? 1 : daysInRange }).map((_, i) => {
-                const date = subDays(today, i);
+            const daysInRange = dateRangeFilter === '30d' ? 30 : (dateRangeFilter === '7d' ? 7 : 1);
+            chartData = Array.from({ length: daysInRange }).map((_, i) => {
+                const date = subDays(today, (daysInRange - 1) - i);
                 return {
                     date: format(date, "MMM d"),
                     bookings: allBookings.filter(b => isWithinInterval(b.appointmentDateTime, { start: startOfDay(date), end: endOfDay(date) })).length,
                 };
-            }).reverse();
+            });
 
             const serviceCounts = new Map<string, number>();
             completedBookings.forEach(b => serviceCounts.set(b.serviceId, (serviceCounts.get(b.serviceId) || 0) + 1));
