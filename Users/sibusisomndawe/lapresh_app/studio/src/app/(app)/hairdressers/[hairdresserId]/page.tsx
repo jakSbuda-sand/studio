@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import type { Booking, BookingDoc, Hairdresser, HairdresserDoc, User, Salon, Service, HairdresserFormValues, DayOfWeek, HairdresserWorkingHours } from "@/lib/types";
 import { Users, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Trash2, Store, Sparkles, Clock, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp, deleteDoc } from "@/lib/firebase";
+import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp, deleteDoc, limit } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -176,9 +176,25 @@ export default function HairdresserDetailPage() {
     if (!hairdresser) return;
     setIsSubmitting(true);
     try {
+      // Safety check: ensure no bookings are associated with this hairdresser
+      const bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", hairdresser.id), limit(1));
+      const bookingSnapshot = await getDocs(bookingsQuery);
+
+      if (!bookingSnapshot.empty) {
+        toast({
+          title: "Deletion Blocked",
+          description: "This hairdresser has associated bookings. Reassign or cancel them before deleting.",
+          variant: "destructive",
+          duration: 7000,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // If safe, proceed with deletion
       await deleteDoc(doc(db, "hairdressers", hairdresser.id)); 
       toast({ 
-        title: "Hairdresser Profile Deleting", 
+        title: "Hairdresser Profile Deleted", 
         description: `Profile for ${hairdresser.name} deleted. Their auth account will be removed automatically.`,
         variant: "default" 
       });

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,31 +6,15 @@ import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { Hairdresser, Salon, DayOfWeek, User, LocationDoc, HairdresserDoc, HairdresserWorkingHours } from "@/lib/types";
-import { Users, PlusCircle, Store, Sparkles, Clock, ShieldAlert, Mail, Loader2, CalendarDays, Eye } from "lucide-react";
+import type { Hairdresser, Salon, User, LocationDoc, HairdresserDoc } from "@/lib/types";
+import { Users, PlusCircle, ShieldAlert, Mail, Loader2, Eye } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { db, collection, getDocs, query, orderBy } from "@/lib/firebase";
-
-const formatWorkingHours = (workingHours?: HairdresserWorkingHours): string => {
-  if (!workingHours) return "Not set";
-  const days: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const parts: string[] = [];
-  days.forEach(day => {
-    const wh = workingHours[day];
-    if (wh) {
-      if (wh.isOff) {
-        // Omitting 'Off' days for a cleaner look
-      } else if (wh.start && wh.end) {
-        parts.push(`${day.substring(0,3)}: ${wh.start}-${wh.end}`);
-      }
-    }
-  });
-  return parts.length > 0 ? parts.join(" | ") : "Not set";
-};
 
 
 export default function HairdressersPage() {
@@ -120,7 +103,7 @@ export default function HairdressersPage() {
     return (
         <div className="flex justify-center items-center h-full">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2">Loading hairdressers...</span>
+          <span className="ml-2 font-body">Loading hairdressers...</span>
         </div>
       );
   }
@@ -129,7 +112,7 @@ export default function HairdressersPage() {
     <div className="space-y-8">
       <PageHeader
         title="Hairdresser Management"
-        description="View your talented team of hairdressers."
+        description="View and manage your talented team of hairdressers."
         icon={Users}
         actions={
           <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -153,38 +136,63 @@ export default function HairdressersPage() {
            </CardFooter>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-          {hairdressers.map((hairdresser) => (
-            <Card key={hairdresser.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg overflow-hidden">
-              <CardHeader className="flex flex-row items-start gap-4 bg-secondary/30 p-4">
-                <Avatar className="h-16 w-16 border-2 border-primary shrink-0">
-                  <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait"/>
-                  <AvatarFallback className="bg-primary/30 text-primary font-headline"> {hairdresser.name.split(" ").map(n => n[0]).join("").toUpperCase()} </AvatarFallback>
-                </Avatar>
-                <div className="flex-grow">
-                  <CardTitle className="font-headline text-xl text-foreground">{hairdresser.name}</CardTitle>
-                   {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs my-1">Password Reset Required</Badge>}
-                  <div className="font-body text-primary flex items-center gap-1 mt-1"> <Store size={14}/> Salons: </div>
-                  <div className="flex flex-wrap mt-1">
-                    {getSalonBadges(hairdresser.assigned_locations)}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-2 font-body flex-grow p-4 text-sm">
-                 {hairdresser.email && ( <div className="flex items-start"> <Mail className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Email: </strong> {hairdresser.email} </div> </div> )}
-                <div className="flex items-start"> <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Specialties: </strong> {hairdresser.specialties.join(", ") || "N/A"} </div> </div>
-                <div className="flex items-start"> <CalendarDays className="mr-2 h-4 w-4 text-primary shrink-0 mt-0.5" /> <div> <strong className="text-muted-foreground">Working Hours: </strong> {formatWorkingHours(hairdresser.workingHours)} </div> </div>
-              </CardContent>
-              <CardFooter className="border-t mt-auto pt-4 flex justify-end gap-2 bg-muted/20 p-4">
-                 <Button asChild variant="outline" size="sm" className="font-body w-full">
-                   <Link href={`/hairdressers/${hairdresser.id}`}>
-                      <Eye className="mr-2 h-4 w-4" /> View Details
-                   </Link>
-                 </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+        <Card className="shadow-lg rounded-lg">
+            <CardHeader>
+                <CardTitle className="font-headline">Team Members</CardTitle>
+                <CardDescription className="font-body">A list of all hairdressers on your team.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="font-headline w-[80px]">Avatar</TableHead>
+                            <TableHead className="font-headline">Name</TableHead>
+                            <TableHead className="font-headline">Email</TableHead>
+                            <TableHead className="font-headline">Assigned Salons</TableHead>
+                            <TableHead className="font-headline">Specialties</TableHead>
+                            <TableHead className="text-right font-headline">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {hairdressers.map((hairdresser) => (
+                            <TableRow key={hairdresser.id} className="font-body">
+                                <TableCell>
+                                    <Avatar className="h-10 w-10">
+                                        <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait"/>
+                                        <AvatarFallback className="bg-primary/20 text-primary font-headline">
+                                            {hairdresser.name.split(" ").map(n => n[0]).join("").toUpperCase() || "?"}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="font-medium text-foreground">{hairdresser.name}</div>
+                                    {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs mt-1">Password Reset Required</Badge>}
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Mail size={14}/>
+                                        {hairdresser.email}
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex flex-wrap gap-1">
+                                      {getSalonBadges(hairdresser.assigned_locations)}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="max-w-[200px] truncate">{hairdresser.specialties?.join(", ") || "N/A"}</TableCell>
+                                <TableCell className="text-right">
+                                    <Button variant="outline" size="sm" asChild className="hover:bg-accent/80">
+                                        <Link href={`/hairdressers/${hairdresser.id}`}>
+                                            <Eye className="mr-2 h-4 w-4" /> View Details
+                                        </Link>
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
       )}
     </div>
   );
