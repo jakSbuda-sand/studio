@@ -448,7 +448,7 @@ export default function CalendarPage() {
                                     <span>{getSalonName(booking.salonId)}</span>
                                 </div>
                             </CardContent>
-                             {(user.role === 'admin' || user.role === 'hairdresser') && (
+                             {user.role === 'admin' && (
                                 <CardFooter className="p-2 border-t flex justify-end bg-muted/50">
                                     <Button variant="ghost" size="sm" onClick={() => openEditForm(booking)} className="font-body text-xs h-auto py-1 px-2" disabled={isSubmitting}>
                                         <Edit3 className="mr-1 h-3 w-3"/>Edit
