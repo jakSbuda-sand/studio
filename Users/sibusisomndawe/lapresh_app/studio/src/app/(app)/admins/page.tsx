@@ -29,18 +29,23 @@ export default function AdminsPage() {
       setIsLoading(true);
       try {
         const usersCol = collection(db, "users");
-        const adminsQuery = query(usersCol, where("role", "==", "admin"), orderBy("name", "asc"));
+        // Removed `orderBy` to make the query more robust. Sorting is now done client-side.
+        const adminsQuery = query(usersCol, where("role", "==", "admin"));
         const adminSnapshot = await getDocs(adminsQuery);
         
         const adminList = adminSnapshot.docs.map(doc => {
           const data = doc.data() as UserDoc;
           return {
             uid: doc.id,
-            name: data.name,
+            name: data.name || "Unnamed Admin", // Provide fallback for safety
             email: data.email,
             role: data.role,
           } as User;
         });
+
+        // Sort the admins client-side
+        adminList.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        
         setAdmins(adminList);
       } catch (error: any) {
         toast({ title: "Error Fetching Admins", description: `Could not load admin data: ${error.message}`, variant: "destructive" });

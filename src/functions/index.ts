@@ -21,7 +21,7 @@ const db = admin.firestore();
 interface CreateAdminData {
   email: string;
   password?: string;
-  displayName: string;
+  name: string;
 }
 
 interface CreateHairdresserData {
@@ -66,27 +66,28 @@ export const createAdminUser = onCall(
       throw new HttpsError("internal", "Failed to verify admin privileges.");
     }
 
-    const {email, password, displayName} = request.data;
-    if (!email || !displayName) {
-      throw new HttpsError("invalid-argument", "Missing required fields: email and displayName.");
+    const {email, password, name} = request.data;
+    if (!email || !name) {
+      throw new HttpsError("invalid-argument", "Missing required fields: email and name.");
     }
 
     try {
       const newUserRecord = await admin.auth().createUser({
         email,
         password: password || Math.random().toString(36).slice(-10),
-        displayName,
+        displayName: name,
         emailVerified: true,
       });
       logger.log("[createAdminUser] Successfully created Auth user:", newUserRecord.uid);
       await db.collection("users").doc(newUserRecord.uid).set({
-        name: displayName,
+        name: name,
         email: email,
         role: "admin",
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       logger.log("[createAdminUser] Successfully created Firestore user doc:", newUserRecord.uid);
-      return {status: "success", message: `Admin user ${displayName} created successfully.`};
+      return {status: "success", message: `Admin user ${name} created successfully.`};
     } catch (error: any) {
       logger.error("[createAdminUser] Error creating new admin:", error);
       if (error.code === "auth/email-already-exists") {
@@ -172,13 +173,9 @@ export const updateUserProfile = onCall(
         if (nameChanged && newName !== undefined) {
           firestoreUserUpdate.name = newName;
         }
-        if (Object.keys(firestoreUserUpdate).length > 1) {
-          await userDocRef.update(firestoreUserUpdate);
-          logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
-          firestoreUpdated = true;
-        } else {
-          logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated. Avatar changes are Auth-only for admin, or no name change.");
-        }
+        await userDocRef.update(firestoreUserUpdate);
+        logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
+        firestoreUpdated = true;
       } else {
         logger.log("[updateUserProfile] Admin user document does NOT exist for UID:", uid, "Checking for hairdresser doc.");
         const hairdresserDoc = await hairdresserDocRef.get();

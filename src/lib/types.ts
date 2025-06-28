@@ -158,7 +158,8 @@ export interface UserDoc {
   name: string;
   email: string;
   role: 'admin' | 'hairdresser';
-  created_at: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface ClientDoc {
