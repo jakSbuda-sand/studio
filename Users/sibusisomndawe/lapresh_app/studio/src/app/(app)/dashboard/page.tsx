@@ -170,9 +170,11 @@ export default function DashboardPage() {
                     bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
                 };
             }).reverse();
+            
+            const completedBookings = allBookings.filter(b => b.status === 'Completed');
 
             const serviceCounts = new Map<string, number>();
-            allBookings.filter(b => b.status === 'Completed').forEach(b => {
+            completedBookings.forEach(b => {
                 serviceCounts.set(b.serviceId, (serviceCounts.get(b.serviceId) || 0) + 1);
             });
 
@@ -185,7 +187,7 @@ export default function DashboardPage() {
                 .slice(0, 5);
 
             const hairdresserCounts = new Map<string, number>();
-            allBookings.filter(b => b.status === 'Completed').forEach(b => {
+            completedBookings.forEach(b => {
                 hairdresserCounts.set(b.hairdresserId, (hairdresserCounts.get(b.hairdresserId) || 0) + 1);
             });
 
@@ -377,7 +379,7 @@ export default function DashboardPage() {
             <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary"/>Popular Services</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Top services for {selectedSalonName}.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Top completed services for {selectedSalonName}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
