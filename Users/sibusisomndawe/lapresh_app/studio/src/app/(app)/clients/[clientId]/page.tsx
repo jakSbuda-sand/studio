@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues, HairdresserDoc } from "@/lib/types";
+import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues, HairdresserDoc, LocationDoc } from "@/lib/types";
 import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/firebase";
@@ -79,7 +79,7 @@ export default function ClientDetailPage() {
         setEditableClientData({ name: fetchedClient.name, phone: fetchedClient.phone, email: fetchedClient.email || "" });
 
         const locationsSnap = await getDocs(collection(db, "locations"));
-        setSalons(locationsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Salon)));
+        setSalons(locationsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) } as Salon)));
         
         const hairdressersSnap = await getDocs(collection(db, "hairdressers"));
         setHairdressers(hairdressersSnap.docs.map(hDoc => {
@@ -531,6 +531,5 @@ export default function ClientDetailPage() {
     </div>
   );
 }
-
 
     
