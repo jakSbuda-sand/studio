@@ -26,6 +26,7 @@ import {
   UserCircle as ProfileIcon, // Renamed to avoid conflict
   Settings2, // Icon for services
   Contact, // Icon for Clients
+  Shield, // Icon for Admins
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import React from 'react';
@@ -137,6 +138,7 @@ const navItems: NavItemProps[] = [
       { href: '/locations', icon: Store, label: 'Salons', roles: ['admin'] },
       { href: '/hairdressers', icon: Users, label: 'Hairdressers', roles: ['admin'] },
       { href: '/services', icon: Scissors, label: 'Services', roles: ['admin'] },
+      { href: '/admins', icon: Shield, label: 'Admins', roles: ['admin'] },
       { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] },
     ]
   },
