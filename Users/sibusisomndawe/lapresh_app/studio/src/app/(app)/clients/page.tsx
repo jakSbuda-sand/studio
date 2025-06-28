@@ -48,17 +48,30 @@ export default function ClientsPage() {
         const clientsCol = collection(db, "clients");
         let clientsQuery;
         
-        const lowercasedFilter = debouncedSearchTerm.toLowerCase();
+        const trimmedSearch = debouncedSearchTerm.trim();
 
-        if (lowercasedFilter.trim() === "") {
+        if (trimmedSearch === "") {
           clientsQuery = query(clientsCol, orderBy("name", "asc"), limit(50));
         } else {
-           clientsQuery = query(
-            clientsCol,
-            where("name_lowercase", ">=", lowercasedFilter),
-            where("name_lowercase", "<=", lowercasedFilter + '\uf8ff'),
-            orderBy("name_lowercase", "asc")
-          );
+           // Basic check to see if search term is numeric, suggesting a phone number search
+           const isPhoneNumber = /^\d+$/.test(trimmedSearch.replace(/[\s()+-]/g, ''));
+
+           if (isPhoneNumber) {
+             clientsQuery = query(
+               clientsCol,
+               where("phone", ">=", trimmedSearch),
+               where("phone", "<=", trimmedSearch + '\uf8ff'),
+               orderBy("phone", "asc")
+             );
+           } else {
+             const lowercasedFilter = trimmedSearch.toLowerCase();
+             clientsQuery = query(
+              clientsCol,
+              where("name_lowercase", ">=", lowercasedFilter),
+              where("name_lowercase", "<=", lowercasedFilter + '\uf8ff'),
+              orderBy("name_lowercase", "asc")
+            );
+           }
         }
 
         const clientSnapshot = await getDocs(clientsQuery);
@@ -114,11 +127,11 @@ export default function ClientsPage() {
        <Card className="shadow-md rounded-lg">
         <CardHeader>
           <CardTitle className="font-headline text-lg flex items-center gap-2"><UserSearch /> Search Clients</CardTitle>
-           <CardDescription className="font-body">Search for clients by their name.</CardDescription>
+           <CardDescription className="font-body">Search for clients by their name or phone number.</CardDescription>
         </CardHeader>
         <CardContent>
           <Input
-            placeholder="Search by name..."
+            placeholder="Search by name or phone number..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-full font-body"
@@ -140,7 +153,7 @@ export default function ClientsPage() {
       <Card className="shadow-lg rounded-lg">
         <CardHeader>
           <CardTitle className="font-headline">Client List</CardTitle>
-          <CardDescription className="font-body">{searchTerm ? `Showing results for "${searchTerm}"` : "A list of recently added clients."}</CardDescription>
+          <CardDescription className="font-body">{searchTerm ? `Showing results for "${searchTerm}"` : "A list of all clients."}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
