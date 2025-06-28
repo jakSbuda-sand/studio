@@ -493,7 +493,7 @@ export default function ClientDetailPage() {
                     <Table>
                     <TableHeader>
                         <TableRow>
-                        <TableHead className="font-headline">Date &amp; Time</TableHead>
+                        <TableHead className="font-headline">Date & Time</TableHead>
                         <TableHead className="font-headline">Service</TableHead>
                         <TableHead className="font-headline">Hairdresser</TableHead>
                         <TableHead className="font-headline">Salon</TableHead>
@@ -531,5 +531,3 @@ export default function ClientDetailPage() {
     </div>
   );
 }
-
-    
