@@ -115,22 +115,33 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
 
 
 const navItems: NavItemProps[] = [
+  // Core items for all roles
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'hairdresser'] },
-  { href: '/locations', icon: Store, label: 'Salon Locations', roles: ['admin'] },
-  { href: '/hairdressers', icon: Users, label: 'Hairdressers', roles: ['admin'] },
-  { href: '/services', icon: Settings2, label: 'Services', roles: ['admin'] },
+  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin', 'hairdresser'] },
+  
+  // Booking section (remains collapsible)
   {
     href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin', 'hairdresser'],
     subItems: [
-      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] },
-      { href: '/bookings', icon: ClipboardList, label: 'View All Bookings', roles: ['admin'] },
+      { href: '/bookings', icon: ClipboardList, label: 'All Bookings', roles: ['admin'] },
       { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
+      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] },
     ]
   },
+
+  // Admin-only management section
   { href: '/clients', icon: Contact, label: 'Clients', roles: ['admin'] },
-  { href: '/calendar', icon: CalendarDays, label: 'Calendar View', roles: ['admin', 'hairdresser'] },
-  { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] },
+  {
+    href: '#', icon: Settings2, label: 'Manage', roles: ['admin'],
+    subItems: [
+      { href: '/locations', icon: Store, label: 'Salons', roles: ['admin'] },
+      { href: '/hairdressers', icon: Users, label: 'Hairdressers', roles: ['admin'] },
+      { href: '/services', icon: Scissors, label: 'Services', roles: ['admin'] },
+      { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] },
+    ]
+  },
 ];
+
 
 export function AppSidebar() {
   const pathname = usePathname();
