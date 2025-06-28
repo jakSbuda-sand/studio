@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
@@ -307,38 +307,56 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1 shadow-lg rounded-lg">
-          <CardHeader><CardTitle className="font-headline text-xl flex items-center gap-2"><Filter className="h-5 w-5 text-primary" /> Filters</CardTitle></CardHeader>
-          <CardContent className="space-y-4 font-body">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 space-y-6">
+           <Card className="shadow-lg rounded-lg">
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl">Calendar</CardTitle>
+                    <CardDescription className="font-body">Select a date to view appointments.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ShadcnCalendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        className="rounded-md border shadow-sm p-0"
+                    />
+                </CardContent>
+            </Card>
             {user.role === 'admin' && (
-              <>
-                <div>
-                  <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon</label>
-                  <Select value={filterSalonId} onValueChange={(value) => { setFilterSalonId(value); if (value !== "all" && filterHairdresserId !== "all") { const selectedH = hairdressers.find(h => h.id === filterHairdresserId); if (selectedH && !selectedH.assigned_locations.includes(value)) setFilterHairdresserId("all"); } }}>
-                    <SelectTrigger id="salon-filter"><SelectValue placeholder="All Salons" /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All Salons</SelectItem>{salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Hairdresser</label>
-                  <Select value={filterHairdresserId} onValueChange={setFilterHairdresserId} disabled={filterSalonId !== "all" && availableHairdressersForFilter.length === 0}>
-                    <SelectTrigger id="hairdresser-filter"><SelectValue placeholder="All Hairdressers" /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All Hairdressers</SelectItem>{availableHairdressersForFilter.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                  {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1">No hairdressers for selected salon.</p>}
-                </div>
-              </>
+                <Card className="shadow-lg rounded-lg">
+                    <CardHeader>
+                        <CardTitle className="font-headline text-xl flex items-center gap-2">
+                            <Filter className="h-5 w-5 text-primary" /> Filters
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 font-body">
+                        <div>
+                            <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon</label>
+                            <Select value={filterSalonId} onValueChange={(value) => { setFilterSalonId(value); if (value !== "all" && filterHairdresserId !== "all") { const selectedH = hairdressers.find(h => h.id === filterHairdresserId); if (selectedH && !selectedH.assigned_locations.includes(value)) setFilterHairdresserId("all"); } }}>
+                                <SelectTrigger id="salon-filter"><SelectValue placeholder="All Salons" /></SelectTrigger>
+                                <SelectContent><SelectItem value="all">All Salons</SelectItem>{salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Hairdresser</label>
+                            <Select value={filterHairdresserId} onValueChange={setFilterHairdresserId} disabled={filterSalonId !== "all" && availableHairdressersForFilter.length === 0}>
+                                <SelectTrigger id="hairdresser-filter"><SelectValue placeholder="All Hairdressers" /></SelectTrigger>
+                                <SelectContent><SelectItem value="all">All Hairdressers</SelectItem>{availableHairdressersForFilter.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1">No hairdressers for selected salon.</p>}
+                        </div>
+                    </CardContent>
+                </Card>
             )}
-             <div className="pt-2">
-              <ShadcnCalendar mode="single" selected={selectedDate} onSelect={setSelectedDate} className="rounded-md border shadow-sm bg-card"/>
-            </div>
-          </CardContent>
-        </Card>
+        </div>
 
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2">
           <Card className="shadow-lg rounded-lg">
-            <CardHeader><CardTitle className="font-headline text-xl">Appointments for: {selectedDate ? format(selectedDate, "PPP") : "All Dates"}</CardTitle><CardDescription className="font-body">{isLoading ? "Loading..." : `${filteredBookingsByDate.length} appointment(s) found.`}</CardDescription></CardHeader>
+            <CardHeader>
+                <CardTitle className="font-headline text-xl">Appointments for: {selectedDate ? format(selectedDate, "PPP") : "All Dates"}</CardTitle>
+                <CardDescription className="font-body">{isLoading ? "Loading..." : `${filteredBookingsByDate.length} appointment(s) found.`}</CardDescription>
+            </CardHeader>
             <CardContent>
               {isLoading ? (
                  <div className="flex justify-center items-center h-[200px]">
@@ -346,53 +364,72 @@ export default function CalendarPage() {
                     <span className="ml-2 font-body">Loading appointments...</span>
                 </div>
               ) : filteredBookingsByDate.length > 0 ? (
-                <ul className="space-y-4">
+                <div className="space-y-4">
                   {filteredBookingsByDate.map(booking => (
-                    <li key={booking.id} className="p-4 border rounded-lg shadow-sm hover:shadow-md transition-shadow bg-card" style={{ borderLeft: `5px solid ${booking.color || 'hsl(var(--primary))'}` }}>
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-headline text-lg text-foreground">{booking.serviceName || "Unknown Service"}</h3>
-                          <p className="text-sm text-muted-foreground font-body flex items-center gap-1"><UserIcon size={14}/> {booking.clientName} - {booking.clientPhone}</p>
-                        </div>
-                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="p-1 h-auto -mt-2 -mr-2" disabled={isSubmitting}>
-                                    <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity">
-                                        {booking.status}
-                                    </Badge>
+                    <Card key={booking.id} className="hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${booking.color || 'hsl(var(--primary))'}` }}>
+                        <CardHeader className="flex flex-row items-start justify-between p-4">
+                            <div>
+                                <CardTitle className="font-headline text-lg">{booking.serviceName || "Unknown Service"}</CardTitle>
+                                <CardDescription className="font-body flex items-center gap-2 pt-1">
+                                    <UserIcon size={14} /> {booking.clientName} - {booking.clientPhone}
+                                </CardDescription>
+                            </div>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" className="p-1 h-auto -mt-2 -mr-2" disabled={isSubmitting}>
+                                        <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity">
+                                            {booking.status}
+                                        </Badge>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="font-body">
+                                    <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {bookingStatusOptions.map((statusOption) => (
+                                        <DropdownMenuItem 
+                                            key={statusOption} 
+                                            onClick={() => handleStatusUpdate(booking.id, statusOption)}
+                                            disabled={isSubmitting || booking.status === statusOption}
+                                        >
+                                            {statusOption}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4 space-y-2 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <ClockIcon size={14} className="text-primary"/> 
+                                <span>{format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</span>
+                            </div>
+                            {user.role === 'admin' && (
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                    <UserIcon size={14} className="text-primary"/> 
+                                    <span>{getHairdresserName(booking.hairdresserId)}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <StoreIcon size={14} className="text-primary"/> 
+                                <span>{getSalonName(booking.salonId)}</span>
+                            </div>
+                            {booking.notes && (
+                                <div className="pt-2 mt-2 border-t">
+                                    <p className="text-xs text-muted-foreground/80 font-body whitespace-pre-wrap">
+                                        <strong>Notes:</strong> {booking.notes}
+                                    </p>
+                                </div>
+                            )}
+                        </CardContent>
+                        {user.role === 'admin' && (
+                            <CardFooter className="p-4 border-t flex justify-end bg-muted/50">
+                                <Button variant="outline" size="sm" onClick={() => openEditForm(booking)} className="font-body" disabled={isSubmitting}>
+                                    <Edit3 className="mr-2 h-4 w-4"/>Edit
                                 </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="font-body">
-                                <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {bookingStatusOptions.map((statusOption) => (
-                                    <DropdownMenuItem 
-                                        key={statusOption} 
-                                        onClick={() => handleStatusUpdate(booking.id, statusOption)}
-                                        disabled={isSubmitting || booking.status === statusOption}
-                                    >
-                                        {statusOption}
-                                    </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div className="mt-2 space-y-1 text-sm font-body">
-                        <p className="flex items-center gap-1"><ClockIcon size={14} className="text-primary"/> {format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</p>
-                        {(user.role === 'admin' && <p className="flex items-center gap-1"><UserIcon size={14} className="text-primary"/> {getHairdresserName(booking.hairdresserId)}</p>)}
-                        <p className="flex items-center gap-1"><StoreIcon size={14} className="text-primary"/> {getSalonName(booking.salonId)}</p>
-                      </div>
-                       {booking.notes && <p className="mt-2 text-xs text-muted-foreground/80 font-body border-t pt-2"><strong>Notes:</strong> {booking.notes}</p>}
-                       <div className="mt-3 flex justify-end items-center gap-2">
-                          {user.role === 'admin' && (
-                            <Button variant="outline" size="sm" onClick={() => openEditForm(booking)} className="font-body" disabled={isSubmitting}>
-                                <Edit3 className="mr-2 h-4 w-4"/>Edit
-                            </Button>
-                          )}
-                       </div>
-                    </li>
+                            </CardFooter>
+                        )}
+                    </Card>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <div className="text-center py-10">
                   <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
