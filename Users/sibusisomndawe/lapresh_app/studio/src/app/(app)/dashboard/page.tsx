@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
 import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
-import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
@@ -39,15 +39,17 @@ const StatCard = ({ title, value, icon: Icon, description, isLoading }: { title:
 };
 
 interface DashboardStats {
-  bookingsToday: number;
-  revenueToday: number;
-  newClientsToday: number;
-  weeklyChartData: any[];
+  totalBookings: number;
+  totalRevenue: number;
+  newClients: number;
+  chartData: any[];
   popularServices: { name: string; count: number }[];
   topHairdressers: { name: string; count: number }[];
   upcomingBookings?: number;
   todaysSchedule?: Booking[];
 }
+
+type DateRangeFilter = "today" | "7d" | "30d";
 
 const chartConfig = {
   bookings: {
@@ -62,6 +64,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [salons, setSalons] = useState<Salon[]>([]);
   const [filterSalonId, setFilterSalonId] = useState<string>("all");
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("7d");
   const [isLoading, setIsLoading] = useState(true);
   const [setupStatus, setSetupStatus] = useState({ hasSalons: true, hasHairdressers: true, hasServices: true });
 
@@ -76,10 +79,21 @@ export default function DashboardPage() {
       setIsLoading(true);
       try {
         const today = new Date();
-        const todayStart = startOfDay(today);
-        const sevenDaysAgo = startOfDay(subDays(today, 6));
+        let startDate: Date;
+        switch (dateRangeFilter) {
+            case "today":
+                startDate = startOfDay(today);
+                break;
+            case "30d":
+                startDate = startOfDay(subDays(today, 29));
+                break;
+            case "7d":
+            default:
+                startDate = startOfDay(subDays(today, 6));
+                break;
+        }
+        const endDate = endOfDay(today);
 
-        // --- Base Queries ---
         const servicesQuery = query(collection(db, "services"));
         const locationsQuery = query(collection(db, "locations"), orderBy("name"));
         const hairdressersQuery = query(collection(db, "hairdressers"));
@@ -90,7 +104,8 @@ export default function DashboardPage() {
         if (user.role === 'admin') {
             const baseBookingsQuery = query(
               collection(db, "bookings"),
-              where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
+              where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
+              where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
               orderBy("appointmentDateTime", "asc")
             );
 
@@ -99,20 +114,21 @@ export default function DashboardPage() {
                 : query(
                     collection(db, "bookings"), 
                     where("salonId", "==", filterSalonId),
-                    where("appointmentDateTime", ">=", Timestamp.fromDate(sevenDaysAgo)),
+                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
+                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
                     orderBy("appointmentDateTime", "asc")
                   );
             
-            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(todayStart)));
+            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)));
+        
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(todayStart)), orderBy("appointmentDateTime", "asc"));
+           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(startOfDay(today))), orderBy("appointmentDateTime", "asc"));
         } else {
-            setStats({ bookingsToday: 0, revenueToday: 0, newClientsToday: 0, weeklyChartData: [], popularServices: [], topHairdressers: [] });
+            setStats({ totalBookings: 0, totalRevenue: 0, newClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
             setIsLoading(false);
             return;
         }
 
-        // --- Fetch Data ---
         const [bookingSnapshot, serviceSnapshot, newClientSnapshot, locationSnapshot, hairdresserSnapshot] = await Promise.all([
           getDocs(bookingsQuery),
           getDocs(servicesQuery),
@@ -121,7 +137,6 @@ export default function DashboardPage() {
           getDocs(hairdressersQuery),
         ]);
 
-        // --- Process Data ---
         setSetupStatus({
             hasSalons: locationSnapshot.size > 0,
             hasHairdressers: hairdresserSnapshot.size > 0,
@@ -144,78 +159,43 @@ export default function DashboardPage() {
             } as Booking;
         });
 
-        // --- Calculate Stats ---
-        const bookingsTodayList = allBookings.filter(b => isSameDay(b.appointmentDateTime, today));
-        const bookingsToday = bookingsTodayList.length;
-        
-        let revenueToday = 0;
-        let newClientsToday = 0;
-        let weeklyChartData: any[] = [];
-        let popularServices: { name: string; count: number }[] = [];
-        let topHairdressers: { name: string; count: number }[] = [];
-        let upcomingBookings = 0;
-        let todaysSchedule: Booking[] = [];
+        let totalBookings = 0, totalRevenue = 0, newClients = 0;
+        let chartData: any[] = [], popularServices: { name: string; count: number }[] = [], topHairdressers: { name: string; count: number }[] = [];
+        let upcomingBookings = 0, todaysSchedule: Booking[] = [];
 
         if (user.role === 'admin') {
-            revenueToday = allBookings
-                .filter(b => b.status === 'Completed' && isSameDay(b.appointmentDateTime, today))
-                .reduce((sum, b) => sum + (b.price || 0), 0);
+            totalBookings = allBookings.length;
             
-            newClientsToday = newClientSnapshot ? newClientSnapshot.size : 0;
+            const completedBookings = allBookings.filter(b => b.status === 'Completed');
+            totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
+            
+            newClients = newClientSnapshot ? newClientSnapshot.size : 0;
 
-            weeklyChartData = Array.from({ length: 7 }).map((_, i) => {
+            const daysInRange = dateRangeFilter === '30d' ? 30 : 7;
+            chartData = Array.from({ length: dateRangeFilter === 'today' ? 1 : daysInRange }).map((_, i) => {
                 const date = subDays(today, i);
                 return {
                     date: format(date, "MMM d"),
-                    bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
+                    bookings: allBookings.filter(b => isWithinInterval(b.appointmentDateTime, { start: startOfDay(date), end: endOfDay(date) })).length,
                 };
             }).reverse();
-            
-            const completedBookings = allBookings.filter(b => b.status === 'Completed');
 
             const serviceCounts = new Map<string, number>();
-            completedBookings.forEach(b => {
-                serviceCounts.set(b.serviceId, (serviceCounts.get(b.serviceId) || 0) + 1);
-            });
-
-            popularServices = Array.from(serviceCounts.entries())
-                .map(([serviceId, count]) => ({
-                    name: servicesMap.get(serviceId)?.name || 'Unknown Service',
-                    count
-                }))
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 5);
+            completedBookings.forEach(b => serviceCounts.set(b.serviceId, (serviceCounts.get(b.serviceId) || 0) + 1));
+            popularServices = Array.from(serviceCounts.entries()).map(([serviceId, count]) => ({ name: servicesMap.get(serviceId)?.name || 'Unknown', count })).sort((a, b) => b.count - a.count).slice(0, 5);
 
             const hairdresserCounts = new Map<string, number>();
-            completedBookings.forEach(b => {
-                hairdresserCounts.set(b.hairdresserId, (hairdresserCounts.get(b.hairdresserId) || 0) + 1);
-            });
-
-            topHairdressers = Array.from(hairdresserCounts.entries())
-                .map(([hairdresserId, count]) => ({
-                    name: hairdressersMap.get(hairdresserId)?.name || 'Unknown Hairdresser',
-                    count
-                }))
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 5);
-
+            completedBookings.forEach(b => hairdresserCounts.set(b.hairdresserId, (hairdresserCounts.get(b.hairdresserId) || 0) + 1));
+            topHairdressers = Array.from(hairdresserCounts.entries()).map(([hairdresserId, count]) => ({ name: hairdressersMap.get(hairdresserId)?.name || 'Unknown', count })).sort((a, b) => b.count - a.count).slice(0, 5);
+        
         } else if (user.role === 'hairdresser') {
-            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && !isSameDay(b.appointmentDateTime, today) && b.appointmentDateTime > today).length;
-            todaysSchedule = bookingsTodayList
-                .filter(b => b.status === 'Confirmed' || b.status === 'Completed')
-                .sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
+            const todaysBookingsList = allBookings.filter(b => isWithinInterval(b.appointmentDateTime, { start: startOfDay(today), end: endOfDay(today) }));
+            totalBookings = todaysBookingsList.length;
+            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(today)).length;
+            todaysSchedule = todaysBookingsList.filter(b => b.status === 'Confirmed' || b.status === 'Completed').sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
         }
         
-        setStats({
-          bookingsToday,
-          revenueToday,
-          newClientsToday,
-          weeklyChartData,
-          popularServices,
-          topHairdressers,
-          upcomingBookings,
-          todaysSchedule
-        });
+        setStats({ totalBookings, totalRevenue, newClients, chartData, popularServices, topHairdressers, upcomingBookings, todaysSchedule });
 
       } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
@@ -226,7 +206,7 @@ export default function DashboardPage() {
     };
 
     fetchDashboardData();
-  }, [user, filterSalonId]);
+  }, [user, filterSalonId, dateRangeFilter]);
 
   if (!user) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin"/></div>;
@@ -250,6 +230,8 @@ export default function DashboardPage() {
   ].filter(action => action.roles.includes(user.role));
   
   const selectedSalonName = filterSalonId === 'all' ? 'All Salons' : (salons.find(s => s.id === filterSalonId)?.name || '...');
+  const dateRangeText = { today: "Today", "7d": "in the last 7 days", "30d": "in the last 30 days" };
+  const statDescription = `For ${selectedSalonName} ${dateRangeText[dateRangeFilter]}`;
   
   const getStatusBadgeVariant = (status: Booking['status']): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
@@ -261,26 +243,10 @@ export default function DashboardPage() {
 
   const SetupGuide = ({ status }: { status: { hasSalons: boolean, hasHairdressers: boolean, hasServices: boolean }}) => {
     const setupItems = [
-        {
-            title: "Add your first Salon",
-            description: "Create a location where bookings can be made.",
-            href: "/locations",
-            isComplete: status.hasSalons,
-        },
-        {
-            title: "Add your first Hairdresser",
-            description: "Add a team member to assign to bookings.",
-            href: "/hairdressers/new",
-            isComplete: status.hasHairdressers,
-        },
-        {
-            title: "Add your first Service",
-            description: "Define a service that clients can book.",
-            href: "/services",
-            isComplete: status.hasServices,
-        },
+        { title: "Add your first Salon", description: "Create a location where bookings can be made.", href: "/locations", isComplete: status.hasSalons },
+        { title: "Add your first Hairdresser", description: "Add a team member to assign to bookings.", href: "/hairdressers/new", isComplete: status.hasHairdressers },
+        { title: "Add your first Service", description: "Define a service that clients can book.", href: "/services", isComplete: status.hasServices },
     ];
-
     return (
         <Card className="shadow-lg rounded-lg bg-primary/10 border-primary/30">
             <CardHeader>
@@ -302,11 +268,7 @@ export default function DashboardPage() {
                                             <p className="text-sm text-muted-foreground font-body">{item.description}</p>
                                         </div>
                                     </div>
-                                    {!item.isComplete && (
-                                        <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-                                            <Link href={item.href}>Go <ArrowRight className="ml-2 h-4 w-4"/></Link>
-                                        </Button>
-                                    )}
+                                    {!item.isComplete && <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex"><Link href={item.href}>Go <ArrowRight className="ml-2 h-4 w-4"/></Link></Button>}
                                 </div>
                             </Card>
                         </li>
@@ -328,16 +290,27 @@ export default function DashboardPage() {
       {isAdmin && (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline text-lg flex items-center gap-2"><Filter className="h-5 w-5 text-primary" />Dashboard Filter</CardTitle>
+                <CardTitle className="font-headline text-lg flex items-center gap-2"><Filter className="h-5 w-5 text-primary" />Dashboard Filters</CardTitle>
             </CardHeader>
-            <CardContent>
-                <div className="max-w-xs">
-                    <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon Location</label>
+            <CardContent className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 min-w-[150px]">
+                    <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Salon Location</label>
                     <Select value={filterSalonId} onValueChange={setFilterSalonId} disabled={!setupStatus.hasSalons}>
                         <SelectTrigger id="salon-filter"><SelectValue placeholder="Select Salon..." /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Salons</SelectItem>
                             {salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex-1 min-w-[150px]">
+                     <label htmlFor="date-range-filter" className="block text-sm font-medium text-muted-foreground mb-1">Date Range</label>
+                    <Select value={dateRangeFilter} onValueChange={(value) => setDateRangeFilter(value as DateRangeFilter)}>
+                        <SelectTrigger id="date-range-filter"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="today">Today</SelectItem>
+                            <SelectItem value="7d">Last 7 Days</SelectItem>
+                            <SelectItem value="30d">Last 30 Days</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -348,21 +321,21 @@ export default function DashboardPage() {
       {isAdmin ? (
         <>
         <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <StatCard title="Bookings Today" value={stats?.bookingsToday ?? 0} icon={CalendarCheck} description={`For ${selectedSalonName}`} isLoading={isLoading} />
-            <StatCard title="Revenue Today" value={`R ${stats?.revenueToday.toFixed(2) ?? '0.00'}`} icon={DollarSign} description={`Completed for ${selectedSalonName}`} isLoading={isLoading} />
-            <StatCard title="New Clients Today" value={stats?.newClientsToday ?? 0} icon={Users} description="Across all locations" isLoading={isLoading} />
+            <StatCard title="Total Bookings" value={stats?.totalBookings ?? 0} icon={CalendarCheck} description={statDescription} isLoading={isLoading} />
+            <StatCard title="Total Revenue" value={`R ${stats?.totalRevenue.toFixed(2) ?? '0.00'}`} icon={DollarSign} description={`Completed bookings ${statDescription}`} isLoading={isLoading} />
+            <StatCard title="New Clients" value={stats?.newClients ?? 0} icon={Users} description={`Registered ${dateRangeText[dateRangeFilter]}`} isLoading={isLoading} />
         </section>
 
         <section className="grid grid-cols-1 gap-6">
           <Card className="shadow-lg rounded-lg">
               <CardHeader>
-                  <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><BarChartIcon className="h-5 w-5 text-primary"/>Bookings This Week</CardTitle>
-                  <CardDescription className="font-body text-muted-foreground">Overview for {selectedSalonName}.</CardDescription>
+                  <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><BarChartIcon className="h-5 w-5 text-primary"/>Bookings Overview</CardTitle>
+                  <CardDescription className="font-body text-muted-foreground">Overview for {selectedSalonName} {dateRangeText[dateRangeFilter]}.</CardDescription>
               </CardHeader>
               <CardContent>
                   {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
                   <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                      <BarChart data={stats?.weeklyChartData} margin={{ top: 20, right: 20, bottom: 5, left: -10 }}>
+                      <BarChart data={stats?.chartData} margin={{ top: 20, right: 20, bottom: 5, left: -10 }}>
                           <CartesianGrid vertical={false} />
                           <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
                           <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
@@ -379,7 +352,7 @@ export default function DashboardPage() {
             <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary"/>Popular Services</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Top completed services for {selectedSalonName}.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Top completed services {statDescription}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
@@ -393,7 +366,7 @@ export default function DashboardPage() {
                                 </div>
                                 <span className="font-bold font-headline text-primary">{service.count}</span>
                             </li>
-                        )) : <p className="text-center text-muted-foreground font-body py-10">No completed bookings data yet.</p>}
+                        )) : <p className="text-center text-muted-foreground font-body py-10">No completed bookings data for this period.</p>}
                     </ul>
                     )}
                 </CardContent>
@@ -401,7 +374,7 @@ export default function DashboardPage() {
              <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><Award className="h-5 w-5 text-primary"/>Top Hairdressers</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Based on completed bookings for {selectedSalonName}.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Based on completed bookings {statDescription}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
@@ -415,7 +388,7 @@ export default function DashboardPage() {
                                 </div>
                                 <span className="font-bold font-headline text-primary">{dresser.count}</span>
                             </li>
-                        )) : <p className="text-center text-muted-foreground font-body py-10">No completed bookings data yet.</p>}
+                        )) : <p className="text-center text-muted-foreground font-body py-10">No completed bookings data for this period.</p>}
                     </ul>
                     )}
                 </CardContent>
@@ -425,7 +398,7 @@ export default function DashboardPage() {
       ) : (
         <>
         <section className="grid gap-6 md:grid-cols-2">
-           <StatCard title="My Bookings Today" value={stats?.bookingsToday ?? 0} icon={CalendarCheck} isLoading={isLoading} />
+           <StatCard title="My Bookings Today" value={stats?.totalBookings ?? 0} icon={CalendarCheck} isLoading={isLoading} />
            <StatCard title="My Upcoming Appointments" value={stats?.upcomingBookings ?? 0} icon={ClipboardList} description="All other confirmed bookings" isLoading={isLoading} />
         </section>
         <section className="mt-6">
@@ -490,3 +463,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
