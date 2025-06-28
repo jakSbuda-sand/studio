@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
@@ -15,6 +15,7 @@ import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const StatCard = ({ title, value, icon: Icon, description, isLoading }: { title: string, value: string | number, icon: React.ElementType, description?: string, isLoading: boolean }) => {
   return (
@@ -62,6 +63,8 @@ export default function DashboardPage() {
   const [salons, setSalons] = useState<Salon[]>([]);
   const [filterSalonId, setFilterSalonId] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
+  const [setupStatus, setSetupStatus] = useState({ hasSalons: true, hasHairdressers: true, hasServices: true });
+
 
   useEffect(() => {
     if (!user) { 
@@ -119,6 +122,12 @@ export default function DashboardPage() {
         ]);
 
         // --- Process Data ---
+        setSetupStatus({
+            hasSalons: locationSnapshot.size > 0,
+            hasHairdressers: hairdresserSnapshot.size > 0,
+            hasServices: serviceSnapshot.size > 0,
+        });
+
         const servicesMap = new Map<string, Service>(serviceSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as Service]));
         const hairdressersMap = new Map<string, Hairdresser>(hairdresserSnapshot.docs.map(doc => [doc.id, {id: doc.id, ...doc.data()} as Hairdresser]));
         setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
@@ -248,10 +257,71 @@ export default function DashboardPage() {
     }
   };
 
+  const SetupGuide = ({ status }: { status: { hasSalons: boolean, hasHairdressers: boolean, hasServices: boolean }}) => {
+    const setupItems = [
+        {
+            title: "Add your first Salon",
+            description: "Create a location where bookings can be made.",
+            href: "/locations",
+            isComplete: status.hasSalons,
+        },
+        {
+            title: "Add your first Hairdresser",
+            description: "Add a team member to assign to bookings.",
+            href: "/hairdressers/new",
+            isComplete: status.hasHairdressers,
+        },
+        {
+            title: "Add your first Service",
+            description: "Define a service that clients can book.",
+            href: "/services",
+            isComplete: status.hasServices,
+        },
+    ];
+
+    return (
+        <Card className="shadow-lg rounded-lg bg-primary/10 border-primary/30">
+            <CardHeader>
+                <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>Setup Guide</CardTitle>
+                <CardDescription className="font-body">Complete these steps to get your salon up and running.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ul className="space-y-4">
+                    {setupItems.map((item, index) => (
+                        <li key={item.title}>
+                            <Card className={cn("transition-all", item.isComplete ? "bg-background/50 border-dashed" : "hover:shadow-md")}>
+                                <div className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className={cn("flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center", item.isComplete ? "bg-green-500 text-white" : "bg-primary/20 text-primary")}>
+                                            {item.isComplete ? <CheckCircle size={20} /> : <span className="font-bold">{index + 1}</span>}
+                                        </div>
+                                        <div>
+                                            <h4 className={cn("font-semibold font-body", item.isComplete && "text-muted-foreground line-through")}>{item.title}</h4>
+                                            <p className="text-sm text-muted-foreground font-body">{item.description}</p>
+                                        </div>
+                                    </div>
+                                    {!item.isComplete && (
+                                        <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+                                            <Link href={item.href}>Go <ArrowRight className="ml-2 h-4 w-4"/></Link>
+                                        </Button>
+                                    )}
+                                </div>
+                            </Card>
+                        </li>
+                    ))}
+                </ul>
+            </CardContent>
+        </Card>
+    );
+  };
 
   return (
     <div className="space-y-8">
       <PageHeader title={pageTitle} description={pageDescription} icon={BarChartIcon} />
+      
+      {isAdmin && !isLoading && (!setupStatus.hasSalons || !setupStatus.hasHairdressers || !setupStatus.hasServices) && (
+        <SetupGuide status={setupStatus} />
+      )}
       
       {isAdmin && (
         <Card>
@@ -261,7 +331,7 @@ export default function DashboardPage() {
             <CardContent>
                 <div className="max-w-xs">
                     <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon Location</label>
-                    <Select value={filterSalonId} onValueChange={setFilterSalonId}>
+                    <Select value={filterSalonId} onValueChange={setFilterSalonId} disabled={!setupStatus.hasSalons}>
                         <SelectTrigger id="salon-filter"><SelectValue placeholder="Select Salon..." /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Salons</SelectItem>
@@ -418,5 +488,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
