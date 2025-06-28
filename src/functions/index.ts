@@ -105,7 +105,6 @@ export const createAdminUser = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
-      
       throw new HttpsError("internal", `An internal error occurred: ${error.message}`);
     }
   }
@@ -413,7 +412,6 @@ export const onBookingCreated = onDocumentCreated(
       // to send the actual email using the data from `bookingData`.
       // For now, we are just logging the intent.
       logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
-
     } catch (error: any) {
       logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
         errorMessage: error.message,

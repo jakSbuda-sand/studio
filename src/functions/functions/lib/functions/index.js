@@ -36,10 +36,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.helloWorld = exports.onHairdresserDeleted = exports.createHairdresserUser = exports.updateUserProfile = void 0;
+exports.helloWorld = exports.onBookingCreated = exports.onHairdresserDeleted = exports.createHairdresserUser = exports.updateUserProfile = exports.createAdminUser = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const https_2 = require("firebase-functions/v2/https");
-const firestore_1 = require("firebase-functions/v2/firestore"); // Added for Firestore triggers
+const firestore_1 = require("firebase-functions/v2/firestore");
 const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin SDK only once
@@ -48,6 +48,58 @@ if (admin.apps.length === 0) {
     logger.log("Firebase Admin SDK initialized.");
 }
 const db = admin.firestore();
+exports.createAdminUser = (0, https_1.onCall)({ region: "us-central1" }, async (request) => {
+    try {
+        logger.log("[createAdminUser] V2: Function started.", { data: request.data });
+        if (!request.auth || !request.auth.uid) {
+            logger.warn("[createAdminUser] V2: Unauthenticated call.");
+            throw new https_1.HttpsError("unauthenticated", "The function must be called while authenticated.");
+        }
+        const callerUid = request.auth.uid;
+        logger.log("[createAdminUser] V2: Verifying caller's admin role for UID:", callerUid);
+        const adminUserDocRef = db.collection("users").doc(callerUid);
+        const adminUserDoc = await adminUserDocRef.get();
+        if (!adminUserDoc.exists() || adminUserDoc.data()?.role !== "admin") {
+            logger.error("[createAdminUser] V2: Caller is not an admin.", { uid: callerUid, role: adminUserDoc.data()?.role });
+            throw new https_1.HttpsError("permission-denied", "Caller does not have admin privileges.");
+        }
+        logger.log("[createAdminUser] V2: Admin role verified.");
+        const { email, password, name } = request.data;
+        if (!email || !name) {
+            logger.error("[createAdminUser] V2: Missing required fields.", { email, name });
+            throw new https_1.HttpsError("invalid-argument", "Missing required fields: email and name.");
+        }
+        logger.log("[createAdminUser] V2: Creating new Auth user for email:", email);
+        const newUserRecord = await admin.auth().createUser({
+            email,
+            password: password || Math.random().toString(36).slice(-10),
+            displayName: name,
+            emailVerified: true,
+        });
+        logger.log("[createAdminUser] V2: Auth user created successfully with UID:", newUserRecord.uid);
+        logger.log("[createAdminUser] V2: Creating new Firestore user document for UID:", newUserRecord.uid);
+        await db.collection("users").doc(newUserRecord.uid).set({
+            name: name,
+            email: email,
+            role: "admin",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        logger.log("[createAdminUser] V2: Firestore doc created successfully.");
+        return { status: "success", message: `Admin user ${name} created successfully.` };
+    }
+    catch (error) {
+        logger.error("[createAdminUser] V2: An unexpected error occurred.", {
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorStack: error.stack,
+        });
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
+        throw new https_1.HttpsError("internal", `An internal error occurred: ${error.message}`);
+    }
+});
 exports.updateUserProfile = (0, https_1.onCall)({ region: "us-central1" }, async (request) => {
     logger.log("[updateUserProfile] Function started. Caller UID:", request.auth?.uid);
     logger.log("[updateUserProfile] Received data from client:", JSON.stringify(request.data));
@@ -110,14 +162,9 @@ exports.updateUserProfile = (0, https_1.onCall)({ region: "us-central1" }, async
             if (nameChanged && newName !== undefined) {
                 firestoreUserUpdate.name = newName;
             }
-            if (Object.keys(firestoreUserUpdate).length > 1) {
-                await userDocRef.update(firestoreUserUpdate);
-                logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
-                firestoreUpdated = true;
-            }
-            else {
-                logger.log("[updateUserProfile] Firestore 'users' (admin) doc for UID:", uid, "not updated. Avatar changes are Auth-only for admin, or no name change.");
-            }
+            await userDocRef.update(firestoreUserUpdate);
+            logger.log("[updateUserProfile] Firestore 'users' (admin) doc updated for UID:", uid, JSON.stringify(firestoreUserUpdate));
+            firestoreUpdated = true;
         }
         else {
             logger.log("[updateUserProfile] Admin user document does NOT exist for UID:", uid, "Checking for hairdresser doc.");
@@ -193,7 +240,7 @@ exports.createHairdresserUser = (0, https_1.onCall)({ region: "us-central1" }, a
         throw new https_1.HttpsError("internal", `Failed to verify admin privileges: ${error.message}`);
     }
     const data = request.data;
-    const requiredFields = ["email", "displayName", "assigned_locations", "availability", "working_days"];
+    const requiredFields = ["email", "displayName", "assigned_locations", "working_days"];
     for (const field of requiredFields) {
         if (!data[field]) {
             logger.error(`[createHairdresserUser] Missing required field: ${field}.`, { data: JSON.stringify(data) });
@@ -227,7 +274,6 @@ exports.createHairdresserUser = (0, https_1.onCall)({ region: "us-central1" }, a
             email: data.email,
             assigned_locations: data.assigned_locations || [],
             working_days: data.working_days || [],
-            availability: data.availability,
             workingHours: data.workingHours || {},
             must_reset_password: true,
             specialties: data.specialties || [],
@@ -281,6 +327,45 @@ exports.onHairdresserDeleted = (0, firestore_1.onDocumentDeleted)({
         }
         // Re-throwing the error will cause the function to report a failure if it's not a 'user-not-found' error.
         throw new https_1.HttpsError("internal", `Failed to delete Auth user ${hairdresserId}: ${error.message}`);
+    }
+});
+exports.onBookingCreated = (0, firestore_1.onDocumentCreated)({
+    document: "bookings/{bookingId}",
+    region: "us-central1",
+}, async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+        logger.log("[onBookingCreated] No data associated with the event.");
+        return;
+    }
+    const bookingData = snapshot.data();
+    const bookingId = event.params.bookingId;
+    logger.log(`[onBookingCreated] Triggered for new booking ID: ${bookingId}`, { bookingData });
+    if (!bookingData.clientEmail) {
+        logger.log(`[onBookingCreated] Booking ${bookingId} has no client email. Skipping notification.`);
+        return;
+    }
+    try {
+        const notificationRef = db.collection("notifications");
+        await notificationRef.add({
+            booking_id: bookingId,
+            type: "email",
+            recipient_email: bookingData.clientEmail,
+            status: "pending", // In a real app, another function would process this queue
+            created_at: admin.firestore.FieldValue.serverTimestamp(),
+            template_id: "booking_confirmation",
+        });
+        logger.log(`[onBookingCreated] Successfully created 'pending' notification record for booking ${bookingId}.`);
+        // In a real implementation, you would now integrate with an email service like SendGrid
+        // to send the actual email using the data from `bookingData`.
+        // For now, we are just logging the intent.
+        logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
+    }
+    catch (error) {
+        logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
+            errorMessage: error.message,
+            errorStack: error.stack,
+        });
     }
 });
 exports.helloWorld = (0, https_2.onRequest)({ region: "us-central1" }, (request, response) => {
