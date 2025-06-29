@@ -26,8 +26,8 @@ interface CreateHairdresserFunctionData {
   email: string;
   password?: string;
   displayName: string;
-  assigned_locations: string[];
-  working_days: DayOfWeek[];
+  assignedLocations: string[];
+  workingDays: DayOfWeek[];
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
@@ -95,8 +95,8 @@ export default function NewHairdresserPage() {
       email: data.email,
       password: tempPassword,
       displayName: data.name,
-      assigned_locations: data.assigned_locations,
-      working_days: workingDays,
+      assignedLocations: data.assigned_locations,
+      workingDays: workingDays,
       workingHours: data.workingHours,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
       profilePictureUrl: data.profilePictureUrl || undefined,

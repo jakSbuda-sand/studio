@@ -8,7 +8,7 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "../lib/types";
+import type {HairdresserWorkingHours, DayOfWeek} from "@/lib/types";
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
@@ -321,7 +321,6 @@ export const createHairdresserUser = onCall(
       logger.log("[createHairdresserUser] Auth user rollback successful for UID:", newUserRecord.uid);
       throw new HttpsError("internal", "Failed to save user information to the database. The user was not created.");
     }
-    
     return {
       status: "success",
       userId: newUserRecord.uid,
@@ -405,7 +404,6 @@ export const onBookingCreated = onDocumentCreated(
       // to send the actual email using the data from `bookingData`.
       // For now, we are just logging the intent.
       logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
-
     } catch (error: any) {
       logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
         errorMessage: error.message,

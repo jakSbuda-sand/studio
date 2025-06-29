@@ -8,7 +8,7 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "@/lib/types";
+import type {HairdresserWorkingHours, DayOfWeek} from "../lib/types";
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
@@ -28,8 +28,8 @@ interface CreateHairdresserData {
   email: string;
   password?: string;
   displayName: string;
-  assigned_locations: string[];
-  working_days: DayOfWeek[];
+  assignedLocations: string[];
+  workingDays: DayOfWeek[];
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
@@ -247,7 +247,7 @@ export const updateUserProfile = onCall(
       }
       throw new HttpsError("internal", `Failed to update profile in Firestore: ${error.message}`);
     }
-  },
+  }
 );
 
 export const createHairdresserUser = onCall(
@@ -272,10 +272,10 @@ export const createHairdresserUser = onCall(
 
     // Validate input data
     const data = request.data;
-    const {email, displayName, assigned_locations, working_days} = data;
+    const {email, displayName, assignedLocations, workingDays} = data;
     const password = data.password || Math.random().toString(36).slice(-10);
 
-    if (!email || !displayName || !assigned_locations || !working_days || password.length < 6) {
+    if (!email || !displayName || !assignedLocations || !workingDays || password.length < 6) {
       throw new HttpsError("invalid-argument", "Missing or invalid data. Check name, email, password, locations, and working days.");
     }
     logger.log("[createHairdresserUser] Input data validated for email:", email);
@@ -304,8 +304,8 @@ export const createHairdresserUser = onCall(
         user_id: newUserRecord.uid,
         name: displayName,
         email: email,
-        assigned_locations: assigned_locations,
-        working_days: working_days,
+        assigned_locations: assignedLocations,
+        working_days: workingDays,
         workingHours: data.workingHours || {},
         must_reset_password: true,
         specialties: data.specialties || [],
@@ -321,7 +321,6 @@ export const createHairdresserUser = onCall(
       logger.log("[createHairdresserUser] Auth user rollback successful for UID:", newUserRecord.uid);
       throw new HttpsError("internal", "Failed to save user information to the database. The user was not created.");
     }
-    
     return {
       status: "success",
       userId: newUserRecord.uid,
@@ -329,7 +328,6 @@ export const createHairdresserUser = onCall(
     };
   }
 );
-
 
 export const onHairdresserDeleted = onDocumentDeleted(
   {
@@ -405,7 +403,6 @@ export const onBookingCreated = onDocumentCreated(
       // to send the actual email using the data from `bookingData`.
       // For now, we are just logging the intent.
       logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
-
     } catch (error: any) {
       logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
         errorMessage: error.message,
@@ -415,11 +412,10 @@ export const onBookingCreated = onDocumentCreated(
   }
 );
 
-
 export const helloWorld = onRequest(
   {region: "us-central1"},
   (request, response) => {
     logger.info("[helloWorld] Function triggered!", {timestamp: new Date().toISOString()});
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
-  },
+  }
 );
