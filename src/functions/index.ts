@@ -63,7 +63,7 @@ export const createAdminUser = onCall(
       const adminUserDocRef = db.collection("users").doc(callerUid);
       const adminUserDoc = await adminUserDocRef.get();
 
-      if (!adminUserDoc.exists() || adminUserDoc.data()?.role !== "admin") {
+      if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
         logger.error("[createAdminUser] V2: Caller is not an admin.", {uid: callerUid, role: adminUserDoc.data()?.role});
         throw new HttpsError("permission-denied", "Caller does not have admin privileges.");
       }

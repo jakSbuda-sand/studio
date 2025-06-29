@@ -79,7 +79,7 @@ export default function NewHairdresserPage() {
         return;
     }
     setIsLoading(true);
-    const tempPassword = data.initialPassword || generateTemporaryPassword();
+    const tempPassword = data.password || generateTemporaryPassword();
     
     // Derive working_days from the structured workingHours
     const workingDays: DayOfWeek[] = [];

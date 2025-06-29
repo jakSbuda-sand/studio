@@ -59,7 +59,7 @@ exports.createAdminUser = (0, https_1.onCall)({ region: "us-central1" }, async (
         logger.log("[createAdminUser] V2: Verifying caller's admin role for UID:", callerUid);
         const adminUserDocRef = db.collection("users").doc(callerUid);
         const adminUserDoc = await adminUserDocRef.get();
-        if (!adminUserDoc.exists() || adminUserDoc.data()?.role !== "admin") {
+        if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
             logger.error("[createAdminUser] V2: Caller is not an admin.", { uid: callerUid, role: adminUserDoc.data()?.role });
             throw new https_1.HttpsError("permission-denied", "Caller does not have admin privileges.");
         }

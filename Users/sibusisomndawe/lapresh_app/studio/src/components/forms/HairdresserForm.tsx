@@ -47,7 +47,7 @@ const daysOfWeek: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "
 const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
-  initialPassword: z.string().min(6, {message: "Initial password must be at least 6 characters."}).optional().or(z.literal('')),
+  password: z.string().min(6, {message: "Password must be at least 6 characters."}).optional().or(z.literal('')),
   assigned_locations: z.array(z.string()).nonempty({ message: "Please select at least one salon." }),
   specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
@@ -88,7 +88,7 @@ export function HairdresserForm({
     const baseValues: Partial<HairdresserFormValues> = {
       name: "",
       email: "",
-      initialPassword: "",
+      password: "",
       assigned_locations: [],
       specialties: "",
       profilePictureUrl: "",
@@ -109,7 +109,7 @@ export function HairdresserForm({
       return {
         name: initialData.name || "",
         email: initialData.email || "",
-        initialPassword: "",
+        password: "",
         assigned_locations: initialData.assigned_locations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
         profilePictureUrl: initialData.profilePictureUrl || "",
@@ -177,7 +177,7 @@ export function HairdresserForm({
                 {!isEditing && (
                 <FormField
                     control={form.control}
-                    name="initialPassword"
+                    name="password"
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Initial Password</FormLabel>
