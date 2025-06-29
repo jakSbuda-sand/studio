@@ -8,7 +8,7 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "../lib/types";
+import type {HairdresserWorkingHours, DayOfWeek} from "@/lib/types";
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
