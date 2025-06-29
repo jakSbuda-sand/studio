@@ -50,41 +50,51 @@ interface UpdateUserProfileResult {
 export const createAdminUser = onCall(
   {region: "us-central1"},
   async (request: CallableRequest<CreateAdminData>) => {
+    // 1. Authenticate and authorize the caller
+    logger.log("[createAdminUser] Function started. Verifying caller...");
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
+    }
+    const callerUid = request.auth.uid;
     try {
-      logger.log("[createAdminUser] V2: Function started.", {data: request.data});
-
-      if (!request.auth || !request.auth.uid) {
-        logger.warn("[createAdminUser] V2: Unauthenticated call.");
-        throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
-      }
-      const callerUid = request.auth.uid;
-
-      logger.log("[createAdminUser] V2: Verifying caller's admin role for UID:", callerUid);
       const adminUserDocRef = db.collection("users").doc(callerUid);
       const adminUserDoc = await adminUserDocRef.get();
-
       if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
-        logger.error("[createAdminUser] V2: Caller is not an admin.", {uid: callerUid, role: adminUserDoc.data()?.role});
         throw new HttpsError("permission-denied", "Caller does not have admin privileges.");
       }
-      logger.log("[createAdminUser] V2: Admin role verified.");
+    } catch (error: any) {
+      logger.error("[createAdminUser] Error verifying admin role:", {uid: callerUid, error});
+      throw new HttpsError("internal", "Failed to verify admin privileges.");
+    }
+    logger.log("[createAdminUser] Caller verified as admin.");
 
-      const {email, password, name} = request.data;
-      if (!email || !name) {
-        logger.error("[createAdminUser] V2: Missing required fields.", {email, name});
-        throw new HttpsError("invalid-argument", "Missing required fields: email and name.");
-      }
+    // 2. Validate input data
+    const {email, password, name} = request.data;
+    if (!email || !password || !name || password.length < 6) {
+      throw new HttpsError("invalid-argument", "Request must include a valid email, name, and a password of at least 6 characters.");
+    }
+    logger.log("[createAdminUser] Input data validated for email:", email);
 
-      logger.log("[createAdminUser] V2: Creating new Auth user for email:", email);
-      const newUserRecord = await admin.auth().createUser({
-        email,
-        password: password || Math.random().toString(36).slice(-10),
+    // 3. Create the new Firebase Auth user
+    let newUserRecord;
+    try {
+      newUserRecord = await admin.auth().createUser({
+        email: email,
+        password: password,
         displayName: name,
         emailVerified: true,
       });
-      logger.log("[createAdminUser] V2: Auth user created successfully with UID:", newUserRecord.uid);
+      logger.log("[createAdminUser] Auth user created successfully with UID:", newUserRecord.uid);
+    } catch (error: any) {
+      logger.error("[createAdminUser] Error creating Firebase Auth user:", {email, error});
+      if (error.code === "auth/email-already-exists") {
+        throw new HttpsError("already-exists", `The email address "${email}" is already in use.`);
+      }
+      throw new HttpsError("internal", "An unexpected error occurred while creating the new user account.");
+    }
 
-      logger.log("[createAdminUser] V2: Creating new Firestore user document for UID:", newUserRecord.uid);
+    // 4. Create the corresponding Firestore user document
+    try {
       await db.collection("users").doc(newUserRecord.uid).set({
         name: name,
         email: email,
@@ -92,21 +102,17 @@ export const createAdminUser = onCall(
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      logger.log("[createAdminUser] V2: Firestore doc created successfully.");
-
-      return {status: "success", message: `Admin user ${name} created successfully.`};
+      logger.log("[createAdminUser] Firestore doc created successfully for UID:", newUserRecord.uid);
     } catch (error: any) {
-      logger.error("[createAdminUser] V2: An unexpected error occurred.", {
-        errorMessage: error.message,
-        errorCode: error.code,
-        errorStack: error.stack,
-      });
-
-      if (error instanceof HttpsError) {
-        throw error;
-      }
-      throw new HttpsError("internal", `An internal error occurred: ${error.message}`);
+      logger.error("[createAdminUser] CRITICAL: Firestore doc creation failed after Auth user was created. Rolling back.", {uid: newUserRecord.uid, error});
+      // Rollback Auth user creation if Firestore write fails
+      await admin.auth().deleteUser(newUserRecord.uid);
+      logger.log("[createAdminUser] Auth user rollback successful for UID:", newUserRecord.uid);
+      throw new HttpsError("internal", "Failed to save user information to the database. The user was not created.");
     }
+
+    // 5. Return success
+    return {status: "success", message: `Admin user "${name}" created successfully.`};
   }
 );
 
@@ -247,72 +253,59 @@ export const updateUserProfile = onCall(
 export const createHairdresserUser = onCall(
   {region: "us-central1"},
   async (request: CallableRequest<CreateHairdresserData>) => {
-    logger.log("[createHairdresserUser] Function execution started.", {timestamp: new Date().toISOString()});
-    logger.log("[createHairdresserUser] Received data:", JSON.stringify(request.data));
-
-    if (!request.auth) {
-      logger.error("[createHairdresserUser] Function called while unauthenticated.");
-      throw new HttpsError(
-        "unauthenticated",
-        "The function must be called while authenticated.",
-      );
+    logger.log("[createHairdresserUser] Function started. Verifying caller...");
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
     }
-
     const callerUid = request.auth.uid;
-    const adminUserDocRef = db.collection("users").doc(callerUid);
-
     try {
+      const adminUserDocRef = db.collection("users").doc(callerUid);
       const adminUserDoc = await adminUserDocRef.get();
       if (!adminUserDoc.exists || adminUserDoc.data()?.role !== "admin") {
-        logger.error("[createHairdresserUser] Caller is not an admin. Role:", adminUserDoc.data()?.role);
-        throw new HttpsError(
-          "permission-denied",
-          "Caller does not have admin privileges.",
-        );
+        throw new HttpsError("permission-denied", "Caller does not have admin privileges.");
       }
     } catch (error: any) {
-      logger.error("[createHairdresserUser] Error verifying admin role:", {error});
-      if (error instanceof HttpsError) throw error;
-      throw new HttpsError("internal", `Failed to verify admin privileges: ${error.message}`);
+      logger.error("[createHairdresserUser] Error verifying admin role:", {uid: callerUid, error});
+      throw new HttpsError("internal", "Failed to verify admin privileges.");
     }
+    logger.log("[createHairdresserUser] Caller verified as admin.");
 
+    // Validate input data
     const data = request.data;
-    const requiredFields: Array<keyof CreateHairdresserData> = ["email", "displayName", "assigned_locations", "working_days"];
-    for (const field of requiredFields) {
-      if (!data[field]) {
-        logger.error(`[createHairdresserUser] Missing required field: ${field}.`, {data: JSON.stringify(data)});
-        throw new HttpsError("invalid-argument", `Missing required field: ${field}.`);
-      }
+    const {email, displayName, assigned_locations, working_days} = data;
+    const password = data.password || Math.random().toString(36).slice(-10);
+
+    if (!email || !displayName || !assigned_locations || !working_days || password.length < 6) {
+      throw new HttpsError("invalid-argument", "Missing or invalid data. Check name, email, password, locations, and working days.");
     }
+    logger.log("[createHairdresserUser] Input data validated for email:", email);
 
-    const temporaryPassword = data.password || Math.random().toString(36).slice(-10);
-
+    // Create Auth user
     let newUserRecord;
     try {
       newUserRecord = await admin.auth().createUser({
-        email: data.email,
-        password: temporaryPassword,
-        displayName: data.displayName,
-        emailVerified: false,
+        email: email,
+        password: password,
+        displayName: displayName,
         photoURL: data.profilePictureUrl || undefined,
       });
-      logger.log("[createHairdresserUser] Successfully created Firebase Auth user with UID:", newUserRecord.uid);
+      logger.log("[createHairdresserUser] Auth user created successfully with UID:", newUserRecord.uid);
     } catch (error: any) {
-      logger.error("[createHairdresserUser] Error creating Firebase Auth user:", {error});
+      logger.error("[createHairdresserUser] Error creating Firebase Auth user:", {email, error});
       if (error.code === "auth/email-already-exists") {
-        throw new HttpsError("already-exists", "The email address is already in use by another account.");
+        throw new HttpsError("already-exists", `The email address "${email}" is already in use.`);
       }
-      throw new HttpsError("internal", `Error creating Firebase Auth user: ${error.message}`);
+      throw new HttpsError("internal", "An unexpected error occurred while creating the new user account.");
     }
 
-    const newHairdresserDocRef = db.collection("hairdressers").doc(newUserRecord.uid);
+    // Create Firestore document
     try {
       const hairdresserDocData = {
         user_id: newUserRecord.uid,
-        name: data.displayName,
-        email: data.email,
-        assigned_locations: data.assigned_locations || [],
-        working_days: data.working_days || [],
+        name: displayName,
+        email: email,
+        assigned_locations: assigned_locations,
+        working_days: working_days,
         workingHours: data.workingHours || {},
         must_reset_password: true,
         specialties: data.specialties || [],
@@ -320,23 +313,23 @@ export const createHairdresserUser = onCall(
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
-      await newHairdresserDocRef.set(hairdresserDocData);
-      logger.log("[createHairdresserUser] Successfully created Firestore document for hairdresser:", newUserRecord.uid);
-
-      return {
-        status: "success",
-        userId: newUserRecord.uid,
-        message: `Hairdresser ${data.displayName} created successfully. Initial password has been set; user will be prompted to change it.`,
-      };
+      await db.collection("hairdressers").doc(newUserRecord.uid).set(hairdresserDocData);
+      logger.log("[createHairdresserUser] Firestore doc created successfully for UID:", newUserRecord.uid);
     } catch (error: any) {
-      logger.error("[createHairdresserUser] Error creating Firestore document for hairdresser:", {error});
-      await admin.auth().deleteUser(newUserRecord.uid).catch((deleteError: any) => {
-        logger.error("[createHairdresserUser] CRITICAL: Error deleting orphaned auth user after Firestore failure:", {deleteError});
-      });
-      throw new HttpsError("internal", `Error creating Firestore document for hairdresser: ${error.message}. Associated Auth user cleanup attempted.`);
+      logger.error("[createHairdresserUser] CRITICAL: Firestore doc creation failed. Rolling back.", {uid: newUserRecord.uid, error});
+      await admin.auth().deleteUser(newUserRecord.uid);
+      logger.log("[createHairdresserUser] Auth user rollback successful for UID:", newUserRecord.uid);
+      throw new HttpsError("internal", "Failed to save user information to the database. The user was not created.");
     }
-  },
+    
+    return {
+      status: "success",
+      userId: newUserRecord.uid,
+      message: `Hairdresser "${displayName}" created successfully. They will be prompted to change their password on first login.`,
+    };
+  }
 );
+
 
 export const onHairdresserDeleted = onDocumentDeleted(
   {
@@ -412,6 +405,7 @@ export const onBookingCreated = onDocumentCreated(
       // to send the actual email using the data from `bookingData`.
       // For now, we are just logging the intent.
       logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
+
     } catch (error: any) {
       logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
         errorMessage: error.message,
