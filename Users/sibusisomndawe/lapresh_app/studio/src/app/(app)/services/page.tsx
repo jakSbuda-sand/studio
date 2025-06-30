@@ -25,7 +25,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { db, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, Timestamp, query, orderBy as firestoreOrderBy } from "@/lib/firebase";
+import { db, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, Timestamp, query, orderBy as firestoreOrderBy, where, limit } from "@/lib/firebase";
 
 export default function ServicesPage() {
   const { user } = useAuth();
@@ -159,6 +159,20 @@ export default function ServicesPage() {
   const handleDeleteService = async (serviceId: string, serviceName: string) => {
     setIsSubmitting(true);
     try {
+      const bookingsQuery = query(collection(db, "bookings"), where("serviceId", "==", serviceId), limit(1));
+      const bookingSnapshot = await getDocs(bookingsQuery);
+
+      if (!bookingSnapshot.empty) {
+        toast({
+          title: "Deletion Blocked",
+          description: `Cannot delete "${serviceName}" because it is part of existing bookings. Please deactivate it instead if you no longer offer this service.`,
+          variant: "destructive",
+          duration: 7000,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
       await deleteDoc(doc(db, "services", serviceId));
       setServices(prev => prev.filter(s => s.id !== serviceId));
       toast({ title: "Service Deleted", description: `Service "${serviceName}" has been deleted.`, variant: "default" });
@@ -280,7 +294,7 @@ export default function ServicesPage() {
                           <AlertDialogHeader>
                             <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle>
                             <AlertDialogDescription className="font-body">
-                              This action will permanently delete the service "{service.name}". This action cannot be undone.
+                              This will permanently delete the service "{service.name}". This action cannot be undone and will fail if the service is associated with any past or present bookings.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -302,5 +316,3 @@ export default function ServicesPage() {
     </div>
   );
 }
-
-    
