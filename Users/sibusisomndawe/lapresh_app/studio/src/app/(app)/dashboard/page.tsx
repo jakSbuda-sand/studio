@@ -105,19 +105,12 @@ export default function DashboardPage() {
             const baseBookingsQuery = query(
               collection(db, "bookings"),
               where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-              where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
-              orderBy("appointmentDateTime", "asc")
+              where("appointmentDateTime", "<=", Timestamp.fromDate(endDate))
             );
 
             bookingsQuery = filterSalonId === 'all' 
                 ? baseBookingsQuery 
-                : query(
-                    collection(db, "bookings"), 
-                    where("salonId", "==", filterSalonId),
-                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
-                    orderBy("appointmentDateTime", "asc")
-                  );
+                : query(baseBookingsQuery, where("salonId", "==", filterSalonId));
             
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)));
         
@@ -171,12 +164,12 @@ export default function DashboardPage() {
             
             newClients = newClientSnapshot ? newClientSnapshot.size : 0;
             
-            const daysInRange = dateRangeFilter === '30d' ? 30 : (dateRangeFilter === '7d' ? 7 : 1);
+            const daysInRange = dateRangeFilter === 'today' ? 1 : (dateRangeFilter === '7d' ? 7 : 30);
             chartData = Array.from({ length: daysInRange }).map((_, i) => {
-                const date = subDays(today, (daysInRange - 1) - i);
+                const date = subDays(today, daysInRange - 1 - i);
                 return {
                     date: format(date, "MMM d"),
-                    bookings: allBookings.filter(b => isWithinInterval(b.appointmentDateTime, { start: startOfDay(date), end: endOfDay(date) })).length,
+                    bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
                 };
             });
 

@@ -27,9 +27,9 @@ export interface Hairdresser {
   userId: string;
   name: string;
   email: string;
-  assigned_locations: string[];
+  assignedLocations: string[];
   specialties: string[];
-  working_days: DayOfWeek[];
+  workingDays: DayOfWeek[];
   workingHours?: HairdresserWorkingHours;
   profilePictureUrl?: string;
   must_reset_password?: boolean;
@@ -126,9 +126,9 @@ export interface ServiceDoc {
 export interface HairdresserDoc {
   name: string;
   email: string;
-  user_id: string;
-  assigned_locations: string[];
-  working_days: DayOfWeek[];
+  userId: string;
+  assignedLocations: string[];
+  workingDays: DayOfWeek[];
   workingHours?: HairdresserWorkingHours;
   must_reset_password: boolean;
   specialties?: string[];

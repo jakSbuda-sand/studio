@@ -62,12 +62,12 @@ export default function HairdresserDetailPage() {
         const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
         const fetchedHairdresser: Hairdresser = {
             id: hairdresserDocSnap.id,
-            userId: hairdresserData.user_id,
+            userId: hairdresserData.userId,
             name: hairdresserData.name,
             email: hairdresserData.email,
-            assigned_locations: hairdresserData.assigned_locations || [],
+            assignedLocations: hairdresserData.assignedLocations || [],
             specialties: hairdresserData.specialties || [],
-            working_days: hairdresserData.working_days || [],
+            workingDays: hairdresserData.workingDays || [],
             workingHours: hairdresserData.workingHours || {},
             profilePictureUrl: hairdresserData.profilePictureUrl || "",
             must_reset_password: hairdresserData.must_reset_password || false,
@@ -131,16 +131,16 @@ export default function HairdresserDetailPage() {
     const hairdresserRef = doc(db, "hairdressers", hairdresser.id);
     const updateData: Partial<HairdresserDoc> = {
       name: data.name,
-      assigned_locations: data.assigned_locations,
+      assignedLocations: data.assigned_locations,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
-      working_days: workingDays,
+      workingDays: workingDays,
       workingHours: data.workingHours || {},
       profilePictureUrl: data.profilePictureUrl || "",
       updatedAt: serverTimestamp() as Timestamp,
     };
 
     try {
-      await updateDoc(hairdresserRef, updateData);
+      await updateDoc(hairdresserRef, updateData as any);
       setHairdresser(prev => prev ? { ...prev, ...updateData, updatedAt: Timestamp.now() } as Hairdresser : null);
       toast({ title: "Hairdresser Updated", description: `${data.name} has been updated.` });
       setIsEditFormOpen(false);
@@ -297,7 +297,7 @@ export default function HairdresserDetailPage() {
               </CardHeader>
               <CardContent className="pt-6 space-y-3 font-body text-sm">
                   <div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span className="text-foreground">{hairdresser.email}</span></div>
-                  <div className="flex items-start gap-2"><Store className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Salons:</strong><div className="flex flex-wrap mt-1">{hairdresser.assigned_locations.map(id => {const salon = salons.find(s=>s.id===id); return <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon?.name || 'Unknown'}</Badge>})}</div></div></div>
+                  <div className="flex items-start gap-2"><Store className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Salons:</strong><div className="flex flex-wrap mt-1">{hairdresser.assignedLocations.map(id => {const salon = salons.find(s=>s.id===id); return <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon?.name || 'Unknown'}</Badge>})}</div></div></div>
                   <div className="flex items-start gap-2"><Sparkles className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Specialties:</strong> {hairdresser.specialties?.join(", ") || "N/A"}</div></div>
                   
                   <div className="flex items-start gap-2">
