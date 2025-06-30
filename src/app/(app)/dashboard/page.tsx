@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
 import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
-import { format, subDays, startOfDay, endOfDay, isWithinInterval } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, isWithinInterval, isSameDay } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
