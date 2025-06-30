@@ -5,12 +5,11 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ServiceForm, type ServiceFormValues } from "@/components/forms/ServiceForm";
 import type { Service, Salon, LocationDoc, ServiceDoc, User } from "@/lib/types";
-import { Scissors, PlusCircle, Edit3, Trash2, Loader2, PackageOpen, ShieldAlert } from "lucide-react";
+import { Scissors, PlusCircle, Edit3, Trash2, Loader2, PackageOpen, ShieldAlert, DollarSign, Clock, Store } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -227,61 +226,68 @@ export default function ServicesPage() {
           </CardFooter>
         </Card>
       ) : (
-        <Card className="shadow-lg rounded-lg">
-          <CardHeader><CardTitle className="font-headline">Available Services</CardTitle><CardDescription className="font-body">A list of all services offered across your salons.</CardDescription></CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="font-headline">Service Name</TableHead>
-                  <TableHead className="font-headline">Salons</TableHead>
-                  <TableHead className="font-headline text-right">Duration (min)</TableHead>
-                  <TableHead className="font-headline text-right">Price (R)</TableHead>
-                  <TableHead className="font-headline text-center">Status</TableHead>
-                  <TableHead className="text-right font-headline">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {services.map((service) => (
-                  <TableRow key={service.id} className="font-body">
-                    <TableCell>
-                      <div className="font-medium text-foreground">{service.name}</div>
-                      {service.description && <div className="text-xs text-muted-foreground truncate max-w-xs">{service.description}</div>}
-                    </TableCell>
-                    <TableCell><div className="flex flex-wrap">{getSalonNames(service.salonIds)}</div></TableCell>
-                    <TableCell className="text-right">{service.durationMinutes}</TableCell>
-                    <TableCell className="text-right">{service.price.toFixed(2)}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={service.isActive ? "default" : "outline"} className={service.isActive ? "bg-green-500/20 text-green-700 border-green-500/30" : "bg-red-500/10 text-red-700 border-red-500/20"}>
-                        {service.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => openEditForm(service)} className="hover:text-primary" disabled={isSubmitting}>
-                        <Edit3 className="h-4 w-4" /> <span className="sr-only">Edit</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isSubmitting}><Trash2 className="h-4 w-4" /> <span className="sr-only">Delete</span></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle><AlertDialogDescription className="font-body">This will permanently delete the service "{service.name}". This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteService(service.id, service.name)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
-                              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete Service"}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {services.map((service) => (
+            <Card key={service.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg overflow-hidden">
+              <CardHeader className="bg-secondary/30 p-4">
+                <div className="flex justify-between items-start gap-2">
+                  <CardTitle className="font-headline text-lg text-foreground">{service.name}</CardTitle>
+                  <Badge variant={service.isActive ? "default" : "outline"} className={`whitespace-nowrap ${service.isActive ? "bg-green-500/20 text-green-700 border-green-500/30" : "bg-red-500/10 text-red-700 border-red-500/20"}`}>
+                    {service.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <CardDescription className="font-body text-xs text-muted-foreground pt-1 truncate h-4">
+                  {service.description || "No description provided."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3 font-body flex-grow">
+                <div className="flex items-center text-sm text-foreground">
+                    <DollarSign className="mr-2 h-4 w-4 text-primary" />
+                    <span>Price: R {service.price.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center text-sm text-foreground">
+                    <Clock className="mr-2 h-4 w-4 text-primary" />
+                    <span>Duration: {service.durationMinutes} minutes</span>
+                </div>
+                 <div className="flex items-start text-sm">
+                    <Store className="mr-2 h-4 w-4 text-primary mt-1 shrink-0" />
+                    <div className="flex flex-wrap gap-1">
+                        {getSalonNames(service.salonIds)}
+                    </div>
+                </div>
+              </CardContent>
+              <CardFooter className="border-t p-3 bg-muted/20 flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => openEditForm(service)} className="font-body" disabled={isSubmitting}>
+                  <Edit3 className="mr-2 h-4 w-4" /> Edit
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" className="font-body" disabled={isSubmitting}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription className="font-body">
+                        This action will permanently delete the service "{service.name}". This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="font-body" disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteService(service.id, service.name)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-body" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Delete"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );
 }
+
+    
