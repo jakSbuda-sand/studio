@@ -35,7 +35,8 @@ import {
   Timestamp,
   query,
   where,
-  limit
+  limit,
+  orderBy
 } from "firebase/firestore";
 
 export default function LocationsPage() {
@@ -49,8 +50,6 @@ export default function LocationsPage() {
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      // router.replace('/dashboard');
-      // No need to fetch data if not admin
       setIsLoading(false);
       return;
     }
@@ -59,12 +58,13 @@ export default function LocationsPage() {
       setIsLoading(true);
       try {
         const locationsCol = collection(db, "locations");
-        const locationSnapshot = await getDocs(locationsCol);
+        const locationsQuery = query(locationsCol, orderBy("name", "asc"));
+        const locationSnapshot = await getDocs(locationsQuery);
         const locationsList = locationSnapshot.docs.map(doc => ({
           id: doc.id,
           ...(doc.data() as LocationDoc)
-        } as Salon)); // Cast to Salon, ensuring Timestamps are handled if needed by UI
-        setSalons(locationsList.sort((a,b) => a.name.localeCompare(b.name)));
+        } as Salon));
+        setSalons(locationsList);
       } catch (error) {
         console.error("Error fetching salons: ", error);
         toast({ title: "Error Fetching Salons", description: "Could not load salon locations from the database.", variant: "destructive" });
@@ -147,7 +147,6 @@ export default function LocationsPage() {
   const handleDeleteSalon = async (id: string, name: string) => {
     setIsSubmitting(true);
     try {
-      // Safety checks before deletion
       const hairdressersQuery = query(collection(db, "hairdressers"), where("assigned_locations", "array-contains", id), limit(1));
       const servicesQuery = query(collection(db, "services"), where("salonIds", "array-contains", id), limit(1));
       const bookingsQuery = query(collection(db, "bookings"), where("salonId", "==", id), limit(1));
@@ -226,7 +225,7 @@ export default function LocationsPage() {
           <Loader2 className="h-10 w-10 animate-spin text-primary" /> <span className="ml-3 text-lg font-body">Loading Salons...</span>
         </div>
       ) : salons.length === 0 ? (
-         <Card className="text-center py-12 shadow-lg rounded-lg">
+        <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader>
             <Store className="mx-auto h-16 w-16 text-muted-foreground" />
             <CardTitle className="mt-4 text-2xl font-headline">No Salon Locations Yet</CardTitle>
@@ -262,11 +261,6 @@ export default function LocationsPage() {
                     <Clock className="mr-2 h-4 w-4 text-primary" />
                     <span>{salon.operatingHours}</span>
                   </div>
-                )}
-                 {salon.createdAt && (
-                  <p className="text-xs text-muted-foreground pt-2">
-                    Added: {(salon.createdAt as Timestamp).toDate().toLocaleDateString()}
-                  </p>
                 )}
               </CardContent>
               <CardFooter className="border-t pt-4 flex justify-end gap-2 bg-muted/20 p-4">

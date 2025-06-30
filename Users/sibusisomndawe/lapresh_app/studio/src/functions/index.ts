@@ -301,11 +301,11 @@ export const createHairdresserUser = onCall(
     // Create Firestore document
     try {
       const hairdresserDocData = {
-        user_id: newUserRecord.uid,
+        userId: newUserRecord.uid,
         name: displayName,
         email: email,
-        assigned_locations: assignedLocations,
-        working_days: workingDays,
+        assignedLocations: assignedLocations,
+        workingDays: workingDays,
         workingHours: data.workingHours || {},
         must_reset_password: true,
         specialties: data.specialties || [],

@@ -62,12 +62,12 @@ export default function HairdresserDetailPage() {
         const hairdresserData = hairdresserDocSnap.data() as HairdresserDoc;
         const fetchedHairdresser: Hairdresser = {
             id: hairdresserDocSnap.id,
-            userId: hairdresserData.user_id,
+            userId: hairdresserData.userId,
             name: hairdresserData.name,
             email: hairdresserData.email,
-            assigned_locations: hairdresserData.assigned_locations || [],
+            assignedLocations: hairdresserData.assignedLocations || [],
             specialties: hairdresserData.specialties || [],
-            working_days: hairdresserData.working_days || [],
+            workingDays: hairdresserData.workingDays || [],
             workingHours: hairdresserData.workingHours || {},
             profilePictureUrl: hairdresserData.profilePictureUrl || "",
             must_reset_password: hairdresserData.must_reset_password || false,
@@ -131,16 +131,16 @@ export default function HairdresserDetailPage() {
     const hairdresserRef = doc(db, "hairdressers", hairdresser.id);
     const updateData: Partial<HairdresserDoc> = {
       name: data.name,
-      assigned_locations: data.assigned_locations,
+      assignedLocations: data.assigned_locations,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
-      working_days: workingDays,
+      workingDays: workingDays,
       workingHours: data.workingHours || {},
       profilePictureUrl: data.profilePictureUrl || "",
       updatedAt: serverTimestamp() as Timestamp,
     };
 
     try {
-      await updateDoc(hairdresserRef, updateData);
+      await updateDoc(hairdresserRef, updateData as any);
       setHairdresser(prev => prev ? { ...prev, ...updateData, updatedAt: Timestamp.now() } as Hairdresser : null);
       toast({ title: "Hairdresser Updated", description: `${data.name} has been updated.` });
       setIsEditFormOpen(false);
@@ -279,130 +279,124 @@ export default function HairdresserDetailPage() {
           </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column for Profile */}
-        <div className="lg:col-span-1 space-y-6">
-            <Card className="shadow-lg rounded-lg">
-                <CardHeader className="bg-secondary/30">
-                <div className="flex items-center gap-4">
-                    <Avatar className="h-16 w-16 border-2 border-primary">
-                        <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait"/>
-                        <AvatarFallback className="bg-primary/20 text-primary font-headline text-xl">
-                            {hairdresserInitials}
-                        </AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <CardTitle className="font-headline text-2xl text-foreground">{hairdresser.name}</CardTitle>
-                        {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs my-1">Password Reset Required</Badge>}
-                    </div>
-                </div>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-3 font-body text-sm">
-                    <div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span className="text-foreground">{hairdresser.email}</span></div>
-                    <div className="flex items-start gap-2"><Store className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Salons:</strong><div className="flex flex-wrap mt-1">{hairdresser.assigned_locations.map(id => {const salon = salons.find(s=>s.id===id); return <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon?.name || 'Unknown'}</Badge>})}</div></div></div>
-                    <div className="flex items-start gap-2"><Sparkles className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Specialties:</strong> {hairdresser.specialties?.join(", ") || "N/A"}</div></div>
-                    
-                    <div className="flex items-start gap-2">
-                        <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div>
-                            <strong className="font-medium">Working Hours:</strong>
-                            {hairdresser.workingHours ? (
-                                <ul className="mt-1 space-y-1 text-xs">
-                                {daysOfWeek.map((day) => {
-                                    const hours = hairdresser.workingHours?.[day];
-                                    return (
-                                    <li key={day} className="flex justify-between items-center">
-                                        <span className="w-12 text-muted-foreground">{day.substring(0, 3)}:</span>
-                                        {hours && !hours.isOff && hours.start && hours.end ? (
-                                        <span className="font-mono text-foreground text-right flex-1">{hours.start} - {hours.end}</span>
-                                        ) : (
-                                        <span className="text-muted-foreground/70 text-right flex-1">Day Off</span>
-                                        )}
-                                    </li>
-                                    );
-                                })}
-                                </ul>
-                            ) : (
-                                <p className="text-muted-foreground text-xs mt-1">Not Set</p>
-                            )}
-                        </div>
-                    </div>
+      <div className="max-w-5xl mx-auto space-y-6">
+          <Card className="shadow-lg rounded-lg">
+              <CardHeader className="bg-secondary/30">
+              <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16 border-2 border-primary">
+                      <AvatarImage src={hairdresser.profilePictureUrl} alt={hairdresser.name} data-ai-hint="person portrait"/>
+                      <AvatarFallback className="bg-primary/20 text-primary font-headline text-xl">
+                          {hairdresserInitials}
+                      </AvatarFallback>
+                  </Avatar>
+                  <div>
+                      <CardTitle className="font-headline text-2xl text-foreground">{hairdresser.name}</CardTitle>
+                      {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs my-1">Password Reset Required</Badge>}
+                  </div>
+              </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-3 font-body text-sm">
+                  <div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span className="text-foreground">{hairdresser.email}</span></div>
+                  <div className="flex items-start gap-2"><Store className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Salons:</strong><div className="flex flex-wrap mt-1">{hairdresser.assignedLocations.map(id => {const salon = salons.find(s=>s.id===id); return <Badge key={id} variant="secondary" className="mr-1 mb-1">{salon?.name || 'Unknown'}</Badge>})}</div></div></div>
+                  <div className="flex items-start gap-2"><Sparkles className="h-5 w-5 text-primary shrink-0" /><div><strong className="font-medium">Specialties:</strong> {hairdresser.specialties?.join(", ") || "N/A"}</div></div>
+                  
+                  <div className="flex items-start gap-2">
+                      <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                      <div>
+                          <strong className="font-medium">Working Hours:</strong>
+                          {hairdresser.workingHours ? (
+                              <ul className="mt-1 space-y-1 text-xs">
+                              {daysOfWeek.map((day) => {
+                                  const hours = hairdresser.workingHours?.[day];
+                                  return (
+                                  <li key={day} className="flex justify-between items-center">
+                                      <span className="w-12 text-muted-foreground">{day.substring(0, 3)}:</span>
+                                      {hours && !hours.isOff && hours.start && hours.end ? (
+                                      <span className="font-mono text-foreground text-right flex-1">{hours.start} - {hours.end}</span>
+                                      ) : (
+                                      <span className="text-muted-foreground/70 text-right flex-1">Day Off</span>
+                                      )}
+                                  </li>
+                                  );
+                              })}
+                              </ul>
+                          ) : (
+                              <p className="text-muted-foreground text-xs mt-1">Not Set</p>
+                          )}
+                      </div>
+                  </div>
 
-                </CardContent>
-                  <CardFooter className="border-t flex justify-end gap-2 p-4">
-                    <Button variant="outline" onClick={() => setIsEditFormOpen(true)} disabled={isSubmitting || isResettingPassword}><Edit3 className="mr-2 h-4 w-4"/>Edit</Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="secondary" disabled={isSubmitting || isResettingPassword}><KeyRound className="mr-2 h-4 w-4"/>Reset Password</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle className="font-headline">Reset Password for {hairdresser.name}?</AlertDialogTitle>
-                                <AlertDialogDescription className="font-body">This will send a password reset link to {hairdresser.email}. They will be able to set a new password by following the link. Are you sure?</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter> 
-                                <AlertDialogCancel disabled={isResettingPassword}>Cancel</AlertDialogCancel> 
-                                <AlertDialogAction onClick={handlePasswordReset} className="bg-primary hover:bg-primary/90" disabled={isResettingPassword}>
-                                    {isResettingPassword ? <Loader2 className="h-4 w-4 animate-spin"/> : "Send Reset Link"}
-                                </AlertDialogAction> 
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+              </CardContent>
+                <CardFooter className="border-t flex justify-end gap-2 p-4">
+                  <Button variant="outline" onClick={() => setIsEditFormOpen(true)} disabled={isSubmitting || isResettingPassword}><Edit3 className="mr-2 h-4 w-4"/>Edit</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" disabled={isSubmitting || isResettingPassword}><Trash2 className="mr-2 h-4 w-4"/>Delete</Button>
+                          <Button variant="secondary" disabled={isSubmitting || isResettingPassword}><KeyRound className="mr-2 h-4 w-4"/>Reset Password</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
-                        <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This will permanently delete the profile for "{hairdresser.name}" and their associated login account. This action cannot be undone. </AlertDialogDescription> </AlertDialogHeader>
-                        <AlertDialogFooter> 
-                            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel> 
-                            <AlertDialogAction onClick={handleDeleteHairdresser} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isSubmitting}>
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Confirm Delete"}
-                            </AlertDialogAction> 
-                        </AlertDialogFooter>
+                          <AlertDialogHeader>
+                              <AlertDialogTitle className="font-headline">Reset Password for {hairdresser.name}?</AlertDialogTitle>
+                              <AlertDialogDescription className="font-body">This will send a password reset link to {hairdresser.email}. They will be able to set a new password by following the link. Are you sure?</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter> 
+                              <AlertDialogCancel disabled={isResettingPassword}>Cancel</AlertDialogCancel> 
+                              <AlertDialogAction onClick={handlePasswordReset} className="bg-primary hover:bg-primary/90" disabled={isResettingPassword}>
+                                  {isResettingPassword ? <Loader2 className="h-4 w-4 animate-spin"/> : "Send Reset Link"}
+                              </AlertDialogAction> 
+                          </AlertDialogFooter>
                       </AlertDialogContent>
-                    </AlertDialog>
-                  </CardFooter>
-            </Card>
-        </div>
+                  </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" disabled={isSubmitting || isResettingPassword}><Trash2 className="mr-2 h-4 w-4"/>Delete</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader> <AlertDialogTitle className="font-headline">Are you sure?</AlertDialogTitle> <AlertDialogDescription className="font-body"> This will permanently delete the profile for "{hairdresser.name}" and their associated login account. This action cannot be undone. </AlertDialogDescription> </AlertDialogHeader>
+                      <AlertDialogFooter> 
+                          <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel> 
+                          <AlertDialogAction onClick={handleDeleteHairdresser} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isSubmitting}>
+                              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Confirm Delete"}
+                          </AlertDialogAction> 
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </CardFooter>
+          </Card>
 
-        {/* Right Column for Booking History */}
-        <div className="lg:col-span-2">
-            <Card className="shadow-lg rounded-lg">
-                <CardHeader><CardTitle className="font-headline">Booking History ({bookings.length})</CardTitle></CardHeader>
-                <CardContent>
-                {bookings.length === 0 ? (
-                    <p className="text-muted-foreground font-body text-center py-8">No bookings found for this hairdresser.</p>
-                ) : (
-                    <Table>
-                    <TableHeader>
-                        <TableRow>
-                        <TableHead className="font-headline">Date & Time</TableHead>
-                        <TableHead className="font-headline">Client</TableHead>
-                        <TableHead className="font-headline">Service</TableHead>
-                        <TableHead className="font-headline">Salon</TableHead>
-                        <TableHead className="font-headline">Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {bookings.map((booking) => (
-                        <TableRow key={booking.id} className="font-body">
-                            <TableCell>
-                            <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
-                            <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
-                            </TableCell>
-                            <TableCell>{booking.clientName}</TableCell>
-                            <TableCell>{booking.serviceName}</TableCell>
-                            <TableCell>{getSalonName(booking.salonId)}</TableCell>
-                            <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
-                        </TableRow>
-                        ))}
-                    </TableBody>
-                    </Table>
-                )}
-                </CardContent>
-            </Card>
-        </div>
+          <Card className="shadow-lg rounded-lg">
+              <CardHeader><CardTitle className="font-headline">Booking History ({bookings.length})</CardTitle></CardHeader>
+              <CardContent>
+              {bookings.length === 0 ? (
+                  <p className="text-muted-foreground font-body text-center py-8">No bookings found for this hairdresser.</p>
+              ) : (
+                  <Table>
+                  <TableHeader>
+                      <TableRow>
+                      <TableHead className="font-headline">Date & Time</TableHead>
+                      <TableHead className="font-headline">Client</TableHead>
+                      <TableHead className="font-headline">Service</TableHead>
+                      <TableHead className="font-headline">Salon</TableHead>
+                      <TableHead className="font-headline">Status</TableHead>
+                      </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                      {bookings.map((booking) => (
+                      <TableRow key={booking.id} className="font-body">
+                          <TableCell>
+                          <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
+                          <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
+                          </TableCell>
+                          <TableCell>{booking.clientName}</TableCell>
+                          <TableCell>{booking.serviceName}</TableCell>
+                          <TableCell>{getSalonName(booking.salonId)}</TableCell>
+                          <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
+                      </TableRow>
+                      ))}
+                  </TableBody>
+                  </Table>
+              )}
+              </CardContent>
+          </Card>
       </div>
     </div>
   );
