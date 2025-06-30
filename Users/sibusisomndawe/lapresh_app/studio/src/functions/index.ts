@@ -33,6 +33,7 @@ interface CreateHairdresserData {
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
+  isActive: boolean;
 }
 
 interface UpdateUserProfileData {
@@ -310,6 +311,7 @@ export const createHairdresserUser = onCall(
         must_reset_password: true,
         specialties: data.specialties || [],
         profilePictureUrl: data.profilePictureUrl || "",
+        isActive: data.isActive ?? true,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };

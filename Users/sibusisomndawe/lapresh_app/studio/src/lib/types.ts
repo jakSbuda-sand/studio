@@ -33,6 +33,7 @@ export interface Hairdresser {
   workingHours?: HairdresserWorkingHours;
   profilePictureUrl?: string;
   must_reset_password?: boolean;
+  isActive: boolean;
   createdAt?: Timestamp | Date | string;
   updatedAt?: Timestamp | Date | string;
 }
@@ -133,6 +134,7 @@ export interface HairdresserDoc {
   must_reset_password: boolean;
   specialties?: string[];
   profilePictureUrl?: string;
+  isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

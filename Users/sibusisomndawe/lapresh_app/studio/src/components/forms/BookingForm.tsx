@@ -310,24 +310,40 @@ export default function BookingForm({
 
   useEffect(() => {
     if (selectedSalonId) {
-      const filtered = allHairdressers.filter(h => h.assigned_locations.includes(selectedSalonId));
-      setAvailableHairdressers(filtered);
-      const currentHairdresserId = form.getValues("hairdresserId");
-      const isCurrentHairdresserValidForSalon = filtered.some(h => h.id === currentHairdresserId);
-      if (user?.role === 'hairdresser' && user.hairdresserProfileId && filtered.some(h => h.id === user.hairdresserProfileId)) {
-        if (form.getValues("hairdresserId") !== user.hairdresserProfileId) {
-            form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
+        // Start with all active hairdressers for the salon
+        const activeHairdressers = allHairdressers.filter(h => 
+            h.isActive && h.assignedLocations.includes(selectedSalonId)
+        );
+
+        // If editing, ensure the original hairdresser is in the list, even if inactive
+        const initialHairdresserId = initialData?.hairdresserId;
+        if (initialHairdresserId) {
+            const initialHairdresser = allHairdressers.find(h => h.id === initialHairdresserId);
+            if (initialHairdresser && !activeHairdressers.some(h => h.id === initialHairdresserId)) {
+                // If the initial hairdresser is not in the list (e.g., inactive or unassigned), add them.
+                activeHairdressers.push(initialHairdresser);
+            }
         }
-      } else if (currentHairdresserId && !isCurrentHairdresserValidForSalon) {
-        form.setValue("hairdresserId", "", { shouldDirty: true });
-      }
+        
+        setAvailableHairdressers(activeHairdressers);
+
+        const currentHairdresserId = form.getValues("hairdresserId");
+        const isCurrentHairdresserValidForSalon = activeHairdressers.some(h => h.id === currentHairdresserId);
+
+        if (user?.role === 'hairdresser' && user.hairdresserProfileId && activeHairdressers.some(h => h.id === user.hairdresserProfileId)) {
+            if (form.getValues("hairdresserId") !== user.hairdresserProfileId) {
+                form.setValue("hairdresserId", user.hairdresserProfileId, { shouldDirty: true });
+            }
+        } else if (currentHairdresserId && !isCurrentHairdresserValidForSalon) {
+            form.setValue("hairdresserId", "", { shouldDirty: true });
+        }
     } else {
-      setAvailableHairdressers([]);
-      if (form.getValues("hairdresserId") !== "") {
-        form.setValue("hairdresserId", "", { shouldDirty: true });
-      }
+        setAvailableHairdressers([]);
+        if (form.getValues("hairdresserId") !== "") {
+            form.setValue("hairdresserId", "", { shouldDirty: true });
+        }
     }
-  }, [selectedSalonId, allHairdressers, user, form]);
+}, [selectedSalonId, allHairdressers, user, form, initialData]);
 
 
   useEffect(() => {
@@ -391,7 +407,7 @@ export default function BookingForm({
 
   const isHairdresserRole = user?.role === 'hairdresser';
   const hairdresserProfileId = user?.hairdresserProfileId;
-  const isSalonSelectDisabled = isHairdresserRole && !!initialDataPreselected?.salonId && !!hairdresserProfileId && allHairdressers.find(h => h.id === hairdresserProfileId)?.assigned_locations.includes(initialDataPreselected.salonId);
+  const isSalonSelectDisabled = isHairdresserRole && !!initialDataPreselected?.salonId && !!hairdresserProfileId && allHairdressers.find(h => h.id === hairdresserProfileId)?.assignedLocations.includes(initialDataPreselected.salonId);
   const isHairdresserSelectDisabled = (!selectedSalonId || availableHairdressers.length === 0) || (isHairdresserRole && !!hairdresserProfileId && availableHairdressers.some(h => h.id === hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId));
   const bookingStatusOptions: Booking['status'][] = ['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
@@ -521,12 +537,13 @@ export default function BookingForm({
                         <SelectItem key={h.id} value={h.id}>
                           {h.name}
                           {isHairdresserRole && h.id === hairdresserProfileId && " (You)"}
+                          {!h.isActive && " (Inactive)"}
                         </SelectItem>
                       ))}
                   </SelectContent>
                 </Select>
                 {!selectedSalonId && <FormDescription>Please select a salon first.</FormDescription>}
-                {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No hairdressers available for this salon.</FormDescription>}
+                {selectedSalonId && availableHairdressers.length === 0 && <FormDescription>No active hairdressers available for this salon.</FormDescription>}
                 {isHairdresserRole && !!hairdresserProfileId && form.getValues("hairdresserId") === hairdresserProfileId && <FormDescription>Booking for yourself.</FormDescription>}
                 <FormMessage />
               </FormItem>

@@ -31,6 +31,7 @@ interface CreateHairdresserFunctionData {
   workingHours?: HairdresserWorkingHours;
   specialties?: string[];
   profilePictureUrl?: string;
+  isActive: boolean;
 }
 
 
@@ -95,11 +96,12 @@ export default function NewHairdresserPage() {
       email: data.email,
       password: tempPassword,
       displayName: data.name,
-      assignedLocations: data.assigned_locations,
+      assignedLocations: data.assignedLocations,
       workingDays: workingDays,
       workingHours: data.workingHours,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
       profilePictureUrl: data.profilePictureUrl || undefined,
+      isActive: data.isActive,
     };
 
     try {

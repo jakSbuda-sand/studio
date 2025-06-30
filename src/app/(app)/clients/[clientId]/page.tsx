@@ -376,157 +376,154 @@ export default function ClientDetailPage() {
           </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-6">
-            <Card className="shadow-lg rounded-lg">
-                <CardHeader className="bg-secondary/30">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-4">
-                        <Avatar className="h-16 w-16 border-2 border-primary">
-                            <AvatarImage src={`https://placehold.co/64x64.png?text=${client.name.charAt(0)}`} alt={client.name} data-ai-hint="letter avatar"/>
-                            <AvatarFallback className="bg-primary/20 text-primary font-headline text-xl">
-                                {client.name.split(" ").map(n => n[0]).join("").toUpperCase() || "?"}
-                            </AvatarFallback>
-                        </Avatar>
-                        <div>
-                            {isEditingClientInfo ? (
-                              <Input 
-                                value={editableClientData.name}
-                                onChange={(e) => setEditableClientData({...editableClientData, name: e.target.value})}
-                                className="text-2xl font-headline"
-                              />
-                            ) : (
-                              <CardTitle className="font-headline text-2xl text-foreground">{client.name}</CardTitle>
-                            )}
-                            <CardDescription className="font-body text-muted-foreground">
-                                Client since: {client.firstSeen ? format(client.firstSeen.toDate(), "MMM dd, yyyy") : "N/A"}
-                            </CardDescription>
-                        </div>
-                    </div>
-                    {!isEditingClientInfo && (
-                        <Button variant="outline" size="icon" onClick={() => setIsEditingClientInfo(true)}>
-                            <Edit3 className="h-4 w-4"/>
-                        </Button>
-                    )}
-                   </div>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-3 font-body">
-                    <div className="flex items-center gap-3">
-                      <Phone className="h-5 w-5 text-primary" />
-                      {isEditingClientInfo ? (
-                         <Input value={editableClientData.phone} onChange={(e) => setEditableClientData({...editableClientData, phone: e.target.value})} />
-                      ) : (
-                         <span className="text-foreground">{client.phone}</span>
-                      )}
-                    </div>
-                     <div className="flex items-center gap-3">
-                      <Mail className="h-5 w-5 text-primary" />
-                      {isEditingClientInfo ? (
-                         <Input type="email" value={editableClientData.email} onChange={(e) => setEditableClientData({...editableClientData, email: e.target.value})} />
-                      ) : (
-                         <span className="text-foreground">{client.email || 'No email provided'}</span>
-                      )}
-                    </div>
-
-                    {!isEditingClientInfo && (
-                      <>
-                        <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Total Bookings: {client.totalBookings}</span></div>
-                        <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Last Visit: {client.lastSeen ? format(client.lastSeen.toDate(), "MMM dd, yyyy") : "N/A"}</span></div>
-                      </>
-                    )}
-                </CardContent>
-                {isEditingClientInfo && (
-                  <CardFooter className="flex justify-end gap-2 border-t pt-4">
-                      <Button variant="ghost" onClick={() => { setIsEditingClientInfo(false); setEditableClientData({name: client.name, phone: client.phone, email: client.email || ""}); }} disabled={isSavingClientInfo}><X className="h-4 w-4 mr-2"/>Cancel</Button>
-                      <Button onClick={handleSaveClientInfo} disabled={isSavingClientInfo}>
-                        {isSavingClientInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                        Save
-                      </Button>
-                  </CardFooter>
-                )}
-            </Card>
-
-            <Card className="shadow-lg rounded-lg">
-                <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle className="font-headline text-xl flex items-center gap-2"><FileText className="text-primary"/>Client Notes</CardTitle>
-                        {!isEditingNotes && (
-                            <Button variant="outline" size="sm" onClick={() => setIsEditingNotes(true)}><Edit3 className="mr-2 h-4 w-4"/>Edit</Button>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Card className="shadow-lg rounded-lg">
+            <CardHeader className="bg-secondary/30">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16 border-2 border-primary">
+                        <AvatarImage src={`https://placehold.co/64x64.png?text=${client.name.charAt(0)}`} alt={client.name} data-ai-hint="letter avatar"/>
+                        <AvatarFallback className="bg-primary/20 text-primary font-headline text-xl">
+                            {client.name.split(" ").map(n => n[0]).join("").toUpperCase() || "?"}
+                        </AvatarFallback>
+                    </Avatar>
+                    <div>
+                        {isEditingClientInfo ? (
+                          <Input 
+                            value={editableClientData.name}
+                            onChange={(e) => setEditableClientData({...editableClientData, name: e.target.value})}
+                            className="text-2xl font-headline"
+                          />
+                        ) : (
+                          <CardTitle className="font-headline text-2xl text-foreground">{client.name}</CardTitle>
                         )}
+                        <CardDescription className="font-body text-muted-foreground">
+                            Client since: {client.firstSeen ? format(client.firstSeen.toDate(), "MMM dd, yyyy") : "N/A"}
+                        </CardDescription>
                     </div>
-                </CardHeader>
-                <CardContent>
-                    {isEditingNotes ? (
-                        <form onSubmit={(e) => { e.preventDefault(); handleSaveNotes();}} className="space-y-3">
-                            <Label htmlFor="clientNotes" className="sr-only">Client Notes</Label>
-                            <Textarea
-                                id="clientNotes"
-                                value={clientNotes}
-                                onChange={(e) => setClientNotes(e.target.value)}
-                                placeholder="Add notes about this client..."
-                                rows={5}
-                                className="font-body"
-                            />
-                            <div className="flex justify-end gap-2">
-                                <Button type="button" variant="ghost" onClick={() => { setIsEditingNotes(false); setClientNotes(client.notes || "");}} disabled={isSavingNotes}>Cancel</Button>
-                                <Button type="submit" disabled={isSavingNotes}>
-                                    {isSavingNotes ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                                    Save Notes
-                                </Button>
-                            </div>
-                        </form>
-                    ) : (
-                        <p className="text-sm text-muted-foreground font-body whitespace-pre-wrap min-h-[60px]">
-                            {client.notes || "No notes added yet."}
-                        </p>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
-        <div className="lg:col-span-2">
-            <Card className="shadow-lg rounded-lg">
-                <CardHeader><CardTitle className="font-headline">Booking History</CardTitle></CardHeader>
-                <CardContent>
-                {bookings.length === 0 ? (
-                    <p className="text-muted-foreground font-body">No bookings found for this client.</p>
-                ) : (
-                    <Table>
-                    <TableHeader>
-                        <TableRow>
-                        <TableHead className="font-headline">Date & Time</TableHead>
-                        <TableHead className="font-headline">Service</TableHead>
-                        <TableHead className="font-headline">Hairdresser</TableHead>
-                        <TableHead className="font-headline">Salon</TableHead>
-                        <TableHead className="font-headline">Status</TableHead>
-                        <TableHead className="text-right font-headline">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {bookings.map((booking) => (
-                        <TableRow key={booking.id} className="font-body">
-                            <TableCell>
-                            <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
-                            <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
-                            </TableCell>
-                            <TableCell>{booking.serviceName || services.find(s => s.id === booking.serviceId)?.name || "N/A"}</TableCell>
-                            <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>
-                            <TableCell>{getSalonName(booking.salonId)}</TableCell>
-                            <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
-                            <TableCell className="text-right">
-                            {user.role === 'admin' && (
-                                <Button variant="outline" size="sm" onClick={() => openEditForm(booking)}>
-                                    <Edit3 className="mr-2 h-4 w-4" />Edit
-                                </Button>
-                            )}
-                            </TableCell>
-                        </TableRow>
-                        ))}
-                    </TableBody>
-                    </Table>
+                </div>
+                {!isEditingClientInfo && (
+                    <Button variant="outline" size="icon" onClick={() => setIsEditingClientInfo(true)}>
+                        <Edit3 className="h-4 w-4"/>
+                    </Button>
                 )}
-                </CardContent>
-            </Card>
-        </div>
+               </div>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-3 font-body">
+                <div className="flex items-center gap-3">
+                  <Phone className="h-5 w-5 text-primary" />
+                  {isEditingClientInfo ? (
+                     <Input value={editableClientData.phone} onChange={(e) => setEditableClientData({...editableClientData, phone: e.target.value})} />
+                  ) : (
+                     <span className="text-foreground">{client.phone}</span>
+                  )}
+                </div>
+                 <div className="flex items-center gap-3">
+                  <Mail className="h-5 w-5 text-primary" />
+                  {isEditingClientInfo ? (
+                     <Input type="email" value={editableClientData.email} onChange={(e) => setEditableClientData({...editableClientData, email: e.target.value})} />
+                  ) : (
+                     <span className="text-foreground">{client.email || 'No email provided'}</span>
+                  )}
+                </div>
+
+                {!isEditingClientInfo && (
+                  <>
+                    <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Total Bookings: {client.totalBookings}</span></div>
+                    <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /><span className="text-foreground">Last Visit: {client.lastSeen ? format(client.lastSeen.toDate(), "MMM dd, yyyy") : "N/A"}</span></div>
+                  </>
+                )}
+            </CardContent>
+            {isEditingClientInfo && (
+              <CardFooter className="flex justify-end gap-2 border-t pt-4">
+                  <Button variant="ghost" onClick={() => { setIsEditingClientInfo(false); setEditableClientData({name: client.name, phone: client.phone, email: client.email || ""}); }} disabled={isSavingClientInfo}><X className="h-4 w-4 mr-2"/>Cancel</Button>
+                  <Button onClick={handleSaveClientInfo} disabled={isSavingClientInfo}>
+                    {isSavingClientInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                    Save
+                  </Button>
+              </CardFooter>
+            )}
+        </Card>
+
+        <Card className="shadow-lg rounded-lg">
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle className="font-headline text-xl flex items-center gap-2"><FileText className="text-primary"/>Client Notes</CardTitle>
+                    {!isEditingNotes && (
+                        <Button variant="outline" size="sm" onClick={() => setIsEditingNotes(true)}><Edit3 className="mr-2 h-4 w-4"/>Edit</Button>
+                    )}
+                </div>
+            </CardHeader>
+            <CardContent>
+                {isEditingNotes ? (
+                    <form onSubmit={(e) => { e.preventDefault(); handleSaveNotes();}} className="space-y-3">
+                        <Label htmlFor="clientNotes" className="sr-only">Client Notes</Label>
+                        <Textarea
+                            id="clientNotes"
+                            value={clientNotes}
+                            onChange={(e) => setClientNotes(e.target.value)}
+                            placeholder="Add notes about this client..."
+                            rows={5}
+                            className="font-body"
+                        />
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="ghost" onClick={() => { setIsEditingNotes(false); setClientNotes(client.notes || "");}} disabled={isSavingNotes}>Cancel</Button>
+                            <Button type="submit" disabled={isSavingNotes}>
+                                {isSavingNotes ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                                Save Notes
+                            </Button>
+                        </div>
+                    </form>
+                ) : (
+                    <p className="text-sm text-muted-foreground font-body whitespace-pre-wrap min-h-[60px]">
+                        {client.notes || "No notes added yet."}
+                    </p>
+                )}
+            </CardContent>
+        </Card>
+
+        <Card className="shadow-lg rounded-lg">
+            <CardHeader><CardTitle className="font-headline">Booking History</CardTitle></CardHeader>
+            <CardContent>
+            {bookings.length === 0 ? (
+                <p className="text-muted-foreground font-body text-center py-8">No bookings found for this client.</p>
+            ) : (
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead className="font-headline">Date &amp; Time</TableHead>
+                    <TableHead className="font-headline">Service</TableHead>
+                    <TableHead className="font-headline">Hairdresser</TableHead>
+                    <TableHead className="font-headline">Salon</TableHead>
+                    <TableHead className="font-headline">Status</TableHead>
+                    <TableHead className="text-right font-headline">Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {bookings.map((booking) => (
+                    <TableRow key={booking.id} className="font-body">
+                        <TableCell>
+                        <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
+                        <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
+                        </TableCell>
+                        <TableCell>{booking.serviceName || services.find(s => s.id === booking.serviceId)?.name || "N/A"}</TableCell>
+                        <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>
+                        <TableCell>{getSalonName(booking.salonId)}</TableCell>
+                        <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
+                        <TableCell className="text-right">
+                        {user.role === 'admin' && (
+                            <Button variant="outline" size="sm" onClick={() => openEditForm(booking)}>
+                                <Edit3 className="mr-2 h-4 w-4" />Edit
+                            </Button>
+                        )}
+                        </TableCell>
+                    </TableRow>
+                    ))}
+                </TableBody>
+                </Table>
+            )}
+            </CardContent>
+        </Card>
       </div>
     </div>
   );

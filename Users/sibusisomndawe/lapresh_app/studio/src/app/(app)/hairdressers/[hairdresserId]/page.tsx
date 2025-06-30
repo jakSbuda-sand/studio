@@ -71,6 +71,7 @@ export default function HairdresserDetailPage() {
             workingHours: hairdresserData.workingHours || {},
             profilePictureUrl: hairdresserData.profilePictureUrl || "",
             must_reset_password: hairdresserData.must_reset_password || false,
+            isActive: hairdresserData.isActive !== undefined ? hairdresserData.isActive : true,
         };
         setHairdresser(fetchedHairdresser);
 
@@ -131,11 +132,12 @@ export default function HairdresserDetailPage() {
     const hairdresserRef = doc(db, "hairdressers", hairdresser.id);
     const updateData: Partial<HairdresserDoc> = {
       name: data.name,
-      assignedLocations: data.assigned_locations,
+      assignedLocations: data.assignedLocations,
       specialties: data.specialties.split(",").map(s => s.trim()).filter(s => s),
       workingDays: workingDays,
       workingHours: data.workingHours || {},
       profilePictureUrl: data.profilePictureUrl || "",
+      isActive: data.isActive,
       updatedAt: serverTimestamp() as Timestamp,
     };
 
@@ -291,7 +293,10 @@ export default function HairdresserDetailPage() {
                   </Avatar>
                   <div>
                       <CardTitle className="font-headline text-2xl text-foreground">{hairdresser.name}</CardTitle>
-                      {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs my-1">Password Reset Required</Badge>}
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant={hairdresser.isActive ? "default" : "destructive"} className={hairdresser.isActive ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}>{hairdresser.isActive ? 'Active' : 'Inactive'}</Badge>
+                        {hairdresser.must_reset_password && <Badge variant="destructive" className="text-xs">Password Reset Required</Badge>}
+                      </div>
                   </div>
               </div>
               </CardHeader>

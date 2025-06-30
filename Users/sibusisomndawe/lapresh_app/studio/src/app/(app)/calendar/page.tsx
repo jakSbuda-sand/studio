@@ -74,11 +74,12 @@ export default function CalendarPage() {
         const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
           const data = hDoc.data() as HairdresserDoc;
           return {
-            id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
-            assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
-            working_days: data.working_days || [],
+            id: hDoc.id, userId: data.userId, name: data.name, email: data.email,
+            assignedLocations: data.assignedLocations || [], specialties: data.specialties || [],
+            workingDays: data.workingDays || [],
             workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
+            isActive: data.isActive !== undefined ? data.isActive : true,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Hairdresser;
         });
@@ -92,8 +93,8 @@ export default function CalendarPage() {
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           setFilterHairdresserId(user.hairdresserProfileId);
           const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
-          if (hairdresserDetails && hairdresserDetails.assigned_locations.length > 0) {
-            setFilterSalonId(hairdresserDetails.assigned_locations[0]);
+          if (hairdresserDetails && hairdresserDetails.assignedLocations.length > 0) {
+            setFilterSalonId(hairdresserDetails.assignedLocations[0]);
           }
         }
       } catch (error: any) {
@@ -301,8 +302,8 @@ export default function CalendarPage() {
   };
 
   const availableHairdressersForFilter = filterSalonId === "all" 
-    ? hairdressers 
-    : hairdressers.filter(h => h.assigned_locations.includes(filterSalonId));
+    ? hairdressers.filter(h => h.isActive) 
+    : hairdressers.filter(h => h.isActive && h.assignedLocations.includes(filterSalonId));
   
   if (!user) return <p className="text-center mt-10 font-body">Please log in to view the calendar.</p>;
 
@@ -348,7 +349,7 @@ export default function CalendarPage() {
                             </h3>
                             <div>
                                 <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon</label>
-                                <Select value={filterSalonId} onValueChange={(value) => { setFilterSalonId(value); if (value !== "all" && filterHairdresserId !== "all") { const selectedH = hairdressers.find(h => h.id === filterHairdresserId); if (selectedH && !selectedH.assigned_locations.includes(value)) setFilterHairdresserId("all"); } }}>
+                                <Select value={filterSalonId} onValueChange={(value) => { setFilterSalonId(value); if (value !== "all" && filterHairdresserId !== "all") { const selectedH = hairdressers.find(h => h.id === filterHairdresserId); if (selectedH && !selectedH.assignedLocations.includes(value)) setFilterHairdresserId("all"); } }}>
                                     <SelectTrigger id="salon-filter"><SelectValue placeholder="All Salons" /></SelectTrigger>
                                     <SelectContent><SelectItem value="all">All Salons</SelectItem>{salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}</SelectContent>
                                 </Select>
