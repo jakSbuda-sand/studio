@@ -19,7 +19,7 @@ import {
 import { format, isSameDay, addMinutes } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, Query, serverTimestamp } from "@/lib/firebase";
+import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, type Query, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -340,6 +340,7 @@ export default function CalendarPage() {
                             selected={selectedDate}
                             onSelect={setSelectedDate}
                             className="rounded-md border shadow-sm p-0 w-full"
+                            disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))}
                         />
                     </div>
                     {user.role === 'admin' && (
