@@ -151,7 +151,6 @@ export interface BookingDoc {
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
   notes?: string;
-  color?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

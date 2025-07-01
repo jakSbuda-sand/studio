@@ -57,6 +57,7 @@ export default function HairdressersPage() {
             workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "",
             must_reset_password: data.must_reset_password || false,
+            isActive: data.isActive !== undefined ? data.isActive : true,
             createdAt: data.createdAt, 
             updatedAt: data.updatedAt,
           } as Hairdresser;
@@ -144,6 +145,9 @@ export default function HairdressersPage() {
                     </div>
                 </CardHeader>
                 <CardContent className="p-4 space-y-3 flex-grow font-body text-sm">
+                    <div className="flex items-center gap-2">
+                        <Badge variant={hairdresser.isActive ? "default" : "destructive"} className={hairdresser.isActive ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}>{hairdresser.isActive ? 'Active' : 'Inactive'}</Badge>
+                    </div>
                     <div className="flex items-start gap-2">
                         <Store size={14} className="text-primary mt-0.5 shrink-0" />
                         <div className="flex flex-wrap gap-1">

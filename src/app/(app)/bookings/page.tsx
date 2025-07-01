@@ -63,11 +63,12 @@ export default function BookingsPage() {
         const hairdressersList = hairdresserSnapshot.docs.map(hDoc => {
           const data = hDoc.data() as HairdresserDoc;
           return {
-            id: hDoc.id, userId: data.user_id, name: data.name, email: data.email,
-            assigned_locations: data.assigned_locations || [], specialties: data.specialties || [],
-            working_days: data.working_days || [],
+            id: hDoc.id, userId: data.userId, name: data.name, email: data.email,
+            assignedLocations: data.assignedLocations || [], specialties: data.specialties || [],
+            workingDays: data.workingDays || [],
             workingHours: data.workingHours || {},
             profilePictureUrl: data.profilePictureUrl || "", must_reset_password: data.must_reset_password || false,
+            isActive: data.isActive !== undefined ? data.isActive : true,
             createdAt: data.createdAt, updatedAt: data.updatedAt,
           } as Hairdresser;
         });

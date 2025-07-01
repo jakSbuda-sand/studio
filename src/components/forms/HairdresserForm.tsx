@@ -48,7 +48,7 @@ const hairdresserFormSchema = z.object({
   name: z.string().min(2, { message: "Hairdresser name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(6, {message: "Password must be at least 6 characters."}).optional().or(z.literal('')),
-  assigned_locations: z.array(z.string()).nonempty({ message: "Please select at least one salon." }),
+  assignedLocations: z.array(z.string()).nonempty({ message: "Please select at least one salon." }),
   specialties: z.string().min(3, {message: "Enter at least one specialty (comma-separated)."}),
   profilePictureUrl: z.string().url({ message: "Please enter a valid URL for the profile picture." }).optional().or(z.literal('')),
   workingHours: z.object(
@@ -58,6 +58,7 @@ const hairdresserFormSchema = z.object({
       }, {} as Record<DayOfWeek, typeof dailyWorkingHoursSchema>)
     )
     .optional(),
+  isActive: z.boolean().default(true),
 });
 
 export type HairdresserFormValues = z.infer<typeof hairdresserFormSchema>;
@@ -89,10 +90,11 @@ export function HairdresserForm({
       name: "",
       email: "",
       password: "",
-      assigned_locations: [],
+      assignedLocations: [],
       specialties: "",
       profilePictureUrl: "",
-      workingHours: JSON.parse(JSON.stringify(defaultWorkingHours))
+      workingHours: JSON.parse(JSON.stringify(defaultWorkingHours)),
+      isActive: true,
     };
 
     if (isEditing && initialData) {
@@ -110,10 +112,11 @@ export function HairdresserForm({
         name: initialData.name || "",
         email: initialData.email || "",
         password: "",
-        assigned_locations: initialData.assigned_locations || [],
+        assignedLocations: initialData.assignedLocations || [],
         specialties: initialData.specialties ? initialData.specialties.join(", ") : "",
         profilePictureUrl: initialData.profilePictureUrl || "",
         workingHours: currentWorkingHours,
+        isActive: initialData.isActive !== undefined ? initialData.isActive : true,
       };
     }
     return baseValues as HairdresserFormValues;
@@ -150,6 +153,26 @@ export function HairdresserForm({
         <CardContent className="p-0">
             <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmitInternal)} className="space-y-8 font-body">
+                <FormField
+                  control={form.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-muted/30">
+                      <div className="space-y-0.5">
+                        <FormLabel>Active Status</FormLabel>
+                        <FormDescription>
+                          Inactive hairdressers cannot be assigned to new bookings.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
                 <FormField
                 control={form.control}
                 name="name"
@@ -193,7 +216,7 @@ export function HairdresserForm({
 
                 <FormField
                   control={form.control}
-                  name="assigned_locations"
+                  name="assignedLocations"
                   render={() => (
                     <FormItem>
                       <div className="mb-2">
@@ -207,7 +230,7 @@ export function HairdresserForm({
                           <FormField
                             key={salon.id}
                             control={form.control}
-                            name="assigned_locations"
+                            name="assignedLocations"
                             render={({ field }) => {
                               return (
                                 <FormItem
