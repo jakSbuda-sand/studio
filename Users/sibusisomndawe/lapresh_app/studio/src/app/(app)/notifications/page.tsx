@@ -61,9 +61,12 @@ export default function NotificationsPage() {
   };
 
 
-  if (!user) return <p>Loading...</p>;
-
-  if (user.role !== 'admin') {
+  if (!user && !isLoading) {
+    router.replace('/login');
+    return null;
+  }
+  
+  if (user && user.role !== 'admin') {
     return (
       <div className="space-y-8 flex flex-col items-center justify-center h-full">
         <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
@@ -84,6 +87,15 @@ export default function NotificationsPage() {
         </Card>
       </div>
     );
+  }
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-full">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 font-body">Loading...</span>
+        </div>
+      );
   }
 
   return (
