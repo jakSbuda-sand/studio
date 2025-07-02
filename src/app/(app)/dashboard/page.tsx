@@ -323,7 +323,7 @@ export default function DashboardPage() {
           <Card className="shadow-lg rounded-lg">
               <CardHeader>
                   <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><BarChartIcon className="h-5 w-5 text-primary"/>Bookings Overview</CardTitle>
-                  <CardDescription className="font-body text-muted-foreground">Overview for {selectedSalonName} {dateRangeText[dateRangeFilter]}.</CardDescription>
+                  <CardDescription className="font-body text-muted-foreground">Overview for ${selectedSalonName} ${dateRangeText[dateRangeFilter]}.</CardDescription>
               </CardHeader>
               <CardContent>
                   {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
@@ -345,7 +345,7 @@ export default function DashboardPage() {
             <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary"/>Popular Services</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Top completed services {statDescription}.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Top completed services ${statDescription}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
@@ -367,7 +367,7 @@ export default function DashboardPage() {
              <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl text-foreground flex items-center gap-2"><Award className="h-5 w-5 text-primary"/>Top Hairdressers</CardTitle>
-                    <CardDescription className="font-body text-muted-foreground">Based on completed bookings {statDescription}.</CardDescription>
+                    <CardDescription className="font-body text-muted-foreground">Based on completed bookings ${statDescription}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? <div className="h-[250px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
@@ -456,3 +456,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
