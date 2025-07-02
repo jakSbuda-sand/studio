@@ -1,80 +1,73 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // HELPER FUNCTIONS
-    function isAuth() {
-      return request.auth != null;
-    }
-
+    
+    // --- Helper Functions ---
     function isAdmin() {
-      return isAuth() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    function isHairdresser() {
-      return isAuth() && exists(/databases/$(database)/documents/hairdressers/$(request.auth.uid));
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
-    function isOwner(userId) {
-      return isAuth() && request.auth.uid == userId;
+    function isHairdresser() {
+      return exists(/databases/$(database)/documents/hairdressers/$(request.auth.uid));
     }
 
-    // COLLECTION RULES
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // --- Collection Rules ---
 
-    // Users collection (for admin roles)
+    // Users (Admins) collection
     match /users/{userId} {
       allow read: if isAdmin() || isOwner(userId);
-      allow write: if isAdmin();
+      allow write, create: if isAdmin();
     }
 
     // Hairdressers collection
     match /hairdressers/{hairdresserId} {
-      // Any authenticated user can see hairdresser profiles (for selection in forms)
-      allow read: if isAuth(); 
-      // Only Admins can create/delete hairdresser profiles. Update is handled by a Cloud Function but we allow owners to update their own profile too.
+      allow read, write: if isAdmin() || isOwner(hairdresserId);
       allow create, delete: if isAdmin();
-      allow update: if isAdmin() || isOwner(hairdresserId);
     }
-    
-    // Locations collection
+
+    // Locations (Salons) collection
     match /locations/{locationId} {
-      allow read: if isAuth();
+      allow read: if isAdmin() || isHairdresser();
       allow write: if isAdmin();
     }
     
     // Services collection
     match /services/{serviceId} {
-      allow read: if isAuth();
+      allow read: if isAdmin() || isHairdresser();
       allow write: if isAdmin();
-    }
-    
-    // Clients collection
-    match /clients/{clientId} {
-      // WARNING: These rules allow any authenticated user (admin or hairdresser) to read all client data.
-      // This is required for the current implementation of checking for existing clients by phone number.
-      // For higher security, this check should be moved to a Cloud Function.
-      allow read, create, update: if isAuth();
-      allow delete: if isAdmin();
     }
     
     // Bookings collection
     match /bookings/{bookingId} {
-      allow create: if isAuth();
-      // Admins can read any booking. Hairdressers can only read their own.
-      allow read: if isAdmin() || (isHairdresser() && resource.data.hairdresserId == request.auth.uid);
-      // Admins can update any booking. Hairdressers can only update their own.
-      allow update: if isAdmin() || (isHairdresser() && resource.data.hairdresserId == request.auth.uid);
+      // Admins can get any single booking, or update any booking.
+      // Hairdressers can get/update a booking only if it's assigned to them.
+      allow get, update: if isAdmin() || (isHairdresser() && resource.data.hairdresserId == request.auth.uid);
+      
+      // Admins can list all bookings.
+      // Hairdressers can also perform list queries, but their client-side code MUST contain a `where("hairdresserId", "==", request.auth.uid)` clause.
+      allow list: if isAdmin() || isHairdresser();
+      
+      // Admins or Hairdressers can create bookings.
+      allow create: if isAdmin() || isHairdresser();
+      
+      // Only Admins can delete bookings.
       allow delete: if isAdmin();
     }
     
-    // Notifications collection - Written by backend, read by admins
+    // Clients collection
+    match /clients/{clientId} {
+      // Admins and Hairdressers can manage client records.
+      allow read, write, create: if isAdmin() || isHairdresser();
+    }
+    
+    // Notifications collection (Admin only)
     match /notifications/{notificationId} {
-      allow read: if isAdmin();
-      allow write: if false; // Deny client-side writes
+       allow read, write: if isAdmin();
     }
   }
 }
-    
