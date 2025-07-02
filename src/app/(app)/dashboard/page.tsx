@@ -146,6 +146,7 @@ export default function DashboardPage() {
             return {
                 ...data,
                 id: doc.id,
+                clientId: data.clientId,
                 appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
                 price: service?.price || 0,
                 serviceName: service?.name || "Unknown Service",
@@ -162,7 +163,17 @@ export default function DashboardPage() {
             const completedBookings = allBookings.filter(b => b.status === 'Completed');
             totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
             
-            newClients = newClientSnapshot ? newClientSnapshot.size : 0;
+            if (newClientSnapshot) {
+              if (filterSalonId === 'all') {
+                newClients = newClientSnapshot.size;
+              } else {
+                const clientIdsInSalonBookings = new Set(allBookings.map(b => b.clientId).filter(Boolean));
+                const newClientsInSalon = newClientSnapshot.docs.filter(clientDoc => 
+                  clientIdsInSalonBookings.has(clientDoc.id)
+                );
+                newClients = newClientsInSalon.length;
+              }
+            }
             
             const daysInRange = dateRangeFilter === 'today' ? 1 : (dateRangeFilter === '7d' ? 7 : 30);
             chartData = Array.from({ length: daysInRange }).map((_, i) => {
@@ -192,7 +203,7 @@ export default function DashboardPage() {
 
       } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
-        toast({ title: "Error Loading Dashboard", description: `Could not load analytics: ${error.message}`, variant: "destructive" });
+        toast({ title: "Error Loading Dashboard", description: `Could not load analytics: ${error.message}.`, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
@@ -456,5 +467,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
