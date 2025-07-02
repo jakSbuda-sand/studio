@@ -102,15 +102,23 @@ export default function DashboardPage() {
         let clientsQuery = null;
 
         if (user.role === 'admin') {
-            const baseBookingsQuery = query(
-              collection(db, "bookings"),
-              where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-              where("appointmentDateTime", "<=", Timestamp.fromDate(endDate))
-            );
-
-            bookingsQuery = filterSalonId === 'all' 
-                ? baseBookingsQuery 
-                : query(baseBookingsQuery, where("salonId", "==", filterSalonId));
+            const bookingsRef = collection(db, "bookings");
+            if (filterSalonId === 'all') {
+                bookingsQuery = query(
+                    bookingsRef,
+                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
+                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
+                    orderBy("appointmentDateTime", "asc")
+                );
+            } else {
+                bookingsQuery = query(
+                    bookingsRef,
+                    where("salonId", "==", filterSalonId),
+                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
+                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
+                    orderBy("appointmentDateTime", "asc")
+                );
+            }
             
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)));
         
@@ -164,15 +172,11 @@ export default function DashboardPage() {
             totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
             
             if (newClientSnapshot) {
-              if (filterSalonId === 'all') {
-                newClients = newClientSnapshot.size;
-              } else {
-                const clientIdsInSalonBookings = new Set(allBookings.map(b => b.clientId).filter(Boolean));
-                const newClientsInSalon = newClientSnapshot.docs.filter(clientDoc => 
-                  clientIdsInSalonBookings.has(clientDoc.id)
-                );
-                newClients = newClientsInSalon.length;
-              }
+              const clientIdsInFilteredBookings = new Set(allBookings.map(b => b.clientId).filter(Boolean));
+              const newClientsInFilter = newClientSnapshot.docs.filter(clientDoc => 
+                clientIdsInFilteredBookings.has(clientDoc.id)
+              );
+              newClients = newClientsInFilter.length;
             }
             
             const daysInRange = dateRangeFilter === 'today' ? 1 : (dateRangeFilter === '7d' ? 7 : 30);
