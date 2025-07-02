@@ -272,7 +272,7 @@ export default function BookingForm({
     return () => {
       clearTimeout(handler);
     };
-  }, [clientNameValue, fetchClientsByName, searchResults]);
+  }, [clientNameValue, fetchClientsByName]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

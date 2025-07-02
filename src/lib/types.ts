@@ -151,7 +151,6 @@ export interface BookingDoc {
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
   notes?: string;
-  color?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -186,4 +185,11 @@ export interface NotificationDoc {
   sent_at?: Timestamp;
   created_at: Timestamp;
   template_id?: string;
+  error_message?: string;
+  context?: {
+    clientName: string;
+    serviceName: string;
+    appointmentDate: string;
+    appointmentTime: string;
+  }
 }
