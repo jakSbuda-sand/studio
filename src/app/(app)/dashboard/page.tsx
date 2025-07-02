@@ -101,8 +101,9 @@ export default function DashboardPage() {
         let bookingsQuery;
         let clientsQuery = null;
 
+        const bookingsRef = collection(db, "bookings");
+        
         if (user.role === 'admin') {
-            const bookingsRef = collection(db, "bookings");
             if (filterSalonId === 'all') {
                 bookingsQuery = query(
                     bookingsRef,
@@ -111,19 +112,12 @@ export default function DashboardPage() {
                     orderBy("appointmentDateTime", "asc")
                 );
             } else {
-                bookingsQuery = query(
-                    bookingsRef,
-                    where("salonId", "==", filterSalonId),
-                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
-                    orderBy("appointmentDateTime", "asc")
-                );
+                // Simplified query: Fetch all for salon, filter date client-side
+                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId));
             }
-            
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
-        
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(startOfDay(today))), orderBy("appointmentDateTime", "asc"));
+           bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
         } else {
             setStats({ totalBookings: 0, totalRevenue: 0, newClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
             setIsLoading(false);
@@ -159,6 +153,12 @@ export default function DashboardPage() {
                 price: service?.price || 0,
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
+        }).filter(booking => {
+            // If we fetched all bookings for a salon, filter by date now
+            if (filterSalonId !== 'all' && user.role === 'admin') {
+                return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
+            }
+            return true; // Already filtered by date in the 'all' query or not an admin view
         });
 
         let totalBookings = 0, totalRevenue = 0, newClients = 0;
@@ -197,10 +197,18 @@ export default function DashboardPage() {
             topHairdressers = Array.from(hairdresserCounts.entries()).map(([hairdresserId, count]) => ({ name: hairdressersMap.get(hairdresserId)?.name || 'Unknown', count })).sort((a, b) => b.count - a.count).slice(0, 5);
         
         } else if (user.role === 'hairdresser') {
-            const todaysBookingsList = allBookings.filter(b => isWithinInterval(b.appointmentDateTime, { start: startOfDay(today), end: endOfDay(today) }));
+            const now = new Date();
+            const startOfToday = startOfDay(now);
+            
+            const todaysBookingsList = allBookings.filter(b => isSameDay(b.appointmentDateTime, now));
             totalBookings = todaysBookingsList.length;
-            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(today)).length;
-            todaysSchedule = todaysBookingsList.filter(b => b.status === 'Confirmed' || b.status === 'Completed').sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
+            
+            // Filter all fetched bookings for upcoming ones
+            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(now)).length;
+            
+            todaysSchedule = todaysBookingsList
+              .filter(b => b.status === 'Confirmed' || b.status === 'Completed')
+              .sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
         }
         
         setStats({ totalBookings, totalRevenue, newClients, chartData, popularServices, topHairdressers, upcomingBookings, todaysSchedule });
