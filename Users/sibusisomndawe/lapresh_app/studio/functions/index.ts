@@ -447,13 +447,17 @@ export const processEmailQueue = onDocumentCreated(
       return;
     }
 
-    const resend = new Resend(resendApiKey.value());
-
     try {
+      const resend = new Resend(resendApiKey.value());
+
       const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
 
+      // IMPORTANT: To send emails from your own domain (e.g., info@lapresh.com),
+      // you must verify that domain in your Resend account settings.
+      // Using a @gmail.com address here is not supported by Resend.
+      // For now, we use the default 'onboarding@resend.dev' which works for testing.
       await resend.emails.send({
-        from: "LaPresh Salon <bookings@notifications.lapresh.com>", // Replace with your verified Resend domain
+        from: "LaPresh Salon <onboarding@resend.dev>",
         to: [notificationData.recipient_email],
         subject: "Your Booking is Confirmed!",
         html: `
@@ -472,11 +476,15 @@ export const processEmailQueue = onDocumentCreated(
         status: "sent",
         sent_at: admin.firestore.FieldValue.serverTimestamp(),
       });
-    } catch (error) {
-      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {error});
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {
+        error: errorMessage,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      });
       await snapshot.ref.update({
         status: "failed",
-        error_message: error instanceof Error ? error.message : "Unknown error",
+        error_message: errorMessage,
       });
     }
   }
@@ -490,3 +498,5 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   }
 );
+
+    
