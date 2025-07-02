@@ -8,7 +8,10 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek} from "../lib/types";
+import {defineString} from "firebase-functions/params";
+import {Resend} from "resend";
+import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc} from "../lib/types";
+import {format} from "date-fns";
 
 // Initialize Firebase Admin SDK only once
 if (admin.apps.length === 0) {
@@ -17,6 +20,9 @@ if (admin.apps.length === 0) {
 }
 
 const db = admin.firestore();
+
+// Define Resend API Key as a secret parameter
+const resendApiKey = defineString("RESEND_API_KEY");
 
 interface CreateAdminData {
   email: string;
@@ -390,21 +396,26 @@ export const onBookingCreated = onDocumentCreated(
     }
 
     try {
-      const notificationRef = db.collection("notifications");
-      await notificationRef.add({
+      const serviceDoc = await db.collection("services").doc(bookingData.serviceId).get();
+      const serviceData = serviceDoc.data() as ServiceDoc | undefined;
+
+      const notificationData = {
         booking_id: bookingId,
         type: "email",
         recipient_email: bookingData.clientEmail,
-        status: "pending", // In a real app, another function would process this queue
+        status: "pending", // To be processed by processEmailQueue
         created_at: admin.firestore.FieldValue.serverTimestamp(),
         template_id: "booking_confirmation",
-      });
-      logger.log(`[onBookingCreated] Successfully created 'pending' notification record for booking ${bookingId}.`);
+        context: {
+          clientName: bookingData.clientName,
+          serviceName: serviceData?.name || "the service you requested",
+          appointmentDate: format(bookingData.appointmentDateTime.toDate(), "EEEE, MMMM do, yyyy"),
+          appointmentTime: format(bookingData.appointmentDateTime.toDate(), "p"),
+        },
+      };
 
-      // In a real implementation, you would now integrate with an email service like SendGrid
-      // to send the actual email using the data from `bookingData`.
-      // For now, we are just logging the intent.
-      logger.info(`[onBookingCreated] SIMULATION: An email confirmation would be sent to ${bookingData.clientEmail} for booking ${bookingId}.`);
+      await db.collection("notifications").add(notificationData);
+      logger.log(`[onBookingCreated] Successfully created 'pending' notification record for booking ${bookingId}.`);
     } catch (error: any) {
       logger.error(`[onBookingCreated] Error creating notification record for booking ${bookingId}`, {
         errorMessage: error.message,
@@ -414,6 +425,69 @@ export const onBookingCreated = onDocumentCreated(
   }
 );
 
+export const processEmailQueue = onDocumentCreated(
+  {
+    document: "notifications/{notificationId}",
+    region: "us-central1",
+    secrets: ["RESEND_API_KEY"],
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+      logger.log("[processEmailQueue] No data associated with event. Exiting.");
+      return;
+    }
+
+    const notificationId = event.params.notificationId;
+    const notificationData = snapshot.data();
+    logger.log(`[processEmailQueue] Processing notification ID: ${notificationId}`, {data: notificationData});
+
+    if (notificationData.status !== "pending") {
+      logger.log(`[processEmailQueue] Notification ${notificationId} is not pending. Status is '${notificationData.status}'. Skipping.`);
+      return;
+    }
+
+    try {
+      // Initialize Resend inside the try block to catch potential API key errors
+      const resend = new Resend(resendApiKey.value());
+
+      const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
+
+      await resend.emails.send({
+        from: "LaPresh Salon <bookings@notifications.lapresh.com>", // Replace with your verified Resend domain
+        to: [notificationData.recipient_email],
+        subject: "Your Booking is Confirmed!",
+        html: `
+          <h1>Booking Confirmation</h1>
+          <p>Hi ${clientName},</p>
+          <p>Your appointment for <strong>${serviceName}</strong> is confirmed!</p>
+          <p><strong>Date:</strong> ${appointmentDate}</p>
+          <p><strong>Time:</strong> ${appointmentTime}</p>
+          <p>We look forward to seeing you!</p>
+          <p>Best regards,<br/>The LaPresh Beauty Salon Team</p>
+        `,
+      });
+
+      logger.info(`[processEmailQueue] Successfully sent email for notification ID: ${notificationId}`);
+      await snapshot.ref.update({
+        status: "sent",
+        sent_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {
+        error: errorMessage,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      });
+      await snapshot.ref.update({
+        status: "failed",
+        error_message: errorMessage,
+      });
+    }
+  }
+);
+
+
 export const helloWorld = onRequest(
   {region: "us-central1"},
   (request, response) => {
@@ -421,3 +495,5 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   }
 );
+
+    
