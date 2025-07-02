@@ -100,9 +100,9 @@ export default function DashboardPage() {
         
         let bookingsQuery;
         let clientsQuery = null;
-        const bookingsRef = collection(db, "bookings");
 
         if (user.role === 'admin') {
+            const bookingsRef = collection(db, "bookings");
             if (filterSalonId === 'all') {
                 bookingsQuery = query(
                     bookingsRef,
@@ -471,5 +471,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    

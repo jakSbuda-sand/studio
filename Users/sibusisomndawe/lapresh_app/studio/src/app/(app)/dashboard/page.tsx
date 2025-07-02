@@ -120,7 +120,7 @@ export default function DashboardPage() {
                 );
             }
             
-            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)));
+            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
            bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), where("appointmentDateTime", ">=", Timestamp.fromDate(startOfDay(today))), orderBy("appointmentDateTime", "asc"));
