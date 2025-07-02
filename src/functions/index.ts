@@ -447,9 +447,10 @@ export const processEmailQueue = onDocumentCreated(
       return;
     }
 
-    const resend = new Resend(resendApiKey.value());
-
     try {
+      // Initialize Resend inside the try block to catch potential API key errors
+      const resend = new Resend(resendApiKey.value());
+
       const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
 
       await resend.emails.send({
@@ -472,11 +473,15 @@ export const processEmailQueue = onDocumentCreated(
         status: "sent",
         sent_at: admin.firestore.FieldValue.serverTimestamp(),
       });
-    } catch (error) {
-      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {error});
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {
+        error: errorMessage,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      });
       await snapshot.ref.update({
         status: "failed",
-        error_message: error instanceof Error ? error.message : "Unknown error",
+        error_message: errorMessage,
       });
     }
   }
@@ -490,3 +495,5 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   }
 );
+
+    
