@@ -185,4 +185,11 @@ export interface NotificationDoc {
   sent_at?: Timestamp;
   created_at: Timestamp;
   template_id?: string;
+  error_message?: string;
+  context?: {
+    clientName: string;
+    serviceName: string;
+    appointmentDate: string;
+    appointmentTime: string;
+  }
 }
