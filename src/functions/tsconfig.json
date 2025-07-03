@@ -23,7 +23,8 @@
     }
   },
   "include": [
-    "index.ts"
+    "index.ts",
+    "test/**/*.ts"
   ],
   "exclude": [
     "lib",
