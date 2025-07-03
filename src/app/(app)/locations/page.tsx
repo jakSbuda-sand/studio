@@ -147,7 +147,7 @@ export default function LocationsPage() {
   const handleDeleteSalon = async (id: string, name: string) => {
     setIsSubmitting(true);
     try {
-      const hairdressersQuery = query(collection(db, "hairdressers"), where("assigned_locations", "array-contains", id), limit(1));
+      const hairdressersQuery = query(collection(db, "hairdressers"), where("assignedLocations", "array-contains", id), limit(1));
       const servicesQuery = query(collection(db, "services"), where("salonIds", "array-contains", id), limit(1));
       const bookingsQuery = query(collection(db, "bookings"), where("salonId", "==", id), limit(1));
 

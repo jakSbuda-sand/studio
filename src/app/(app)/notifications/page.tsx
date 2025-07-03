@@ -34,7 +34,7 @@ export default function NotificationsPage() {
       setIsLoading(true);
       try {
         const notificationsCol = collection(db, "notifications");
-        const q = query(notificationsCol, orderBy("created_at", "desc"));
+        const q = query(notificationsCol, orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
         const notificationsList = querySnapshot.docs.map(doc => ({
           id: doc.id,
@@ -139,24 +139,24 @@ export default function NotificationsPage() {
                     {notifications.map((log) => (
                         <TableRow key={log.id} className="font-body">
                             <TableCell>
-                                {log.created_at ? 
+                                {log.createdAt ? 
                                     <div className="flex flex-col">
-                                        <span>{format((log.created_at as Timestamp).toDate(), "MMM dd, yyyy 'at' HH:mm")}</span>
-                                        <span className="text-xs text-muted-foreground">{formatDistanceToNow((log.created_at as Timestamp).toDate(), { addSuffix: true })}</span>
+                                        <span>{format((log.createdAt as Timestamp).toDate(), "MMM dd, yyyy 'at' HH:mm")}</span>
+                                        <span className="text-xs text-muted-foreground">{formatDistanceToNow((log.createdAt as Timestamp).toDate(), { addSuffix: true })}</span>
                                     </div>
                                 : "N/A"}
                             </TableCell>
                             <TableCell>
                                 <div className="flex items-center gap-2">
                                     <Mail size={14} className="text-muted-foreground" />
-                                    {log.recipient_email || "N/A"}
+                                    {log.recipientEmail || "N/A"}
                                 </div>
                             </TableCell>
-                            <TableCell className="capitalize">{log.template_id || log.type}</TableCell>
+                            <TableCell className="capitalize">{log.templateId || log.type}</TableCell>
                             <TableCell>
                                 <Badge variant={getStatusBadgeVariant(log.status)}>{log.status}</Badge>
                                 {log.status === 'failed' && (
-                                    <p className="text-xs text-destructive mt-1 max-w-xs truncate" title={log.error_message}>{log.error_message}</p>
+                                    <p className="text-xs text-destructive mt-1 max-w-xs truncate" title={log.errorMessage}>{log.errorMessage}</p>
                                 )}
                             </TableCell>
                         </TableRow>

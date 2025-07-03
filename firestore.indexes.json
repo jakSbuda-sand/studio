@@ -105,6 +105,13 @@
       "collectionGroup": "hairdressers",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "assignedLocations", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "hairdressers",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "name", "order": "ASCENDING" }
       ]
     },

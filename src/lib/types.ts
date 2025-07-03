@@ -179,15 +179,15 @@ export interface ClientDoc {
 }
 
 export interface NotificationDoc {
-  booking_id: string;
+  bookingId: string;
   type: 'email' | 'sms';
-  recipient_email?: string;
-  recipient_phone?: string;
+  recipientEmail?: string;
+  recipientPhone?: string;
   status: 'pending' | 'sent' | 'failed';
-  sent_at?: Timestamp;
-  created_at: Timestamp;
-  template_id?: string;
-  error_message?: string;
+  sentAt?: Timestamp;
+  createdAt: Timestamp;
+  templateId?: string;
+  errorMessage?: string;
   context?: {
     clientName: string;
     serviceName: string;
