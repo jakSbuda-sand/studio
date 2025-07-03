@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight, CheckCircle } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight, CheckCircle, Droplets } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
@@ -112,8 +112,7 @@ export default function DashboardPage() {
                     orderBy("appointmentDateTime", "asc")
                 );
             } else {
-                // Simplified query: Fetch all for salon, filter date client-side
-                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId));
+                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId), orderBy("appointmentDateTime", "asc"));
             }
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
@@ -142,20 +141,26 @@ export default function DashboardPage() {
         const hairdressersMap = new Map<string, Hairdresser>(hairdresserSnapshot.docs.map(doc => [doc.id, {id: doc.id, ...doc.data()} as Hairdresser]));
         setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
 
+        const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
+
         const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
+            const basePrice = service?.price || 0;
+            const finalPrice = (data.washServiceAdded && washService) ? basePrice + washService.price : basePrice;
+
             return {
                 ...data,
                 id: doc.id,
                 clientId: data.clientId,
                 appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
-                price: service?.price || 0,
+                price: finalPrice,
+                washServiceAdded: data.washServiceAdded || false,
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
         }).filter(booking => {
             // If we fetched all bookings for a salon, filter by date now
-            if (filterSalonId !== 'all' && user.role === 'admin') {
+            if (user.role === 'admin' && filterSalonId !== 'all') {
                 return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
             }
             return true; // Already filtered by date in the 'all' query or not an admin view
@@ -441,6 +446,11 @@ export default function DashboardPage() {
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
                                 <Scissors size={14}/> {booking.serviceName}
                             </p>
+                            {booking.washServiceAdded && (
+                                <p className="text-xs text-blue-600 font-medium flex items-center gap-1.5">
+                                    <Droplets size={12}/> Wash Included
+                                </p>
+                            )}
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                                 <Store size={14}/> {salons.find(s => s.id === booking.salonId)?.name || 'N/A'}
                             </p>
@@ -479,3 +489,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
