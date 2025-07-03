@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle, MoreHorizontal } from "lucide-react";
+import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle, MoreHorizontal, Droplets } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -323,7 +323,15 @@ export default function BookingsPage() {
                     <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                     <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                   </TableCell>
-                  <TableCell>{booking.serviceName || "N/A"}</TableCell>
+                  <TableCell>
+                     <div>{booking.serviceName || "N/A"}</div>
+                      {booking.washServiceAdded && (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                          <Droplets size={12} className="text-blue-500" />
+                          <span>Wash Included</span>
+                        </div>
+                      )}
+                  </TableCell>
                   {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
                   <TableCell>

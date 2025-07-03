@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight, CheckCircle } from "lucide-react";
+import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardList, Filter, PlusCircle, Store, UserCog, TrendingUp, Loader2, Crown, Scissors, Award, CalendarDays, ListChecks, ArrowRight, CheckCircle, Droplets } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
@@ -446,6 +446,11 @@ export default function DashboardPage() {
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
                                 <Scissors size={14}/> {booking.serviceName}
                             </p>
+                            {booking.washServiceAdded && (
+                                <p className="text-xs text-blue-600 font-medium flex items-center gap-1.5">
+                                    <Droplets size={12}/> Wash Included
+                                </p>
+                            )}
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                                 <Store size={14}/> {salons.find(s => s.id === booking.salonId)?.name || 'N/A'}
                             </p>

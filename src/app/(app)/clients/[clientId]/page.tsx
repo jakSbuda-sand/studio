@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues, HairdresserDoc, LocationDoc, ServiceDoc } from "@/lib/types";
-import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText, X } from "lucide-react";
+import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText, X, Droplets } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
@@ -509,7 +509,15 @@ export default function ClientDetailPage() {
                         <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                         <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                         </TableCell>
-                        <TableCell>{booking.serviceName || services.find(s => s.id === booking.serviceId)?.name || "N/A"}</TableCell>
+                        <TableCell>
+                            <div>{booking.serviceName || services.find(s => s.id === booking.serviceId)?.name || "N/A"}</div>
+                            {booking.washServiceAdded && (
+                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                    <Droplets size={12} className="text-blue-500" />
+                                    <span>+ Wash</span>
+                                </div>
+                            )}
+                        </TableCell>
                         <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>
                         <TableCell>{getSalonName(booking.salonId)}</TableCell>
                         <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>

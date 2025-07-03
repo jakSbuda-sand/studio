@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc, DayOfWeek } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase } from "lucide-react";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -452,6 +452,12 @@ export default function CalendarPage() {
                                     <StoreIcon size={12} className="text-primary"/> 
                                     <span>{getSalonName(booking.salonId)}</span>
                                 </div>
+                                {booking.washServiceAdded && (
+                                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                                        <Droplets size={12} /> 
+                                        <span>Wash Included</span>
+                                    </div>
+                                )}
                             </CardContent>
                              {user.role === 'admin' && (
                                 <CardFooter className="p-2 border-t flex justify-end bg-muted/50">
