@@ -112,7 +112,7 @@ export default function DashboardPage() {
                     orderBy("appointmentDateTime", "asc")
                 );
             } else {
-                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId), where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)), where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)), orderBy("appointmentDateTime", "asc"));
+                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId), orderBy("appointmentDateTime", "asc"));
             }
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
@@ -160,7 +160,7 @@ export default function DashboardPage() {
             } as Booking;
         }).filter(booking => {
             // If we fetched all bookings for a salon, filter by date now
-            if (filterSalonId !== 'all' && user.role === 'admin') {
+            if (user.role === 'admin' && filterSalonId !== 'all') {
                 return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
             }
             return true; // Already filtered by date in the 'all' query or not an admin view
@@ -489,3 +489,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
