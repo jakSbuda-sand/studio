@@ -108,11 +108,13 @@ export default function DashboardPage() {
                 bookingsQuery = query(
                     bookingsRef,
                     where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
-                    orderBy("appointmentDateTime", "asc")
+                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate))
+                    // The orderBy is implicitly handled by Firestore for this type of query
                 );
             } else {
-                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId), orderBy("appointmentDateTime", "asc"));
+                // **ROBUST FIX**: Fetch all bookings for the salon without sorting on the DB side.
+                // Sorting and date filtering will be handled on the client side.
+                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId));
             }
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
@@ -143,7 +145,8 @@ export default function DashboardPage() {
 
         const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
 
-        const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
+        // First, map all documents to the Booking type
+        const allBookingsRaw: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
             const basePrice = service?.price || 0;
@@ -158,13 +161,19 @@ export default function DashboardPage() {
                 washServiceAdded: data.washServiceAdded || false,
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
-        }).filter(booking => {
-            // If we fetched all bookings for a salon, filter by date now
+        });
+        
+        // Now, perform client-side filtering and sorting
+        const allBookings = allBookingsRaw
+          .filter(booking => {
+            // If a specific salon was selected, apply the date filter now on the client side
             if (user.role === 'admin' && filterSalonId !== 'all') {
                 return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
             }
-            return true; // Already filtered by date in the 'all' query or not an admin view
-        });
+            return true; // Otherwise, the data is already filtered by the query or doesn't need it.
+          })
+          .sort((a,b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
+
 
         let totalBookings = 0, totalRevenue = 0, newClients = 0;
         let chartData: any[] = [], popularServices: { name: string; count: number }[] = [], topHairdressers: { name: string; count: number }[] = [];
@@ -203,7 +212,6 @@ export default function DashboardPage() {
         
         } else if (user.role === 'hairdresser') {
             const now = new Date();
-            const startOfToday = startOfDay(now);
             
             const todaysBookingsList = allBookings.filter(b => isSameDay(b.appointmentDateTime, now));
             totalBookings = todaysBookingsList.length;
@@ -490,4 +498,3 @@ export default function DashboardPage() {
   );
 }
 
-    
