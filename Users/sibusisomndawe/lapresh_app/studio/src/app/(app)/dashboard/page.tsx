@@ -112,6 +112,7 @@ export default function DashboardPage() {
                     orderBy("appointmentDateTime", "asc")
                 );
             } else {
+                // Fetch all bookings for the salon, then filter by date on the client side
                 bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId), orderBy("appointmentDateTime", "asc"));
             }
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
@@ -159,11 +160,11 @@ export default function DashboardPage() {
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
         }).filter(booking => {
-            // If we fetched all bookings for a salon, filter by date now
+            // If a specific salon was selected, apply the date filter now on the client side
             if (user.role === 'admin' && filterSalonId !== 'all') {
                 return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
             }
-            return true; // Already filtered by date in the 'all' query or not an admin view
+            return true; // Otherwise, the data is already filtered by the query or doesn't need it.
         });
 
         let totalBookings = 0, totalRevenue = 0, newClients = 0;
@@ -490,3 +491,4 @@ export default function DashboardPage() {
   );
 }
 
+    
