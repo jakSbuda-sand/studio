@@ -112,6 +112,7 @@ export default function BookingsPage() {
             serviceName: serviceDetails?.name || "Service Not Found",
             appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
             notes: data.notes, createdAt: data.createdAt, updatedAt: data.updatedAt,
+            washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
         const sortedBookingsList = bookingsList.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
@@ -203,6 +204,7 @@ export default function BookingsPage() {
         salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
         appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
         status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
+        washServiceAdded: data.addWashService === 'Yes',
       };
 
       await updateDoc(bookingRef, updateData as { [x: string]: any });
@@ -213,6 +215,7 @@ export default function BookingsPage() {
         ...data,
         appointmentDateTime: data.appointmentDateTime,
         serviceName: serviceDetails?.name || "Service Not Found",
+        washServiceAdded: data.addWashService === 'Yes',
         updatedAt: Timestamp.now(), 
       };
 

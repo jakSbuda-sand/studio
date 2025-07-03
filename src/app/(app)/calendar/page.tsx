@@ -142,6 +142,7 @@ export default function CalendarPage() {
             serviceName: serviceDetails?.name || "Service Not Found",
             appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
             notes: data.notes, color: getStatusColor(data.status), createdAt: data.createdAt, updatedAt: data.updatedAt,
+            washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
         setBookings(bookingsList);
@@ -252,6 +253,7 @@ export default function CalendarPage() {
         salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
         appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
         status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
+        washServiceAdded: data.addWashService === 'Yes',
       };
 
       await updateDoc(bookingRef, updateData as { [x: string]: any });
@@ -263,6 +265,7 @@ export default function CalendarPage() {
         appointmentDateTime: data.appointmentDateTime,
         serviceName: serviceDetails?.name || "Service Not Found",
         color: getStatusColor(data.status),
+        washServiceAdded: data.addWashService === 'Yes',
         updatedAt: Timestamp.now(), 
       };
 

@@ -448,13 +448,16 @@ export const processEmailQueue = onDocumentCreated(
     }
 
     try {
-      // Initialize Resend inside the try block to catch potential API key errors
       const resend = new Resend(resendApiKey.value());
 
       const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
 
+      // IMPORTANT: To send emails from your own domain (e.g., info@lapresh.com),
+      // you must verify that domain in your Resend account settings.
+      // Using a @gmail.com address here is not supported by Resend.
+      // For now, we use the default 'onboarding@resend.dev' which works for testing.
       await resend.emails.send({
-        from: "LaPresh Salon <bookings@notifications.lapresh.com>", // Replace with your verified Resend domain
+        from: "LaPresh Salon <onboarding@resend.dev>",
         to: [notificationData.recipient_email],
         subject: "Your Booking is Confirmed!",
         html: `

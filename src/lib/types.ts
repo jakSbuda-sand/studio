@@ -66,6 +66,7 @@ export interface Booking {
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
   notes?: string;
   color?: string;
+  washServiceAdded?: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -151,6 +152,7 @@ export interface BookingDoc {
   durationMinutes: number;
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
   notes?: string;
+  washServiceAdded?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

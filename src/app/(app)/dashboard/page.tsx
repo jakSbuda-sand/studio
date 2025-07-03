@@ -112,8 +112,7 @@ export default function DashboardPage() {
                     orderBy("appointmentDateTime", "asc")
                 );
             } else {
-                // Simplified query: Fetch all for salon, filter date client-side
-                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId));
+                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId), where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)), where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)), orderBy("appointmentDateTime", "asc"));
             }
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
@@ -142,15 +141,21 @@ export default function DashboardPage() {
         const hairdressersMap = new Map<string, Hairdresser>(hairdresserSnapshot.docs.map(doc => [doc.id, {id: doc.id, ...doc.data()} as Hairdresser]));
         setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
 
+        const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
+
         const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
+            const basePrice = service?.price || 0;
+            const finalPrice = (data.washServiceAdded && washService) ? basePrice + washService.price : basePrice;
+
             return {
                 ...data,
                 id: doc.id,
                 clientId: data.clientId,
                 appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
-                price: service?.price || 0,
+                price: finalPrice,
+                washServiceAdded: data.washServiceAdded || false,
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
         }).filter(booking => {

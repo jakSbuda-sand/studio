@@ -174,6 +174,7 @@ async function createBookingInFirestore(data: BookingFormValues, currentUser: Us
     appointmentDateTime: appointmentDateForFirestore,
     durationMinutes: data.durationMinutes,
     status: 'Confirmed', 
+    washServiceAdded: data.addWashService === 'Yes',
     notes: data.notes || "",
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
