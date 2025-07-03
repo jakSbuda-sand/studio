@@ -400,12 +400,12 @@ export const onBookingCreated = onDocumentCreated(
       const serviceData = serviceDoc.data() as ServiceDoc | undefined;
 
       const notificationData = {
-        booking_id: bookingId,
+        bookingId: bookingId,
         type: "email",
-        recipient_email: bookingData.clientEmail,
+        recipientEmail: bookingData.clientEmail,
         status: "pending", // To be processed by processEmailQueue
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
-        template_id: "booking_confirmation",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        templateId: "booking_confirmation",
         context: {
           clientName: bookingData.clientName,
           serviceName: serviceData?.name || "the service you requested",
@@ -448,19 +448,17 @@ export const processEmailQueue = onDocumentCreated(
     }
 
     try {
-      const key = resendApiKey.value();
-      if (!key) {
-        throw new Error("RESEND_API_KEY secret is not configured in the function's environment.");
-      }
-      const resend = new Resend(key);
+      const resend = new Resend(resendApiKey.value());
 
       const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
 
-      // For testing, Resend requires using the `onboarding@resend.dev` address
-      // until you have verified your own domain (e.g., `lapresh.com`) in Resend.
+      // IMPORTANT: To send emails from your own domain (e.g., info@lapresh.com),
+      // you must verify that domain in your Resend account settings.
+      // Using a @gmail.com address here is not supported by Resend.
+      // For now, we use the default 'onboarding@resend.dev' which works for testing.
       await resend.emails.send({
         from: "LaPresh Salon <onboarding@resend.dev>",
-        to: [notificationData.recipient_email],
+        to: [notificationData.recipientEmail],
         subject: "Your Booking is Confirmed!",
         html: `
           <h1>Booking Confirmation</h1>
@@ -476,7 +474,7 @@ export const processEmailQueue = onDocumentCreated(
       logger.info(`[processEmailQueue] Successfully sent email for notification ID: ${notificationId}`);
       await snapshot.ref.update({
         status: "sent",
-        sent_at: admin.firestore.FieldValue.serverTimestamp(),
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -486,7 +484,7 @@ export const processEmailQueue = onDocumentCreated(
       });
       await snapshot.ref.update({
         status: "failed",
-        error_message: errorMessage,
+        errorMessage: errorMessage,
       });
     }
   }
@@ -500,5 +498,3 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   }
 );
-
-    
