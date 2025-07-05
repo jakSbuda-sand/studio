@@ -19,8 +19,7 @@ import {
 import { format, isSameDay, addMinutes } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp } from "@/lib/firebase";
-import type { QueryConstraint } from "firebase/firestore";
+import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp, type Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,7 +39,10 @@ const getStatusColor = (status: Booking['status']): string => {
 export default function CalendarPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  
+  const [allBookings, setAllBookings] = useState<Booking[]>([]); // Master list of all bookings
+  const [bookings, setBookings] = useState<Booking[]>([]); // Displayed bookings after filtering
+  
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -57,6 +59,7 @@ export default function CalendarPage() {
 
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
+  // Effect 1: Fetch prerequisite data (salons, hairdressers, services)
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
@@ -110,65 +113,65 @@ export default function CalendarPage() {
     fetchPrerequisites();
   }, [user]);
 
+  // Effect 2: Fetch all relevant bookings once prerequisites are loaded
   useEffect(() => {
     if (!user || services.length === 0) return;
 
-    const fetchBookings = async () => {
+    const fetchAllBookings = async () => {
       setIsLoading(true);
       try {
+        let baseQuery: Query;
         const bookingsCollection = collection(db, "bookings");
-        const queryConstraints: QueryConstraint[] = [];
 
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-          queryConstraints.push(where("hairdresserId", "==", user.hairdresserProfileId));
-        } else if (user.role === 'admin') {
-          if (filterSalonId !== "all") {
-            queryConstraints.push(where("salonId", "==", filterSalonId));
-          }
-          if (filterHairdresserId !== "all") {
-            queryConstraints.push(where("hairdresserId", "==", filterHairdresserId));
-          }
+            baseQuery = query(bookingsCollection, where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
+        } else {
+            baseQuery = query(bookingsCollection, orderBy("appointmentDateTime", "asc"));
         }
-        
-        queryConstraints.push(orderBy("appointmentDateTime", "asc"));
 
-        const finalQuery = query(bookingsCollection, ...queryConstraints);
-        const bookingSnapshot = await getDocs(finalQuery);
+        const bookingSnapshot = await getDocs(baseQuery);
 
-        const bookingsList = bookingSnapshot.docs.map(bDoc => {
+        const fetchedBookings = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
-          let appointmentDateTimeJS: Date;
-          if (data.appointmentDateTime instanceof Timestamp) {
-            appointmentDateTimeJS = data.appointmentDateTime.toDate();
-          } else {
-            appointmentDateTimeJS = new Date(data.appointmentDateTime.toString());
-          }
+          const appointmentDateTimeJS = (data.appointmentDateTime as Timestamp).toDate();
           const serviceDetails = services.find(s => s.id === data.serviceId);
           return {
-            id: bDoc.id, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone,
-            salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+            id: bDoc.id, ...data,
+            appointmentDateTime: appointmentDateTimeJS,
             serviceName: serviceDetails?.name || "Service Not Found",
-            appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
-            notes: data.notes, color: getStatusColor(data.status), createdAt: data.createdAt, updatedAt: data.updatedAt,
+            color: getStatusColor(data.status),
             washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
-        setBookings(bookingsList);
+
+        setAllBookings(fetchedBookings);
 
       } catch (error: any) {
-        console.error("Error fetching calendar data:", error);
-        if ((error as any).code === 'failed-precondition') {
-          toast({ title: "Filter Error", description: "This combination of filters requires a database index that is not yet configured. Please filter by only one criteria at a time.", variant: "destructive", duration: 8000 });
-        } else {
-          toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
-        }
+        console.error("Error fetching all calendar data:", error);
+        toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchBookings();
-  }, [user, filterSalonId, filterHairdresserId, services, salons, hairdressers]);
+    fetchAllBookings();
+  }, [user, services]);
+
+  // Effect 3: Apply client-side filters whenever the master list or filters change
+  useEffect(() => {
+    let filtered = allBookings;
+
+    if (user?.role === 'admin') {
+      if (filterSalonId !== "all") {
+        filtered = filtered.filter(b => b.salonId === filterSalonId);
+      }
+      if (filterHairdresserId !== "all") {
+        filtered = filtered.filter(b => b.hairdresserId === filterHairdresserId);
+      }
+    }
+    setBookings(filtered);
+  }, [allBookings, filterSalonId, filterHairdresserId, user]);
+
 
   useEffect(() => {
     if (filterHairdresserId !== "all" && selectedDate && hairdressers.length > 0) {
@@ -196,7 +199,10 @@ export default function CalendarPage() {
         const bookingRef = doc(db, "bookings", bookingId);
         await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
         const newColor = getStatusColor(newStatus);
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+
+        // Update both master and filtered lists to ensure consistency
+        setAllBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+        
         toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
     } catch (error: any) {
         console.error(`Error updating booking status to ${newStatus}:`, error);
@@ -281,7 +287,7 @@ export default function CalendarPage() {
         updatedAt: Timestamp.now(), 
       };
 
-      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      setAllBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
       toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
       setIsFormOpen(false);
       setEditingBooking(null);
