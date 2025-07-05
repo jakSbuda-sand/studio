@@ -33,11 +33,12 @@ import React from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/contexts/AuthContext';
 import type { User } from '@/lib/types';
+import logo from '@/assets/logo.png';
 
 
 const Logo = () => (
   <div className="flex items-center justify-center p-2">
-     <Image src="/logo.png" alt="LaPresh Beauty Logo" width={180} height={45} />
+     <Image src={logo} alt="LaPresh Beauty Logo" width={180} height={45} />
   </div>
 );
 
