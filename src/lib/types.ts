@@ -89,8 +89,8 @@ export interface Client {
   phone: string;
   email?: string;
   notes?: string;
-  firstSeen?: Timestamp; // Timestamp from Firestore
-  lastSeen?: Timestamp; // Timestamp from Firestore
+  firstSeen?: Timestamp; 
+  lastSeen?: Timestamp; 
   totalBookings: number;
 }
 
