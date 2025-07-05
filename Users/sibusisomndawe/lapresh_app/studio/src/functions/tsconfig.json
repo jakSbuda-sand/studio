@@ -2,16 +2,18 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "target": "es2021",
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
     "outDir": "lib",
-    "rootDir": ".",
     "sourceMap": true,
     "strict": true,
+    "target": "es2021",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "noImplicitReturns": true,
-    "noUnusedLocals": true
+    "rootDir": ".",
+    "types": ["mocha", "chai", "sinon"]
   },
+  "compileOnSave": true,
   "include": [
     "index.ts",
     "test/**/*.ts"
@@ -19,6 +21,5 @@
   "exclude": [
     "node_modules",
     "lib"
-  ],
-  "compileOnSave": true
+  ]
 }
