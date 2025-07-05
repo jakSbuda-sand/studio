@@ -9,7 +9,7 @@ import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardLi
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
-import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
+import { db, collection, getDocs, query, where, orderBy, Timestamp, type Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, isSameDay } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -98,24 +98,23 @@ export default function DashboardPage() {
         const locationsQuery = query(collection(db, "locations"), orderBy("name"));
         const hairdressersQuery = query(collection(db, "hairdressers"));
         
-        let bookingsQuery;
-        let clientsQuery = null;
-
-        const bookingsRef = collection(db, "bookings");
+        let bookingsQuery: Query;
+        let clientsQuery: Query | null = null;
         
         if (user.role === 'admin') {
-            if (filterSalonId === 'all') {
-                bookingsQuery = query(
-                    bookingsRef,
-                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate))
-                    // The orderBy is implicitly handled by Firestore for this type of query
-                );
-            } else {
-                // **ROBUST FIX**: Fetch all bookings for the salon without sorting on the DB side.
-                // Sorting and date filtering will be handled on the client side.
-                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId));
+            let bookingsQueryBuilder: Query = collection(db, "bookings");
+
+            if (filterSalonId !== 'all') {
+                bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
             }
+
+            bookingsQuery = query(
+                bookingsQueryBuilder,
+                where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
+                where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
+                orderBy("appointmentDateTime", "asc")
+            );
+            
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
            bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
@@ -144,9 +143,8 @@ export default function DashboardPage() {
         setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
 
         const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
-
-        // First, map all documents to the Booking type
-        const allBookingsRaw: Booking[] = bookingSnapshot.docs.map(doc => {
+        
+        const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
             const basePrice = service?.price || 0;
@@ -162,17 +160,6 @@ export default function DashboardPage() {
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
         });
-        
-        // Now, perform client-side filtering and sorting
-        const allBookings = allBookingsRaw
-          .filter(booking => {
-            // If a specific salon was selected, apply the date filter now on the client side
-            if (user.role === 'admin' && filterSalonId !== 'all') {
-                return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
-            }
-            return true; // Otherwise, the data is already filtered by the query or doesn't need it.
-          })
-          .sort((a,b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
 
 
         let totalBookings = 0, totalRevenue = 0, newClients = 0;
@@ -185,13 +172,7 @@ export default function DashboardPage() {
             const completedBookings = allBookings.filter(b => b.status === 'Completed');
             totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
             
-            if (newClientSnapshot) {
-              const clientIdsInFilteredBookings = new Set(allBookings.map(b => b.clientId).filter(Boolean));
-              const newClientsInFilter = newClientSnapshot.docs.filter(clientDoc => 
-                clientIdsInFilteredBookings.has(clientDoc.id)
-              );
-              newClients = newClientsInFilter.length;
-            }
+            newClients = newClientSnapshot ? newClientSnapshot.size : 0;
             
             const daysInRange = dateRangeFilter === 'today' ? 1 : (dateRangeFilter === '7d' ? 7 : 30);
             chartData = Array.from({ length: daysInRange }).map((_, i) => {
@@ -212,11 +193,11 @@ export default function DashboardPage() {
         
         } else if (user.role === 'hairdresser') {
             const now = new Date();
+            const startOfToday = startOfDay(now);
             
             const todaysBookingsList = allBookings.filter(b => isSameDay(b.appointmentDateTime, now));
             totalBookings = todaysBookingsList.length;
             
-            // Filter all fetched bookings for upcoming ones
             upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(now)).length;
             
             todaysSchedule = todaysBookingsList
@@ -497,4 +478,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
