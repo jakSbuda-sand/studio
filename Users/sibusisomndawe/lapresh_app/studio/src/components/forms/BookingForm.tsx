@@ -23,7 +23,7 @@ import type { Booking, Salon, Hairdresser, Service, ServiceDoc, Client, ClientDo
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format, isSameDay, startOfDay, endOfDay, parse, addMinutes } from "date-fns";
-import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck } from "lucide-react";
+import { CalendarIcon, ClipboardList, Clock, Loader2, Info, Settings2, UserCheck, Droplets } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, Timestamp, limit, orderBy } from "@/lib/firebase";
@@ -41,6 +41,7 @@ const bookingFormSchema = z.object({
   appointmentTime: z.string({ required_error: "Please select an available time." }).regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)."),
   durationMinutes: z.coerce.number().int().positive("Duration must be a positive number."),
   status: z.enum(['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No-Show'], { required_error: "Booking status is required."}),
+  addWashService: z.enum(['Yes', 'No']),
   notes: z.string().optional(),
 });
 
@@ -70,6 +71,7 @@ export default function BookingForm({
   const [availableHairdressers, setAvailableHairdressers] = useState<Hairdresser[]>([]);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isFetchingServices, setIsFetchingServices] = useState(false);
+  const [washService, setWashService] = useState<Service | null>(null);
 
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [isSearchListOpen, setIsSearchListOpen] = useState(false);
@@ -85,6 +87,7 @@ export default function BookingForm({
     appointmentTime: format(new Date(initialData.appointmentDateTime), "HH:mm"),
     status: initialData.status,
     serviceId: initialData.serviceId,
+    addWashService: initialData.washServiceAdded ? 'Yes' : 'No',
   } : {
     clientName: "",
     clientPhone: "",
@@ -96,6 +99,7 @@ export default function BookingForm({
     appointmentTime: "",
     durationMinutes: 60,
     status: 'Confirmed',
+    addWashService: 'No',
     notes: "",
     ...initialDataPreselected,
   };
@@ -109,6 +113,26 @@ export default function BookingForm({
   const selectedDate = form.watch("appointmentDateTime");
   const duration = form.watch("durationMinutes");
   const { setValue } = form;
+
+  useEffect(() => {
+    // Fetch all services to find the 'Wash' service
+    const fetchAllServices = async () => {
+        try {
+            const servicesCol = collection(db, "services");
+            const servicesQuery = query(servicesCol, where("isActive", "==", true));
+            const snapshot = await getDocs(servicesQuery);
+            const allServices = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Service));
+            const foundWashService = allServices.find(s => s.name.toLowerCase() === 'wash') || null;
+            setWashService(foundWashService);
+            if (!foundWashService) {
+                console.warn("A service named 'Wash' was not found. The 'Add Wash Service' feature will only affect duration if a service named 'Wash' is created and active.");
+            }
+        } catch (error) {
+            console.error("Failed to fetch services to find 'Wash' service:", error);
+        }
+    };
+    fetchAllServices();
+  }, []);
 
   const generateAndFilterSlots = useCallback(async () => {
     if (!selectedHairdresserId || !selectedDate || !duration || !selectedSalonId) {
@@ -387,15 +411,22 @@ export default function BookingForm({
       if (name === "salonId") {
         setSelectedSalonId(value.salonId);
       }
-      if (name === "serviceId" && value.serviceId) {
-        const selectedService = availableServices.find(s => s.id === value.serviceId);
+      if (name === "serviceId" || name === 'addWashService') {
+        const serviceId = form.getValues("serviceId");
+        const addWash = form.getValues("addWashService") === 'Yes';
+        const selectedService = availableServices.find(s => s.id === serviceId);
+        
         if (selectedService) {
-          form.setValue("durationMinutes", selectedService.durationMinutes, { shouldDirty: true });
+            let totalDuration = selectedService.durationMinutes;
+            if (addWash && washService) {
+                totalDuration += washService.durationMinutes;
+            }
+            form.setValue("durationMinutes", totalDuration, { shouldDirty: true });
         }
       }
     });
     return () => subscription.unsubscribe();
-  }, [form, availableServices]);
+  }, [form, availableServices, washService]);
 
 
   const handleSubmitInternal = async (data: BookingFormValues) => {
@@ -497,10 +528,6 @@ export default function BookingForm({
                   <Select
                     onValueChange={(value) => {
                       field.onChange(value);
-                      const selectedService = availableServices.find(s => s.id === value);
-                      if (selectedService) {
-                        form.setValue("durationMinutes", selectedService.durationMinutes);
-                      }
                     }}
                     value={field.value}
                     disabled={!selectedSalonId || isFetchingServices || availableServices.length === 0}
@@ -522,6 +549,30 @@ export default function BookingForm({
                 </FormItem>
               )}/>
             </div>
+            
+             <FormField control={form.control} name="addWashService" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Add Wash Service?</FormLabel>
+                 <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    disabled={!washService}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <Droplets className="mr-2 h-4 w-4 opacity-50" />
+                        <SelectValue placeholder="Select an option" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        <SelectItem value="No">No</SelectItem>
+                        <SelectItem value="Yes">Yes (+{washService?.durationMinutes} min, +R{washService?.price.toFixed(2)})</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {!washService && <FormDescription>A service named "Wash" must be created to use this option.</FormDescription>}
+                  <FormMessage />
+              </FormItem>
+             )}/>
 
             <FormField control={form.control} name="hairdresserId" render={({ field }) => (
               <FormItem>

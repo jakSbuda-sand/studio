@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues, HairdresserDoc, LocationDoc } from "@/lib/types";
-import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText, X } from "lucide-react";
+import type { Booking, BookingDoc, Client, ClientDoc, User, Salon, Hairdresser, Service, BookingFormValues, HairdresserDoc, LocationDoc, ServiceDoc } from "@/lib/types";
+import { UserCircle, Phone, Mail, CalendarDays, ArrowLeft, Loader2, ShieldAlert, Edit3, Save, FileText, X, Droplets } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, query, where, orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
@@ -86,7 +86,7 @@ export default function ClientDetailPage() {
           const data = hDoc.data() as HairdresserDoc;
           return {
               id: hDoc.id,
-              userId: data.user_id,
+              userId: data.userId,
               name: data.name,
               email: data.email,
               assignedLocations: data.assignedLocations || [],
@@ -101,7 +101,7 @@ export default function ClientDetailPage() {
       }));
 
         const servicesSnap = await getDocs(collection(db, "services"));
-        const servicesList = servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
+        const servicesList = servicesSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as ServiceDoc) } as Service));
         setServices(servicesList);
 
         const bookingsQuery = query(
@@ -118,6 +118,7 @@ export default function ClientDetailPage() {
             ...data,
             appointmentDateTime: (data.appointmentDateTime as Timestamp).toDate(),
             serviceName: serviceDetails?.name || "N/A",
+            washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
 
@@ -261,6 +262,7 @@ export default function ClientDetailPage() {
         salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
         appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
         status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
+        washServiceAdded: data.addWashService === 'Yes',
       };
 
       await updateDoc(bookingRef, updateData as { [x: string]: any });
@@ -271,6 +273,7 @@ export default function ClientDetailPage() {
         ...data,
         appointmentDateTime: data.appointmentDateTime,
         serviceName: serviceDetails?.name || "Service Not Found",
+        washServiceAdded: data.addWashService === 'Yes',
         updatedAt: Timestamp.now(), 
       };
 
@@ -506,7 +509,15 @@ export default function ClientDetailPage() {
                         <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                         <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                         </TableCell>
-                        <TableCell>{booking.serviceName || services.find(s => s.id === booking.serviceId)?.name || "N/A"}</TableCell>
+                        <TableCell>
+                            <div>{booking.serviceName || services.find(s => s.id === booking.serviceId)?.name || "N/A"}</div>
+                            {booking.washServiceAdded && (
+                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                    <Droplets size={12} className="text-blue-500" />
+                                    <span>+ Wash</span>
+                                </div>
+                            )}
+                        </TableCell>
                         <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>
                         <TableCell>{getSalonName(booking.salonId)}</TableCell>
                         <TableCell><Badge variant={getStatusBadgeVariant(booking.status)}>{booking.status}</Badge></TableCell>
@@ -528,5 +539,3 @@ export default function ClientDetailPage() {
     </div>
   );
 }
-
-    

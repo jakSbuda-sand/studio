@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle, MoreHorizontal } from "lucide-react";
+import { ClipboardList, Edit3, Trash2, PlusCircle, CalendarDays, Loader2, CheckCircle, MoreHorizontal, Droplets } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -112,6 +112,7 @@ export default function BookingsPage() {
             serviceName: serviceDetails?.name || "Service Not Found",
             appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
             notes: data.notes, createdAt: data.createdAt, updatedAt: data.updatedAt,
+            washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
         const sortedBookingsList = bookingsList.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
@@ -203,6 +204,7 @@ export default function BookingsPage() {
         salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
         appointmentDateTime: appointmentDateForFirestore, durationMinutes: data.durationMinutes,
         status: data.status, notes: data.notes || "", updatedAt: serverTimestamp() as Timestamp,
+        washServiceAdded: data.addWashService === 'Yes',
       };
 
       await updateDoc(bookingRef, updateData as { [x: string]: any });
@@ -213,6 +215,7 @@ export default function BookingsPage() {
         ...data,
         appointmentDateTime: data.appointmentDateTime,
         serviceName: serviceDetails?.name || "Service Not Found",
+        washServiceAdded: data.addWashService === 'Yes',
         updatedAt: Timestamp.now(), 
       };
 
@@ -320,7 +323,15 @@ export default function BookingsPage() {
                     <div>{format(new Date(booking.appointmentDateTime), "MMM dd, yyyy")}</div>
                     <div className="text-sm text-muted-foreground">{format(new Date(booking.appointmentDateTime), "p")}</div>
                   </TableCell>
-                  <TableCell>{booking.serviceName || "N/A"}</TableCell>
+                  <TableCell>
+                     <div>{booking.serviceName || "N/A"}</div>
+                      {booking.washServiceAdded && (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                          <Droplets size={12} className="text-blue-500" />
+                          <span>Wash Included</span>
+                        </div>
+                      )}
+                  </TableCell>
                   {user.role === 'admin' && <TableCell>{getHairdresserName(booking.hairdresserId)}</TableCell>}
                   <TableCell>{getSalonName(booking.salonId)}</TableCell>
                   <TableCell>
