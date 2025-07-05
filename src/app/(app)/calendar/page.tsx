@@ -19,7 +19,8 @@ import {
 import { format, isSameDay, addMinutes } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, type Query, serverTimestamp } from "@/lib/firebase";
+import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp } from "@/lib/firebase";
+import type { QueryConstraint } from "firebase/firestore";
 import { toast } from "@/hooks/use-toast";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -113,20 +114,27 @@ export default function CalendarPage() {
     const fetchBookings = async () => {
       setIsLoading(true);
       try {
-        let bookingsQueryBuilder: Query = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
-        
-        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-            bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", user.hairdresserProfileId));
-        } else {
-            if (filterSalonId !== "all") {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
-            }
-            if (filterHairdresserId !== "all") {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", filterHairdresserId));
-            }
-        }
+        const bookingsCollection = collection(db, "bookings");
+        const queryConstraints: QueryConstraint[] = [];
 
-        const bookingSnapshot = await getDocs(bookingsQueryBuilder);
+        // Apply filters based on user role and selections
+        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+          queryConstraints.push(where("hairdresserId", "==", user.hairdresserProfileId));
+        } else { // Admin role
+          if (filterSalonId !== "all") {
+            queryConstraints.push(where("salonId", "==", filterSalonId));
+          }
+          if (filterHairdresserId !== "all") {
+            queryConstraints.push(where("hairdresserId", "==", filterHairdresserId));
+          }
+        }
+        
+        // Always apply ordering
+        queryConstraints.push(orderBy("appointmentDateTime", "asc"));
+
+        const finalQuery = query(bookingsCollection, ...queryConstraints);
+        const bookingSnapshot = await getDocs(finalQuery);
+
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
           let appointmentDateTimeJS: Date;
