@@ -8,7 +8,6 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import {defineString} from "firebase-functions/params";
 import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc} from "./types";
 import {format} from "date-fns";
 
@@ -19,9 +18,6 @@ if (admin.apps.length === 0) {
 }
 
 const db = admin.firestore();
-
-// Define Resend API Key as a secret parameter
-const resendApiKey = defineString("RESEND_API_KEY");
 
 interface CreateAdminData {
   email: string;
@@ -430,7 +426,7 @@ export const processEmailQueue = onDocumentCreated(
     region: "us-central1",
   },
   async (event) => {
-    logger.log("[processEmailQueue] DEPLOYMENT_V5_CONFIRMED. Function triggered.");
+    logger.log("[processEmailQueue] DEPLOYMENT_V_FINAL. Function triggered.");
     const snapshot = event.data;
     if (!snapshot) {
       logger.log("[processEmailQueue] No data associated with event. Exiting.");
@@ -442,10 +438,10 @@ export const processEmailQueue = onDocumentCreated(
 
     // This is a diagnostic step. The real logic will be restored later.
     await snapshot.ref.update({
-        status: "sent",
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        errorMessage: "DIAGNOSTIC: Email sending logic is disabled.",
-      });
+      status: "sent",
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      errorMessage: "DIAGNOSTIC: Email sending logic is disabled.",
+    });
 
     logger.log(`[processEmailQueue] DIAGNOSTIC: Successfully updated notification ${notificationId} to 'sent'.`);
   }

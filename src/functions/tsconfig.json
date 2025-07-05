@@ -13,10 +13,12 @@
     "noUnusedLocals": true
   },
   "include": [
-    "index.ts"
+    "index.ts",
+    "test/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "lib"
   ],
   "compileOnSave": true
 }
