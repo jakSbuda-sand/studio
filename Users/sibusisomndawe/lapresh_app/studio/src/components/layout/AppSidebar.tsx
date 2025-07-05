@@ -37,7 +37,7 @@ import type { User } from '@/lib/types';
 
 const Logo = () => (
   <div className="flex items-center justify-center p-2">
-     <Image src="/logo.png" alt="LaPresh Beauty Logo" width={180} height={45} className="object-contain" />
+     <Image src="/logo.png?v=2" alt="LaPresh Beauty Logo" width={180} height={45} />
   </div>
 );
 
@@ -117,20 +117,13 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
 const navItems: NavItemProps[] = [
   // Core items for all roles
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'hairdresser'] },
-  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin', 'hairdresser'] },
   
-  // Booking section (remains collapsible)
-  {
-    href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin', 'hairdresser'],
-    subItems: [
-      { href: '/bookings', icon: ClipboardList, label: 'All Bookings', roles: ['admin'] },
-      { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
-      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin'] },
-    ]
-  },
-
-  // Admin-only management section
+  // Conditionally rendered items
+  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin'] },
+  { href: '/bookings', icon: ClipboardList, label: 'Bookings', roles: ['admin'] },
   { href: '/clients', icon: Contact, label: 'Clients', roles: ['admin'] },
+  
+  // Admin-only management section
   {
     href: '#', icon: Settings2, label: 'Manage', roles: ['admin'],
     subItems: [
@@ -178,5 +171,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
-  
