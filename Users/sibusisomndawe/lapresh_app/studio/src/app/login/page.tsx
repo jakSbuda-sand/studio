@@ -65,7 +65,7 @@ export default function LoginPage() {
        <Card className="w-full max-w-md shadow-2xl overflow-hidden rounded-xl">
         <CardHeader className="bg-primary/10 p-8 text-center flex flex-col items-center">
           <div className="mb-4">
-            <Image src="/logo.png?v=2" alt="LaPresh Beauty Logo" width={240} height={60} priority />
+            <Image src="/logo.png" alt="LaPresh Beauty Logo" width={240} height={60} priority />
           </div>
           <CardTitle className="text-4xl sm:text-5xl font-headline text-primary-foreground tracking-wider invisible h-0">
             LaPresh Beauty Salon

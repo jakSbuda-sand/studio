@@ -37,7 +37,7 @@ import type { User } from '@/lib/types';
 
 const Logo = () => (
   <div className="flex items-center justify-center p-2">
-     <Image src="/logo.png?v=2" alt="LaPresh Beauty Logo" width={180} height={45} />
+     <Image src="/logo.png" alt="LaPresh Beauty Logo" width={180} height={45} />
   </div>
 );
 
@@ -115,10 +115,9 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
 
 
 const navItems: NavItemProps[] = [
-  // Core items for all roles
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'hairdresser'] },
-  
-  // Conditionally rendered items
+  { href: '/calendar', icon: CalendarDays, label: "Today's Schedule", roles: ['hairdresser'] },
+  { href: '/bookings', icon: ClipboardList, label: "Today's Bookings", roles: ['hairdresser'] },
   { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin'] },
   { href: '/bookings', icon: ClipboardList, label: 'Bookings', roles: ['admin'] },
   { href: '/clients', icon: Contact, label: 'Clients', roles: ['admin'] },
