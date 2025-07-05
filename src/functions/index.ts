@@ -429,7 +429,6 @@ export const processEmailQueue = onDocumentCreated(
   {
     document: "notifications/{notificationId}",
     region: "us-central1",
-    secrets: ["RESEND_API_KEY"],
   },
   async (event) => {
     const snapshot = event.data;
@@ -503,3 +502,5 @@ export const helloWorld = onRequest(
     response.send("Hello from Firebase! (v2) - Logging test successful if you see this in response and logs.");
   }
 );
+
+    
