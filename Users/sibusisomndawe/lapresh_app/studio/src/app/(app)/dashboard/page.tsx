@@ -100,9 +100,6 @@ export default function DashboardPage() {
         
         let bookingsQuery: Query;
         let clientsQuery: Query | null = null;
-        let allBookings: Booking[] = [];
-        
-        const bookingsRef = collection(db, "bookings");
         
         if (user.role === 'admin') {
             let bookingsQueryBuilder: Query = collection(db, "bookings");
@@ -114,7 +111,8 @@ export default function DashboardPage() {
             bookingsQuery = query(
                 bookingsQueryBuilder,
                 where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-                where("appointmentDateTime", "<=", Timestamp.fromDate(endDate))
+                where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
+                orderBy("appointmentDateTime", "asc")
             );
             
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
@@ -146,7 +144,7 @@ export default function DashboardPage() {
 
         const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
         
-        allBookings = bookingSnapshot.docs.map(doc => {
+        const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
             const basePrice = service?.price || 0;
@@ -161,7 +159,7 @@ export default function DashboardPage() {
                 washServiceAdded: data.washServiceAdded || false,
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
-        }).sort((a,b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
+        });
 
 
         let totalBookings = 0, totalRevenue = 0, newClients = 0;
