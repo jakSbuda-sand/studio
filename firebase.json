@@ -6,7 +6,7 @@
   "functions": [
     {
       "source": "src/functions",
-      "runtime": "nodejs18",
+      "runtime": "nodejs20",
       "codebase": "default",
       "ignore": [
         "node_modules",
@@ -33,7 +33,7 @@
       {
         "source": "/api/genkit/**",
         "function": {
-          "region": "us-west1",
+          "region": "us-central1",
           "functionId": "genkitNextServer",
           "pinTag": true
         }
@@ -41,7 +41,7 @@
       {
         "source": "**",
         "function": {
-          "region": "us-west1",
+          "region": "us-central1",
           "functionId": "nextServer",
           "pinTag": true
         }
