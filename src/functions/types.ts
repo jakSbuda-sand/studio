@@ -1,7 +1,7 @@
 
-import type {Timestamp} from 'firebase/firestore';
+import type {Timestamp} from "firebase-admin/firestore";
 
-export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+export type DayOfWeek = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
 
 export interface DailyWorkingHours {
   start: string; // HH:mm format
@@ -63,7 +63,7 @@ export interface Booking {
   appointmentDateTime: Date;
   durationMinutes: number;
   price?: number; // Price of the service at time of booking
-  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
+  status: "Pending" | "Confirmed" | "Completed" | "Cancelled" | "No-Show";
   notes?: string;
   color?: string;
   washServiceAdded?: boolean;
@@ -75,7 +75,7 @@ export interface User {
   uid: string;
   name: string | null;
   email: string | null;
-  role: 'admin' | 'hairdresser' | 'unknown';
+  role: "admin" | "hairdresser" | "unknown";
   avatarUrl?: string;
   hairdresserDocId?: string;
   hairdresserProfileId?: string;
@@ -150,7 +150,7 @@ export interface BookingDoc {
   serviceId: string;
   appointmentDateTime: Timestamp;
   durationMinutes: number;
-  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'No-Show';
+  status: "Pending" | "Confirmed" | "Completed" | "Cancelled" | "No-Show";
   notes?: string;
   washServiceAdded?: boolean;
   createdAt: Timestamp;
@@ -160,7 +160,7 @@ export interface BookingDoc {
 export interface UserDoc {
   name: string;
   email: string;
-  role: 'admin' | 'hairdresser';
+  role: "admin" | "hairdresser";
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -180,10 +180,10 @@ export interface ClientDoc {
 
 export interface NotificationDoc {
   bookingId: string;
-  type: 'email' | 'sms';
+  type: "email" | "sms";
   recipientEmail?: string;
   recipientPhone?: string;
-  status: 'pending' | 'sent' | 'failed';
+  status: "pending" | "sent" | "failed";
   sentAt?: Timestamp;
   createdAt: Timestamp;
   templateId?: string;

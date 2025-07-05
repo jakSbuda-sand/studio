@@ -10,7 +10,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {defineString} from "firebase-functions/params";
 import {Resend} from "resend";
-import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc} from "../lib/types";
+import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc, NotificationDoc} from "./types";
 import {format} from "date-fns";
 
 // Initialize Firebase Admin SDK only once
@@ -399,12 +399,12 @@ export const onBookingCreated = onDocumentCreated(
       const serviceDoc = await db.collection("services").doc(bookingData.serviceId).get();
       const serviceData = serviceDoc.data() as ServiceDoc | undefined;
 
-      const notificationData = {
+      const notificationData: Omit<NotificationDoc, "id" | "sentAt" | "errorMessage"> = {
         bookingId: bookingId,
         type: "email",
         recipientEmail: bookingData.clientEmail,
-        status: "pending", // To be processed by processEmailQueue
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: "pending",
+        createdAt: admin.firestore.FieldValue.serverTimestamp() as admin.firestore.Timestamp,
         templateId: "booking_confirmation",
         context: {
           clientName: bookingData.clientName,
@@ -439,11 +439,20 @@ export const processEmailQueue = onDocumentCreated(
     }
 
     const notificationId = event.params.notificationId;
-    const notificationData = snapshot.data();
+    const notificationData = snapshot.data() as NotificationDoc;
     logger.log(`[processEmailQueue] Processing notification ID: ${notificationId}`, {data: notificationData});
 
     if (notificationData.status !== "pending") {
       logger.log(`[processEmailQueue] Notification ${notificationId} is not pending. Status is '${notificationData.status}'. Skipping.`);
+      return;
+    }
+
+    if (!notificationData.recipientEmail || !notificationData.context) {
+      logger.error(`[processEmailQueue] Notification ${notificationId} is missing recipient email or context. Marking as failed.`);
+      await snapshot.ref.update({
+        status: "failed",
+        errorMessage: "Missing recipient email or context data.",
+      });
       return;
     }
 
@@ -452,10 +461,6 @@ export const processEmailQueue = onDocumentCreated(
 
       const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
 
-      // IMPORTANT: To send emails from your own domain (e.g., info@lapresh.com),
-      // you must verify that domain in your Resend account settings.
-      // Using a @gmail.com address here is not supported by Resend.
-      // For now, we use the default 'onboarding@resend.dev' which works for testing.
       await resend.emails.send({
         from: "LaPresh Salon <onboarding@resend.dev>",
         to: [notificationData.recipientEmail],
