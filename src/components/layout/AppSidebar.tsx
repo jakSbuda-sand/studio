@@ -1,3 +1,4 @@
+
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -36,7 +37,7 @@ import type { User } from '@/lib/types';
 
 const Logo = () => (
   <div className="flex items-center justify-center p-2">
-     <Image src="/logo.png" alt="LaPresh Beauty Logo" width={180} height={45} priority />
+     <Image src="/logo.png" alt="LaPresh Beauty Logo" width={180} height={45} />
   </div>
 );
 
