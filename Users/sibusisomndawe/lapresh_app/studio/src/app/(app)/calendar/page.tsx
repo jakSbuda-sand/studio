@@ -113,20 +113,24 @@ export default function CalendarPage() {
     const fetchBookings = async () => {
       setIsLoading(true);
       try {
-        let bookingsQueryBuilder: Query = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
+        let bookingsQuery: Query = collection(db, "bookings");
         
+        // Apply filters first based on user role and selections
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-            bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", user.hairdresserProfileId));
-        } else {
+            bookingsQuery = query(bookingsQuery, where("hairdresserId", "==", user.hairdresserProfileId));
+        } else { // Admin role
             if (filterSalonId !== "all") {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
+                bookingsQuery = query(bookingsQuery, where("salonId", "==", filterSalonId));
             }
             if (filterHairdresserId !== "all") {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", filterHairdresserId));
+                bookingsQuery = query(bookingsQuery, where("hairdresserId", "==", filterHairdresserId));
             }
         }
+        
+        // Then apply ordering
+        const finalQuery = query(bookingsQuery, orderBy("appointmentDateTime", "asc"));
 
-        const bookingSnapshot = await getDocs(bookingsQueryBuilder);
+        const bookingSnapshot = await getDocs(finalQuery);
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
           let appointmentDateTimeJS: Date;
@@ -482,3 +486,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+    
