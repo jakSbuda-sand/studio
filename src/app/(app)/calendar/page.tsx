@@ -1,13 +1,14 @@
 
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc, DayOfWeek } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets } from "lucide-react";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets, ShieldAlert } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -16,13 +17,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { format, isSameDay, addMinutes } from "date-fns";
+import { format, isSameDay, addMinutes, startOfDay, endOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp, type Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 
 const getStatusColor = (status: Booking['status']): string => {
@@ -38,6 +40,7 @@ const getStatusColor = (status: Booking['status']): string => {
 
 export default function CalendarPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   
   const [allBookings, setAllBookings] = useState<Booking[]>([]); // Master list of all bookings
@@ -97,10 +100,6 @@ export default function CalendarPage() {
 
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           setFilterHairdresserId(user.hairdresserProfileId);
-          const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
-          if (hairdresserDetails && hairdresserDetails.assignedLocations.length > 0) {
-            setFilterSalonId(hairdresserDetails.assignedLocations[0]);
-          }
         }
       } catch (error: any) {
         console.error("Error fetching prerequisites:", error);
@@ -124,7 +123,14 @@ export default function CalendarPage() {
         const bookingsCollection = collection(db, "bookings");
 
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-            baseQuery = query(bookingsCollection, where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
+            const today = new Date();
+            const start = startOfDay(today);
+            const end = endOfDay(today);
+            baseQuery = query(bookingsCollection, 
+                where("hairdresserId", "==", user.hairdresserProfileId),
+                where("appointmentDateTime", ">=", Timestamp.fromDate(start)),
+                where("appointmentDateTime", "<=", Timestamp.fromDate(end)),
+                orderBy("appointmentDateTime", "asc"));
         } else {
             baseQuery = query(bookingsCollection, orderBy("appointmentDateTime", "asc"));
         }
@@ -174,8 +180,9 @@ export default function CalendarPage() {
 
 
   useEffect(() => {
-    if (filterHairdresserId !== "all" && selectedDate && hairdressers.length > 0) {
-        const hairdresser = hairdressers.find(h => h.id === filterHairdresserId);
+    const hairdresserIdToCheck = user?.role === 'hairdresser' ? user.hairdresserProfileId : filterHairdresserId;
+    if (hairdresserIdToCheck && hairdresserIdToCheck !== "all" && selectedDate && hairdressers.length > 0) {
+        const hairdresser = hairdressers.find(h => h.id === hairdresserIdToCheck);
         if (hairdresser?.workingHours) {
             const dayOfWeek = format(selectedDate, 'EEEE') as DayOfWeek;
             const schedule = hairdresser.workingHours[dayOfWeek];
@@ -190,7 +197,7 @@ export default function CalendarPage() {
     } else {
         setWorkingHoursToday(null); // Reset if no specific hairdresser or date is selected
     }
-  }, [selectedDate, filterHairdresserId, hairdressers]);
+  }, [selectedDate, filterHairdresserId, hairdressers, user]);
 
   
   const handleStatusUpdate = async (bookingId: string, newStatus: Booking['status']) => {
@@ -200,7 +207,6 @@ export default function CalendarPage() {
         await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
         const newColor = getStatusColor(newStatus);
 
-        // Update both master and filtered lists to ensure consistency
         setAllBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
         
         toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
@@ -220,7 +226,6 @@ export default function CalendarPage() {
       const newAppointmentEnd = addMinutes(newAppointmentStart, data.durationMinutes);
       const bookingsRef = collection(db, "bookings");
 
-      // Check for hairdresser conflicts
       const hairdresserQuery = query(bookingsRef, where("hairdresserId", "==", data.hairdresserId));
       const hairdresserSnapshot = await getDocs(hairdresserQuery);
 
@@ -244,7 +249,6 @@ export default function CalendarPage() {
           }
       }
 
-      // Check for client conflicts
       const clientQuery = query(bookingsRef, where("clientPhone", "==", data.clientPhone));
       const clientSnapshot = await getDocs(clientQuery);
 
@@ -306,7 +310,9 @@ export default function CalendarPage() {
     setIsFormOpen(true);
   };
 
-  const filteredBookingsByDate = bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true);
+  const filteredBookingsByDate = user?.role === 'admin' 
+    ? bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true)
+    : allBookings;
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
   const getHairdresserName = (hairdresserId: string) => hairdressers.find(h => h.id === hairdresserId)?.name || "N/A";
@@ -327,12 +333,15 @@ export default function CalendarPage() {
     : hairdressers.filter(h => h.isActive && h.assignedLocations.includes(filterSalonId));
   
   if (!user) return <p className="text-center mt-10 font-body">Please log in to view the calendar.</p>;
+  
+  const pageTitle = user.role === 'admin' ? "Admin Calendar View" : "Today's Schedule";
+  const pageDescription = user.role === 'admin' ? "Visualize and manage appointments." : `Your appointments for ${format(new Date(), "PPP")}`;
 
   return (
     <div className="space-y-8">
       <PageHeader
-        title={user.role === 'admin' ? "Admin Calendar View" : "My Calendar"}
-        description="Visualize and manage appointments."
+        title={pageTitle}
+        description={pageDescription}
         icon={CalendarDays}
       />
       
@@ -352,19 +361,19 @@ export default function CalendarPage() {
       </Dialog>
       
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-8 items-start">
-        <div className="xl:col-span-1 space-y-8 sticky top-20">
-            <Card className="shadow-lg rounded-lg">
-                <CardContent className="p-2 sm:p-3 flex flex-col gap-4">
-                    <div className="flex-1">
-                         <ShadcnCalendar
-                            mode="single"
-                            selected={selectedDate}
-                            onSelect={setSelectedDate}
-                            className="rounded-md border shadow-sm p-0 w-full"
-                            disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))}
-                        />
-                    </div>
-                    {user.role === 'admin' && (
+        {user.role === 'admin' && (
+            <div className="xl:col-span-1 space-y-8 sticky top-20">
+                <Card className="shadow-lg rounded-lg">
+                    <CardContent className="p-2 sm:p-3 flex flex-col gap-4">
+                        <div className="flex-1">
+                            <ShadcnCalendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={setSelectedDate}
+                                className="rounded-md border shadow-sm p-0 w-full"
+                                disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))}
+                            />
+                        </div>
                         <div className="space-y-4 pt-2">
                             <h3 className="font-headline text-lg flex items-center gap-2 px-1">
                                 <Filter className="h-5 w-5 text-primary" /> Filters
@@ -385,35 +394,35 @@ export default function CalendarPage() {
                                 {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1 px-1">No hairdressers for selected salon.</p>}
                             </div>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
 
-            {workingHoursToday && filterHairdresserId !== 'all' && (
-              <Card className="shadow-lg rounded-lg">
-                <CardHeader>
-                    <CardTitle className="font-headline text-lg flex items-center gap-2">
-                        <Briefcase className="h-5 w-5 text-primary"/>
-                        Daily Schedule
-                    </CardTitle>
-                    <CardDescription>Working hours for {getHairdresserName(filterHairdresserId)}.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                     {typeof workingHoursToday === 'object' && workingHoursToday !== null ? (
-                        <p className="text-sm font-medium text-foreground">
-                            Scheduled from <strong className="text-primary">{workingHoursToday.start}</strong> to <strong className="text-primary">{workingHoursToday.end}</strong>.
-                        </p>
-                    ) : workingHoursToday === 'off' ? (
-                        <p className="text-sm text-muted-foreground">This hairdresser has the day off.</p>
-                    ) : (
-                         <p className="text-sm text-muted-foreground">Working hours not defined.</p>
-                    )}
-                </CardContent>
-              </Card>
-            )}
-        </div>
+                {workingHoursToday && filterHairdresserId !== 'all' && (
+                  <Card className="shadow-lg rounded-lg">
+                    <CardHeader>
+                        <CardTitle className="font-headline text-lg flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-primary"/>
+                            Daily Schedule
+                        </CardTitle>
+                        <CardDescription>Working hours for {getHairdresserName(filterHairdresserId)}.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {typeof workingHoursToday === 'object' && workingHoursToday !== null ? (
+                            <p className="text-sm font-medium text-foreground">
+                                Scheduled from <strong className="text-primary">{workingHoursToday.start}</strong> to <strong className="text-primary">{workingHoursToday.end}</strong>.
+                            </p>
+                        ) : workingHoursToday === 'off' ? (
+                            <p className="text-sm text-muted-foreground">This hairdresser has the day off.</p>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Working hours not defined.</p>
+                        )}
+                    </CardContent>
+                  </Card>
+                )}
+            </div>
+        )}
 
-        <div className="xl:col-span-3 space-y-4">
+        <div className={cn("space-y-4", user.role === 'admin' ? 'xl:col-span-3' : 'col-span-1 xl:col-span-4')}>
             <Card className="shadow-lg rounded-lg">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl">Appointments for: <span className="text-primary">{selectedDate ? format(selectedDate, "PPP") : "All Dates"}</span></CardTitle>
@@ -447,7 +456,7 @@ export default function CalendarPage() {
                                             <DropdownMenuLabel>Change Status</DropdownMenuLabel>
                                             <DropdownMenuSeparator />
                                             {bookingStatusOptions.map((statusOption) => (
-                                                <DropdownMenuItem key={statusOption} onClick={() => handleStatusUpdate(booking.id, statusOption)} disabled={isSubmitting || booking.status === statusOption}>
+                                                <DropdownMenuItem key={statusOption} onClick={() => handleStatusUpdate(booking.id, statusOption)} disabled={isSubmitting || booking.status === statusOption || (user?.role === 'hairdresser' && statusOption !== 'Completed')}>
                                                     {statusOption}
                                                 </DropdownMenuItem>
                                             ))}
