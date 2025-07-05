@@ -43,6 +43,7 @@ export default function BookingsPage() {
   
   const [pageTitle, setPageTitle] = useState("All Bookings");
   const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
+  const [visibleCount, setVisibleCount] = useState(5);
   
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
@@ -54,6 +55,7 @@ export default function BookingsPage() {
 
     const fetchData = async () => {
       setIsLoading(true);
+      setVisibleCount(5); // Reset visible count on new data fetch
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
@@ -340,7 +342,7 @@ export default function BookingsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bookings.map((booking) => (
+              {bookings.slice(0, visibleCount).map((booking) => (
                 <TableRow key={booking.id} className="font-body">
                   <TableCell>
                     <div className="font-medium text-foreground">{booking.clientName}</div>
@@ -399,6 +401,21 @@ export default function BookingsPage() {
             </TableBody>
           </Table>
         </CardContent>
+         {bookings.length > 5 && (
+            <CardFooter className="flex items-center justify-between border-t pt-4">
+                 <p className="text-sm text-muted-foreground font-body">
+                    Showing {Math.min(visibleCount, bookings.length)} of {bookings.length} bookings.
+                </p>
+                {visibleCount < bookings.length && (
+                    <Button
+                        variant="outline"
+                        onClick={() => setVisibleCount(prev => prev + 5)}
+                    >
+                        Load More
+                    </Button>
+                )}
+            </CardFooter>
+        )}
       </Card>
       )}
     </div>
