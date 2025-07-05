@@ -39,7 +39,10 @@ const getStatusColor = (status: Booking['status']): string => {
 export default function CalendarPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  
+  const [allBookings, setAllBookings] = useState<Booking[]>([]); // Master list of all bookings
+  const [bookings, setBookings] = useState<Booking[]>([]); // Displayed bookings after filtering
+  
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -56,6 +59,7 @@ export default function CalendarPage() {
 
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
+  // Effect 1: Fetch prerequisite data (salons, hairdressers, services)
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
@@ -63,6 +67,7 @@ export default function CalendarPage() {
     }
     
     const fetchPrerequisites = async () => {
+      setIsLoading(true);
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
@@ -100,17 +105,19 @@ export default function CalendarPage() {
       } catch (error: any) {
         console.error("Error fetching prerequisites:", error);
         toast({ title: "Error Fetching Data", description: `Could not load base data: ${error.message}.`, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchPrerequisites();
   }, [user]);
 
+  // Effect 2: Fetch all relevant bookings once prerequisites are loaded
   useEffect(() => {
-    if (!user) return;
-    if (salons.length === 0 || hairdressers.length === 0 || services.length === 0) return;
+    if (!user || services.length === 0) return;
 
-    const fetchBookings = async () => {
+    const fetchAllBookings = async () => {
       setIsLoading(true);
       try {
         let baseQuery: Query;
@@ -124,46 +131,47 @@ export default function CalendarPage() {
 
         const bookingSnapshot = await getDocs(baseQuery);
 
-        let fetchedBookings = bookingSnapshot.docs.map(bDoc => {
+        const fetchedBookings = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
-          let appointmentDateTimeJS: Date;
-          if (data.appointmentDateTime instanceof Timestamp) {
-            appointmentDateTimeJS = data.appointmentDateTime.toDate();
-          } else {
-            appointmentDateTimeJS = new Date(data.appointmentDateTime.toString());
-          }
+          const appointmentDateTimeJS = (data.appointmentDateTime as Timestamp).toDate();
           const serviceDetails = services.find(s => s.id === data.serviceId);
           return {
-            id: bDoc.id, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone,
-            salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+            id: bDoc.id, ...data,
+            appointmentDateTime: appointmentDateTimeJS,
             serviceName: serviceDetails?.name || "Service Not Found",
-            appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
-            notes: data.notes, color: getStatusColor(data.status), createdAt: data.createdAt, updatedAt: data.updatedAt,
+            color: getStatusColor(data.status),
             washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
 
-        if (user.role === 'admin') {
-            if (filterSalonId !== "all") {
-                fetchedBookings = fetchedBookings.filter(b => b.salonId === filterSalonId);
-            }
-            if (filterHairdresserId !== "all") {
-                fetchedBookings = fetchedBookings.filter(b => b.hairdresserId === filterHairdresserId);
-            }
-        }
-
-        setBookings(fetchedBookings);
+        setAllBookings(fetchedBookings);
 
       } catch (error: any) {
-        console.error("Error fetching calendar data:", error);
+        console.error("Error fetching all calendar data:", error);
         toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchBookings();
-  }, [user, filterSalonId, filterHairdresserId, services, salons, hairdressers]);
+    fetchAllBookings();
+  }, [user, services]);
+
+  // Effect 3: Apply client-side filters whenever the master list or filters change
+  useEffect(() => {
+    let filtered = allBookings;
+
+    if (user?.role === 'admin') {
+      if (filterSalonId !== "all") {
+        filtered = filtered.filter(b => b.salonId === filterSalonId);
+      }
+      if (filterHairdresserId !== "all") {
+        filtered = filtered.filter(b => b.hairdresserId === filterHairdresserId);
+      }
+    }
+    setBookings(filtered);
+  }, [allBookings, filterSalonId, filterHairdresserId, user]);
+
 
   useEffect(() => {
     if (filterHairdresserId !== "all" && selectedDate && hairdressers.length > 0) {
@@ -191,7 +199,10 @@ export default function CalendarPage() {
         const bookingRef = doc(db, "bookings", bookingId);
         await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
         const newColor = getStatusColor(newStatus);
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+
+        // Update both master and filtered lists to ensure consistency
+        setAllBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+        
         toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
     } catch (error: any) {
         console.error(`Error updating booking status to ${newStatus}:`, error);
@@ -276,7 +287,7 @@ export default function CalendarPage() {
         updatedAt: Timestamp.now(), 
       };
 
-      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      setAllBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
       toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
       setIsFormOpen(false);
       setEditingBooking(null);
