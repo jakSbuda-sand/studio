@@ -41,7 +41,7 @@ const StatCard = ({ title, value, icon: Icon, description, isLoading }: { title:
 interface DashboardStats {
   totalBookings: number;
   totalRevenue: number;
-  newClients: number;
+  uniqueClients: number;
   chartData: any[];
   popularServices: { name: string; count: number }[];
   topHairdressers: { name: string; count: number }[];
@@ -99,31 +99,25 @@ export default function DashboardPage() {
         const hairdressersQuery = query(collection(db, "hairdressers"));
         
         let bookingsQuery: Query;
-        let clientsQuery: Query | null = null;
         
         if (user.role === 'admin') {
-            // Fetch all bookings within the date range first. Salon filtering will happen on the client side.
             bookingsQuery = query(
                 collection(db, "bookings"),
                 where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
                 where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
                 orderBy("appointmentDateTime", "asc")
             );
-            
-            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-           // Hairdresser-specific query remains the same as it correctly filters by their ID.
            bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
         } else {
-            setStats({ totalBookings: 0, totalRevenue: 0, newClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
+            setStats({ totalBookings: 0, totalRevenue: 0, uniqueClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
             setIsLoading(false);
             return;
         }
 
-        const [bookingSnapshot, serviceSnapshot, newClientSnapshot, locationSnapshot, hairdresserSnapshot] = await Promise.all([
+        const [bookingSnapshot, serviceSnapshot, locationSnapshot, hairdresserSnapshot] = await Promise.all([
           getDocs(bookingsQuery),
           getDocs(servicesQuery),
-          clientsQuery ? getDocs(clientsQuery) : Promise.resolve(null),
           getDocs(locationsQuery),
           getDocs(hairdressersQuery),
         ]);
@@ -140,8 +134,7 @@ export default function DashboardPage() {
 
         const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
         
-        // Map all bookings within the fetched date range
-        let allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
+        let allBookingsInPeriod: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
             const basePrice = service?.price || 0;
@@ -158,30 +151,30 @@ export default function DashboardPage() {
             } as Booking;
         });
         
-        // If admin and a salon is selected, filter the array now.
+        let filteredBookings = allBookingsInPeriod;
         if (user.role === 'admin' && filterSalonId !== 'all') {
-            allBookings = allBookings.filter(booking => booking.salonId === filterSalonId);
+            filteredBookings = allBookingsInPeriod.filter(booking => booking.salonId === filterSalonId);
         }
 
-
-        let totalBookings = 0, totalRevenue = 0, newClients = 0;
+        let totalBookings = 0, totalRevenue = 0, uniqueClients = 0;
         let chartData: any[] = [], popularServices: { name: string; count: number }[] = [], topHairdressers: { name: string; count: number }[] = [];
         let upcomingBookings = 0, todaysSchedule: Booking[] = [];
 
         if (user.role === 'admin') {
-            totalBookings = allBookings.length;
+            totalBookings = filteredBookings.length;
             
-            const completedBookings = allBookings.filter(b => b.status === 'Completed');
+            const completedBookings = filteredBookings.filter(b => b.status === 'Completed');
             totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
-            
-            newClients = newClientSnapshot ? newClientSnapshot.size : 0;
+
+            const uniqueClientIds = new Set(completedBookings.map(b => b.clientId));
+            uniqueClients = uniqueClientIds.size;
             
             const daysInRange = dateRangeFilter === 'today' ? 1 : (dateRangeFilter === '7d' ? 7 : 30);
             chartData = Array.from({ length: daysInRange }).map((_, i) => {
                 const date = subDays(today, daysInRange - 1 - i);
                 return {
                     date: format(date, "MMM d"),
-                    bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
+                    bookings: filteredBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
                 };
             });
 
@@ -195,19 +188,18 @@ export default function DashboardPage() {
         
         } else if (user.role === 'hairdresser') {
             const now = new Date();
-            const startOfToday = startOfDay(now);
             
-            const todaysBookingsList = allBookings.filter(b => isSameDay(b.appointmentDateTime, now));
+            const todaysBookingsList = filteredBookings.filter(b => isSameDay(b.appointmentDateTime, now));
             totalBookings = todaysBookingsList.length;
             
-            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(now)).length;
+            upcomingBookings = filteredBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(now)).length;
             
             todaysSchedule = todaysBookingsList
               .filter(b => b.status === 'Confirmed' || b.status === 'Completed')
               .sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
         }
         
-        setStats({ totalBookings, totalRevenue, newClients, chartData, popularServices, topHairdressers, upcomingBookings, todaysSchedule });
+        setStats({ totalBookings, totalRevenue, uniqueClients, chartData, popularServices, topHairdressers, upcomingBookings, todaysSchedule });
 
       } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
@@ -335,7 +327,7 @@ export default function DashboardPage() {
         <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <StatCard title="Total Bookings" value={stats?.totalBookings ?? 0} icon={CalendarCheck} description={statDescription} isLoading={isLoading} />
             <StatCard title="Total Revenue" value={`R ${stats?.totalRevenue.toFixed(2) ?? '0.00'}`} icon={DollarSign} description={`Completed bookings ${statDescription}`} isLoading={isLoading} />
-            <StatCard title="New Clients" value={stats?.newClients ?? 0} icon={Users} description={`Registered ${dateRangeText[dateRangeFilter]}`} isLoading={isLoading} />
+            <StatCard title="Unique Clients" value={stats?.uniqueClients ?? 0} icon={Users} description={`Serviced ${dateRangeText[dateRangeFilter]}`} isLoading={isLoading} />
         </section>
 
         <section className="grid grid-cols-1 gap-6">
