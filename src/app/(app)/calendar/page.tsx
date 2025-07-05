@@ -1,13 +1,14 @@
 
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc, DayOfWeek } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets } from "lucide-react";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets, ShieldAlert } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -16,13 +17,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { format, isSameDay, addMinutes } from "date-fns";
+import { format, isSameDay, addMinutes, startOfDay, endOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, type Query, serverTimestamp } from "@/lib/firebase";
+import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp, type Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 
 const getStatusColor = (status: Booking['status']): string => {
@@ -38,8 +40,12 @@ const getStatusColor = (status: Booking['status']): string => {
 
 export default function CalendarPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  
+  const [allBookings, setAllBookings] = useState<Booking[]>([]); // Master list of all bookings
+  const [bookings, setBookings] = useState<Booking[]>([]); // Displayed bookings after filtering
+  
   const [salons, setSalons] = useState<Salon[]>([]);
   const [hairdressers, setHairdressers] = useState<Hairdresser[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -56,6 +62,7 @@ export default function CalendarPage() {
 
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
+  // Effect 1: Fetch prerequisite data (salons, hairdressers, services)
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
@@ -63,6 +70,7 @@ export default function CalendarPage() {
     }
     
     const fetchPrerequisites = async () => {
+      setIsLoading(true);
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
@@ -92,75 +100,89 @@ export default function CalendarPage() {
 
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           setFilterHairdresserId(user.hairdresserProfileId);
-          const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
-          if (hairdresserDetails && hairdresserDetails.assignedLocations.length > 0) {
-            setFilterSalonId(hairdresserDetails.assignedLocations[0]);
-          }
         }
       } catch (error: any) {
         console.error("Error fetching prerequisites:", error);
         toast({ title: "Error Fetching Data", description: `Could not load base data: ${error.message}.`, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchPrerequisites();
   }, [user]);
 
+  // Effect 2: Fetch all relevant bookings once prerequisites are loaded
   useEffect(() => {
-    if (!user) return;
-    if (salons.length === 0 || hairdressers.length === 0 || services.length === 0) return;
+    if (!user || services.length === 0) return;
 
-    const fetchBookings = async () => {
+    const fetchAllBookings = async () => {
       setIsLoading(true);
       try {
-        let bookingsQueryBuilder: Query = query(collection(db, "bookings"), orderBy("appointmentDateTime", "asc"));
-        
+        let baseQuery: Query;
+        const bookingsCollection = collection(db, "bookings");
+
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-            bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", user.hairdresserProfileId));
+            const today = new Date();
+            const start = startOfDay(today);
+            const end = endOfDay(today);
+            baseQuery = query(bookingsCollection, 
+                where("hairdresserId", "==", user.hairdresserProfileId),
+                where("appointmentDateTime", ">=", Timestamp.fromDate(start)),
+                where("appointmentDateTime", "<=", Timestamp.fromDate(end)),
+                orderBy("appointmentDateTime", "asc"));
         } else {
-            if (filterSalonId !== "all") {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
-            }
-            if (filterHairdresserId !== "all") {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("hairdresserId", "==", filterHairdresserId));
-            }
+            baseQuery = query(bookingsCollection, orderBy("appointmentDateTime", "asc"));
         }
 
-        const bookingSnapshot = await getDocs(bookingsQueryBuilder);
-        const bookingsList = bookingSnapshot.docs.map(bDoc => {
+        const bookingSnapshot = await getDocs(baseQuery);
+
+        const fetchedBookings = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
-          let appointmentDateTimeJS: Date;
-          if (data.appointmentDateTime instanceof Timestamp) {
-            appointmentDateTimeJS = data.appointmentDateTime.toDate();
-          } else {
-            appointmentDateTimeJS = new Date(data.appointmentDateTime.toString());
-          }
+          const appointmentDateTimeJS = (data.appointmentDateTime as Timestamp).toDate();
           const serviceDetails = services.find(s => s.id === data.serviceId);
           return {
-            id: bDoc.id, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone,
-            salonId: data.salonId, hairdresserId: data.hairdresserId, serviceId: data.serviceId,
+            id: bDoc.id, ...data,
+            appointmentDateTime: appointmentDateTimeJS,
             serviceName: serviceDetails?.name || "Service Not Found",
-            appointmentDateTime: appointmentDateTimeJS, durationMinutes: data.durationMinutes, status: data.status,
-            notes: data.notes, color: getStatusColor(data.status), createdAt: data.createdAt, updatedAt: data.updatedAt,
+            color: getStatusColor(data.status),
             washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
-        setBookings(bookingsList);
+
+        setAllBookings(fetchedBookings);
 
       } catch (error: any) {
-        console.error("Error fetching calendar data:", error);
+        console.error("Error fetching all calendar data:", error);
         toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchBookings();
-  }, [user, filterSalonId, filterHairdresserId, services, salons, hairdressers]);
+    fetchAllBookings();
+  }, [user, services]);
+
+  // Effect 3: Apply client-side filters whenever the master list or filters change
+  useEffect(() => {
+    let filtered = allBookings;
+
+    if (user?.role === 'admin') {
+      if (filterSalonId !== "all") {
+        filtered = filtered.filter(b => b.salonId === filterSalonId);
+      }
+      if (filterHairdresserId !== "all") {
+        filtered = filtered.filter(b => b.hairdresserId === filterHairdresserId);
+      }
+    }
+    setBookings(filtered.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+  }, [allBookings, filterSalonId, filterHairdresserId, user]);
+
 
   useEffect(() => {
-    if (filterHairdresserId !== "all" && selectedDate && hairdressers.length > 0) {
-        const hairdresser = hairdressers.find(h => h.id === filterHairdresserId);
+    const hairdresserIdToCheck = user?.role === 'hairdresser' ? user.hairdresserProfileId : filterHairdresserId;
+    if (hairdresserIdToCheck && hairdresserIdToCheck !== "all" && selectedDate && hairdressers.length > 0) {
+        const hairdresser = hairdressers.find(h => h.id === hairdresserIdToCheck);
         if (hairdresser?.workingHours) {
             const dayOfWeek = format(selectedDate, 'EEEE') as DayOfWeek;
             const schedule = hairdresser.workingHours[dayOfWeek];
@@ -175,7 +197,7 @@ export default function CalendarPage() {
     } else {
         setWorkingHoursToday(null); // Reset if no specific hairdresser or date is selected
     }
-  }, [selectedDate, filterHairdresserId, hairdressers]);
+  }, [selectedDate, filterHairdresserId, hairdressers, user]);
 
   
   const handleStatusUpdate = async (bookingId: string, newStatus: Booking['status']) => {
@@ -184,7 +206,9 @@ export default function CalendarPage() {
         const bookingRef = doc(db, "bookings", bookingId);
         await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
         const newColor = getStatusColor(newStatus);
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+
+        setAllBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, color: newColor, updatedAt: Timestamp.now() } : b));
+        
         toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
     } catch (error: any) {
         console.error(`Error updating booking status to ${newStatus}:`, error);
@@ -202,7 +226,6 @@ export default function CalendarPage() {
       const newAppointmentEnd = addMinutes(newAppointmentStart, data.durationMinutes);
       const bookingsRef = collection(db, "bookings");
 
-      // Check for hairdresser conflicts
       const hairdresserQuery = query(bookingsRef, where("hairdresserId", "==", data.hairdresserId));
       const hairdresserSnapshot = await getDocs(hairdresserQuery);
 
@@ -226,7 +249,6 @@ export default function CalendarPage() {
           }
       }
 
-      // Check for client conflicts
       const clientQuery = query(bookingsRef, where("clientPhone", "==", data.clientPhone));
       const clientSnapshot = await getDocs(clientQuery);
 
@@ -269,7 +291,7 @@ export default function CalendarPage() {
         updatedAt: Timestamp.now(), 
       };
 
-      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      setAllBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b));
       toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
       setIsFormOpen(false);
       setEditingBooking(null);
@@ -288,7 +310,9 @@ export default function CalendarPage() {
     setIsFormOpen(true);
   };
 
-  const filteredBookingsByDate = bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true);
+  const filteredBookingsByDate = user?.role === 'admin' 
+    ? bookings.filter(booking => selectedDate ? isSameDay(booking.appointmentDateTime, selectedDate) : true)
+    : allBookings;
   
   const getSalonName = (salonId: string) => salons.find(s => s.id === salonId)?.name || "N/A";
   const getHairdresserName = (hairdresserId: string) => hairdressers.find(h => h.id === hairdresserId)?.name || "N/A";
@@ -309,12 +333,15 @@ export default function CalendarPage() {
     : hairdressers.filter(h => h.isActive && h.assignedLocations.includes(filterSalonId));
   
   if (!user) return <p className="text-center mt-10 font-body">Please log in to view the calendar.</p>;
+  
+  const pageTitle = user.role === 'admin' ? "Admin Calendar View" : "Today's Schedule";
+  const pageDescription = user.role === 'admin' ? "Visualize and manage appointments." : `Your appointments for ${format(new Date(), "PPP")}`;
 
   return (
     <div className="space-y-8">
       <PageHeader
-        title={user.role === 'admin' ? "Admin Calendar View" : "My Calendar"}
-        description="Visualize and manage appointments."
+        title={pageTitle}
+        description={pageDescription}
         icon={CalendarDays}
       />
       
@@ -333,149 +360,148 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        <div className="lg:col-span-2 space-y-8">
-            <Card className="shadow-lg rounded-lg">
-                <CardContent className="p-4 sm:p-6 flex flex-col md:flex-row gap-6">
-                    <div className="flex-1">
-                         <ShadcnCalendar
-                            mode="single"
-                            selected={selectedDate}
-                            onSelect={setSelectedDate}
-                            className="rounded-md border shadow-sm p-0 w-full"
-                            disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))}
-                        />
-                    </div>
-                    {user.role === 'admin' && (
-                        <div className="md:w-1/3 space-y-4 pt-2">
-                            <h3 className="font-headline text-lg flex items-center gap-2">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8 items-start">
+        {user.role === 'admin' && (
+            <div className="xl:col-span-1 space-y-8 sticky top-20">
+                <Card className="shadow-lg rounded-lg">
+                    <CardContent className="p-2 sm:p-3 flex flex-col gap-4">
+                        <div className="flex-1">
+                            <ShadcnCalendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={setSelectedDate}
+                                className="rounded-md border shadow-sm p-0 w-full"
+                                disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))}
+                            />
+                        </div>
+                        <div className="space-y-4 pt-2">
+                            <h3 className="font-headline text-lg flex items-center gap-2 px-1">
                                 <Filter className="h-5 w-5 text-primary" /> Filters
                             </h3>
                             <div>
-                                <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon</label>
+                                <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1 px-1">Filter by Salon</label>
                                 <Select value={filterSalonId} onValueChange={(value) => { setFilterSalonId(value); if (value !== "all" && filterHairdresserId !== "all") { const selectedH = hairdressers.find(h => h.id === filterHairdresserId); if (selectedH && !selectedH.assignedLocations.includes(value)) setFilterHairdresserId("all"); } }}>
                                     <SelectTrigger id="salon-filter"><SelectValue placeholder="All Salons" /></SelectTrigger>
                                     <SelectContent><SelectItem value="all">All Salons</SelectItem>{salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div>
-                                <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Hairdresser</label>
+                                <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1 px-1">Filter by Hairdresser</label>
                                 <Select value={filterHairdresserId} onValueChange={setFilterHairdresserId} disabled={filterSalonId !== "all" && availableHairdressersForFilter.length === 0}>
                                     <SelectTrigger id="hairdresser-filter"><SelectValue placeholder="All Hairdressers" /></SelectTrigger>
                                     <SelectContent><SelectItem value="all">All Hairdressers</SelectItem>{availableHairdressersForFilter.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
                                 </Select>
-                                {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1">No hairdressers for selected salon.</p>}
+                                {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1 px-1">No hairdressers for selected salon.</p>}
                             </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {workingHoursToday && filterHairdresserId !== 'all' && (
+                  <Card className="shadow-lg rounded-lg">
+                    <CardHeader>
+                        <CardTitle className="font-headline text-lg flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-primary"/>
+                            Daily Schedule
+                        </CardTitle>
+                        <CardDescription>Working hours for {getHairdresserName(filterHairdresserId)}.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {typeof workingHoursToday === 'object' && workingHoursToday !== null ? (
+                            <p className="text-sm font-medium text-foreground">
+                                Scheduled from <strong className="text-primary">{workingHoursToday.start}</strong> to <strong className="text-primary">{workingHoursToday.end}</strong>.
+                            </p>
+                        ) : workingHoursToday === 'off' ? (
+                            <p className="text-sm text-muted-foreground">This hairdresser has the day off.</p>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Working hours not defined.</p>
+                        )}
+                    </CardContent>
+                  </Card>
+                )}
+            </div>
+        )}
+
+        <div className={cn("space-y-4", user.role === 'admin' ? 'xl:col-span-3' : 'col-span-1 xl:col-span-4')}>
+            <Card className="shadow-lg rounded-lg">
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl">Appointments for: <span className="text-primary">{selectedDate ? format(selectedDate, "PPP") : "All Dates"}</span></CardTitle>
+                    <CardDescription className="font-body">{filteredBookingsByDate.length} appointment(s) scheduled.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <div className="flex justify-center items-center h-[200px]">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    ) : filteredBookingsByDate.length > 0 ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+                        {filteredBookingsByDate.map(booking => (
+                            <Card key={booking.id} className="hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${booking.color || 'hsl(var(--primary))'}` }}>
+                                <CardHeader className="flex flex-row items-start justify-between p-2">
+                                    <div>
+                                        <CardTitle className="font-headline text-sm">{booking.serviceName || "Unknown Service"}</CardTitle>
+                                        <CardDescription className="font-body flex items-center gap-2 pt-1">
+                                            <UserIcon size={14} /> {booking.clientName}
+                                        </CardDescription>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" className="p-1 h-auto -mt-1 -mr-1" disabled={isSubmitting}>
+                                                <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity text-xs">
+                                                    {booking.status}
+                                                </Badge>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="font-body">
+                                            <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            {bookingStatusOptions.map((statusOption) => (
+                                                <DropdownMenuItem key={statusOption} onClick={() => handleStatusUpdate(booking.id, statusOption)} disabled={isSubmitting || booking.status === statusOption || (user?.role === 'hairdresser' && statusOption !== 'Completed')}>
+                                                    {statusOption}
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </CardHeader>
+                                <CardContent className="px-2 pb-2 space-y-1 text-xs">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <ClockIcon size={12} className="text-primary"/> 
+                                        <span>{format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</span>
+                                    </div>
+                                    {user.role === 'admin' && (
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <UserIcon size={12} className="text-primary"/> 
+                                            <span>{getHairdresserName(booking.hairdresserId)}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <StoreIcon size={12} className="text-primary"/> 
+                                        <span>{getSalonName(booking.salonId)}</span>
+                                    </div>
+                                    {booking.washServiceAdded && (
+                                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                                            <Droplets size={12} /> 
+                                            <span>Wash Included</span>
+                                        </div>
+                                    )}
+                                </CardContent>
+                                 {user.role === 'admin' && (
+                                    <CardFooter className="p-2 border-t flex justify-end bg-muted/50">
+                                        <Button variant="ghost" size="sm" onClick={() => openEditForm(booking)} className="font-body text-xs h-auto py-1 px-2" disabled={isSubmitting}>
+                                            <Edit3 className="mr-1 h-3 w-3"/>Edit
+                                        </Button>
+                                    </CardFooter>
+                                )}
+                            </Card>
+                        ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 border rounded-lg bg-muted/50">
+                            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
+                            <p className="mt-4 font-body text-muted-foreground">No appointments for this day or filters.</p>
                         </div>
                     )}
                 </CardContent>
-            </Card>
-
-            {workingHoursToday && filterHairdresserId !== 'all' && (
-              <Card className="shadow-lg rounded-lg">
-                <CardHeader>
-                    <CardTitle className="font-headline text-lg flex items-center gap-2">
-                        <Briefcase className="h-5 w-5 text-primary"/>
-                        Daily Schedule
-                    </CardTitle>
-                    <CardDescription>Working hours for {getHairdresserName(filterHairdresserId)} on {selectedDate ? format(selectedDate, "PPP") : ''}.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                     {typeof workingHoursToday === 'object' && workingHoursToday !== null ? (
-                        <p className="text-sm font-medium text-foreground">
-                            Scheduled to work from <strong className="text-primary">{workingHoursToday.start}</strong> to <strong className="text-primary">{workingHoursToday.end}</strong>.
-                        </p>
-                    ) : workingHoursToday === 'off' ? (
-                        <p className="text-sm text-muted-foreground">This hairdresser has the day off.</p>
-                    ) : (
-                         <p className="text-sm text-muted-foreground">Working hours have not been defined for this hairdresser.</p>
-                    )}
-                </CardContent>
-              </Card>
-            )}
-
-        </div>
-
-        <div className="lg:col-span-1 space-y-4">
-            <Card className="shadow-lg rounded-lg sticky top-20">
-            <CardHeader>
-                <CardTitle className="font-headline text-xl">Appointments for:</CardTitle>
-                <CardDescription className="font-body font-bold text-lg text-primary">{selectedDate ? format(selectedDate, "PPP") : "All Dates"}</CardDescription>
-            </CardHeader>
-            <CardContent className="max-h-[65vh] overflow-y-auto">
-                {isLoading ? (
-                    <div className="flex justify-center items-center h-[200px]">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                ) : filteredBookingsByDate.length > 0 ? (
-                    <div className="space-y-4">
-                    {filteredBookingsByDate.map(booking => (
-                        <Card key={booking.id} className="hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${booking.color || 'hsl(var(--primary))'}` }}>
-                            <CardHeader className="flex flex-row items-start justify-between p-3">
-                                <div>
-                                    <CardTitle className="font-headline text-base">{booking.serviceName || "Unknown Service"}</CardTitle>
-                                    <CardDescription className="font-body flex items-center gap-2 pt-1">
-                                        <UserIcon size={14} /> {booking.clientName}
-                                    </CardDescription>
-                                </div>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" className="p-1 h-auto -mt-1 -mr-1" disabled={isSubmitting}>
-                                            <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity text-xs">
-                                                {booking.status}
-                                            </Badge>
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="font-body">
-                                        <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        {bookingStatusOptions.map((statusOption) => (
-                                            <DropdownMenuItem key={statusOption} onClick={() => handleStatusUpdate(booking.id, statusOption)} disabled={isSubmitting || booking.status === statusOption}>
-                                                {statusOption}
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </CardHeader>
-                            <CardContent className="px-3 pb-3 space-y-1 text-xs">
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <ClockIcon size={12} className="text-primary"/> 
-                                    <span>{format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</span>
-                                </div>
-                                {user.role === 'admin' && (
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                        <UserIcon size={12} className="text-primary"/> 
-                                        <span>{getHairdresserName(booking.hairdresserId)}</span>
-                                    </div>
-                                )}
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <StoreIcon size={12} className="text-primary"/> 
-                                    <span>{getSalonName(booking.salonId)}</span>
-                                </div>
-                                {booking.washServiceAdded && (
-                                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                                        <Droplets size={12} /> 
-                                        <span>Wash Included</span>
-                                    </div>
-                                )}
-                            </CardContent>
-                             {user.role === 'admin' && (
-                                <CardFooter className="p-2 border-t flex justify-end bg-muted/50">
-                                    <Button variant="ghost" size="sm" onClick={() => openEditForm(booking)} className="font-body text-xs h-auto py-1 px-2" disabled={isSubmitting}>
-                                        <Edit3 className="mr-1 h-3 w-3"/>Edit
-                                    </Button>
-                                </CardFooter>
-                            )}
-                        </Card>
-                    ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-10">
-                        <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="mt-4 font-body text-muted-foreground">No appointments for this day or filters.</p>
-                    </div>
-                )}
-            </CardContent>
             </Card>
         </div>
       </div>

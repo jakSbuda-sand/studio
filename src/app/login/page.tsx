@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { LogIn, Scissors, Loader2 } from "lucide-react";
+import { LogIn, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -62,11 +63,11 @@ export default function LoginPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-background to-primary/20 p-4 sm:p-8">
        <Card className="w-full max-w-md shadow-2xl overflow-hidden rounded-xl">
-        <CardHeader className="bg-primary/10 p-8 text-center">
-          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
-            <Scissors className="h-10 w-10" />
+        <CardHeader className="bg-primary/10 p-8 text-center flex flex-col items-center">
+          <div className="mb-4">
+            <Image src="/logo.png" alt="LaPresh Beauty Logo" width={240} height={60} priority />
           </div>
-          <CardTitle className="text-4xl sm:text-5xl font-headline text-primary-foreground tracking-wider">
+          <CardTitle className="text-4xl sm:text-5xl font-headline text-primary-foreground tracking-wider invisible h-0">
             LaPresh Beauty Salon
           </CardTitle>
           <CardDescription className="text-lg text-primary-foreground/80 font-body mt-2">

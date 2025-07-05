@@ -429,7 +429,6 @@ export const processEmailQueue = onDocumentCreated(
   {
     document: "notifications/{notificationId}",
     region: "us-central1",
-    secrets: ["RESEND_API_KEY"],
   },
   async (event) => {
     const snapshot = event.data;
@@ -461,8 +460,11 @@ export const processEmailQueue = onDocumentCreated(
 
       const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
 
+      // IMPORTANT: To send emails from a custom domain (e.g., info@lapresh.com),
+      // that domain must be verified in your Resend account settings.
+      // Using 'onboarding@resend.dev' is intended for testing only.
       await resend.emails.send({
-        from: "LaPresh Salon <onboarding@resend.dev>",
+        from: "LaPresh Salon <no-reply@transactional.lapreshbeauty.co.za>",
         to: [notificationData.recipientEmail],
         subject: "Your Booking is Confirmed!",
         html: `

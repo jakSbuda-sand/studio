@@ -9,7 +9,7 @@ import { BarChart as BarChartIcon, DollarSign, Users, CalendarCheck, ClipboardLi
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { User, Booking, Service, Hairdresser, HairdresserDoc, ServiceDoc, BookingDoc, ClientDoc, Salon, LocationDoc } from "@/lib/types";
-import { db, collection, getDocs, query, where, orderBy, Timestamp } from "@/lib/firebase";
+import { db, collection, getDocs, query, where, orderBy, Timestamp, type Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, isSameDay } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -41,7 +41,7 @@ const StatCard = ({ title, value, icon: Icon, description, isLoading }: { title:
 interface DashboardStats {
   totalBookings: number;
   totalRevenue: number;
-  newClients: number;
+  uniqueClients: number;
   chartData: any[];
   popularServices: { name: string; count: number }[];
   topHairdressers: { name: string; count: number }[];
@@ -98,37 +98,26 @@ export default function DashboardPage() {
         const locationsQuery = query(collection(db, "locations"), orderBy("name"));
         const hairdressersQuery = query(collection(db, "hairdressers"));
         
-        let bookingsQuery;
-        let clientsQuery = null;
-
-        const bookingsRef = collection(db, "bookings");
+        let bookingsQuery: Query;
         
         if (user.role === 'admin') {
-            if (filterSalonId === 'all') {
-                bookingsQuery = query(
-                    bookingsRef,
-                    where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
-                    where("appointmentDateTime", "<=", Timestamp.fromDate(endDate))
-                    // The orderBy is implicitly handled by Firestore for this type of query
-                );
-            } else {
-                // **ROBUST FIX**: Fetch all bookings for the salon without sorting on the DB side.
-                // Sorting and date filtering will be handled on the client side.
-                bookingsQuery = query(bookingsRef, where("salonId", "==", filterSalonId));
-            }
-            clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
+            bookingsQuery = query(
+                collection(db, "bookings"),
+                where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
+                where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
+                orderBy("appointmentDateTime", "asc")
+            );
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
            bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
         } else {
-            setStats({ totalBookings: 0, totalRevenue: 0, newClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
+            setStats({ totalBookings: 0, totalRevenue: 0, uniqueClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
             setIsLoading(false);
             return;
         }
 
-        const [bookingSnapshot, serviceSnapshot, newClientSnapshot, locationSnapshot, hairdresserSnapshot] = await Promise.all([
+        const [bookingSnapshot, serviceSnapshot, locationSnapshot, hairdresserSnapshot] = await Promise.all([
           getDocs(bookingsQuery),
           getDocs(servicesQuery),
-          clientsQuery ? getDocs(clientsQuery) : Promise.resolve(null),
           getDocs(locationsQuery),
           getDocs(hairdressersQuery),
         ]);
@@ -144,9 +133,8 @@ export default function DashboardPage() {
         setSalons(locationSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as LocationDoc) })));
 
         const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
-
-        // First, map all documents to the Booking type
-        const allBookingsRaw: Booking[] = bookingSnapshot.docs.map(doc => {
+        
+        let allBookingsInPeriod: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
             const basePrice = service?.price || 0;
@@ -163,42 +151,30 @@ export default function DashboardPage() {
             } as Booking;
         });
         
-        // Now, perform client-side filtering and sorting
-        const allBookings = allBookingsRaw
-          .filter(booking => {
-            // If a specific salon was selected, apply the date filter now on the client side
-            if (user.role === 'admin' && filterSalonId !== 'all') {
-                return isWithinInterval(booking.appointmentDateTime, { start: startDate, end: endDate });
-            }
-            return true; // Otherwise, the data is already filtered by the query or doesn't need it.
-          })
-          .sort((a,b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
+        let filteredBookings = allBookingsInPeriod;
+        if (user.role === 'admin' && filterSalonId !== 'all') {
+            filteredBookings = allBookingsInPeriod.filter(booking => booking.salonId === filterSalonId);
+        }
 
-
-        let totalBookings = 0, totalRevenue = 0, newClients = 0;
+        let totalBookings = 0, totalRevenue = 0, uniqueClients = 0;
         let chartData: any[] = [], popularServices: { name: string; count: number }[] = [], topHairdressers: { name: string; count: number }[] = [];
         let upcomingBookings = 0, todaysSchedule: Booking[] = [];
 
         if (user.role === 'admin') {
-            totalBookings = allBookings.length;
+            totalBookings = filteredBookings.length;
             
-            const completedBookings = allBookings.filter(b => b.status === 'Completed');
+            const completedBookings = filteredBookings.filter(b => b.status === 'Completed');
             totalRevenue = completedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
-            
-            if (newClientSnapshot) {
-              const clientIdsInFilteredBookings = new Set(allBookings.map(b => b.clientId).filter(Boolean));
-              const newClientsInFilter = newClientSnapshot.docs.filter(clientDoc => 
-                clientIdsInFilteredBookings.has(clientDoc.id)
-              );
-              newClients = newClientsInFilter.length;
-            }
+
+            const uniqueClientIds = new Set(completedBookings.map(b => b.clientId));
+            uniqueClients = uniqueClientIds.size;
             
             const daysInRange = dateRangeFilter === 'today' ? 1 : (dateRangeFilter === '7d' ? 7 : 30);
             chartData = Array.from({ length: daysInRange }).map((_, i) => {
                 const date = subDays(today, daysInRange - 1 - i);
                 return {
                     date: format(date, "MMM d"),
-                    bookings: allBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
+                    bookings: filteredBookings.filter(b => isSameDay(b.appointmentDateTime, date)).length,
                 };
             });
 
@@ -213,18 +189,17 @@ export default function DashboardPage() {
         } else if (user.role === 'hairdresser') {
             const now = new Date();
             
-            const todaysBookingsList = allBookings.filter(b => isSameDay(b.appointmentDateTime, now));
+            const todaysBookingsList = filteredBookings.filter(b => isSameDay(b.appointmentDateTime, now));
             totalBookings = todaysBookingsList.length;
             
-            // Filter all fetched bookings for upcoming ones
-            upcomingBookings = allBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(now)).length;
+            upcomingBookings = filteredBookings.filter(b => b.status === 'Confirmed' && b.appointmentDateTime > endOfDay(now)).length;
             
             todaysSchedule = todaysBookingsList
               .filter(b => b.status === 'Confirmed' || b.status === 'Completed')
               .sort((a, b) => a.appointmentDateTime.getTime() - b.appointmentDateTime.getTime());
         }
         
-        setStats({ totalBookings, totalRevenue, newClients, chartData, popularServices, topHairdressers, upcomingBookings, todaysSchedule });
+        setStats({ totalBookings, totalRevenue, uniqueClients, chartData, popularServices, topHairdressers, upcomingBookings, todaysSchedule });
 
       } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
@@ -246,14 +221,14 @@ export default function DashboardPage() {
   const pageDescription = isAdmin ? "Your command center for managing salon operations efficiently." : "Manage your appointments and client interactions.";
 
   const quickActions = [
-    { href: "/bookings/new", label: "New Booking", icon: PlusCircle, roles: ['admin', 'hairdresser'] },
+    { href: "/bookings/new", label: "New Booking", icon: PlusCircle, roles: ['admin'] },
     ...(isAdmin ? [
       { href: "/locations", label: "Add Salon", icon: Store, roles: ['admin'] },
       { href: "/hairdressers/new", label: "Add Hairdresser", icon: Users, roles: ['admin'] },
       { href: "/services", label: "Add Service", icon: Scissors, roles: ['admin'] },
     ] : [
-      { href: "/calendar", label: "My Calendar", icon: CalendarCheck, roles: ['hairdresser'] },
-      { href: "/bookings?view=mine", label: "My Bookings", icon: ClipboardList, roles: ['hairdresser'] },
+      { href: "/calendar", label: "Today's Schedule", icon: CalendarCheck, roles: ['hairdresser'] },
+      { href: "/bookings", label: "Today's Bookings", icon: ClipboardList, roles: ['hairdresser'] },
       { href: "/profile", label: "My Profile", icon: UserCog, roles: ['hairdresser'] },
     ])
   ].filter(action => action.roles.includes(user.role));
@@ -352,7 +327,7 @@ export default function DashboardPage() {
         <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <StatCard title="Total Bookings" value={stats?.totalBookings ?? 0} icon={CalendarCheck} description={statDescription} isLoading={isLoading} />
             <StatCard title="Total Revenue" value={`R ${stats?.totalRevenue.toFixed(2) ?? '0.00'}`} icon={DollarSign} description={`Completed bookings ${statDescription}`} isLoading={isLoading} />
-            <StatCard title="New Clients" value={stats?.newClients ?? 0} icon={Users} description={`Registered ${dateRangeText[dateRangeFilter]}`} isLoading={isLoading} />
+            <StatCard title="Unique Clients" value={stats?.uniqueClients ?? 0} icon={Users} description={`Serviced ${dateRangeText[dateRangeFilter]}`} isLoading={isLoading} />
         </section>
 
         <section className="grid grid-cols-1 gap-6">
@@ -497,4 +472,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
