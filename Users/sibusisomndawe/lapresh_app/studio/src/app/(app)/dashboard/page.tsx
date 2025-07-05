@@ -227,6 +227,8 @@ export default function DashboardPage() {
       { href: "/hairdressers/new", label: "Add Hairdresser", icon: Users, roles: ['admin'] },
       { href: "/services", label: "Add Service", icon: Scissors, roles: ['admin'] },
     ] : [
+      { href: "/calendar", label: "Today's Schedule", icon: CalendarCheck, roles: ['hairdresser'] },
+      { href: "/bookings", label: "Today's Bookings", icon: ClipboardList, roles: ['hairdresser'] },
       { href: "/profile", label: "My Profile", icon: UserCog, roles: ['hairdresser'] },
     ])
   ].filter(action => action.roles.includes(user.role));
