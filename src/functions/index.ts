@@ -8,7 +8,9 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc} from "./types";
+import {defineString} from "firebase-functions/params";
+import {Resend} from "resend";
+import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc, NotificationDoc} from "./types";
 import {format} from "date-fns";
 
 // Initialize Firebase Admin SDK only once
@@ -18,6 +20,9 @@ if (admin.apps.length === 0) {
 }
 
 const db = admin.firestore();
+
+// Define Resend API Key as a secret parameter
+const resendApiKey = defineString("RESEND_API_KEY");
 
 interface CreateAdminData {
   email: string;
@@ -394,12 +399,12 @@ export const onBookingCreated = onDocumentCreated(
       const serviceDoc = await db.collection("services").doc(bookingData.serviceId).get();
       const serviceData = serviceDoc.data() as ServiceDoc | undefined;
 
-      const notificationData = {
+      const notificationData: Omit<NotificationDoc, "id" | "sentAt" | "errorMessage"> = {
         bookingId: bookingId,
         type: "email",
         recipientEmail: bookingData.clientEmail,
-        status: "pending", // To be processed by processEmailQueue
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: "pending",
+        createdAt: admin.firestore.FieldValue.serverTimestamp() as admin.firestore.Timestamp,
         templateId: "booking_confirmation",
         context: {
           clientName: bookingData.clientName,
@@ -424,9 +429,9 @@ export const processEmailQueue = onDocumentCreated(
   {
     document: "notifications/{notificationId}",
     region: "us-central1",
+    secrets: ["RESEND_API_KEY"],
   },
   async (event) => {
-    logger.log("[processEmailQueue] DEPLOYMENT_V_FINAL. Function triggered.");
     const snapshot = event.data;
     if (!snapshot) {
       logger.log("[processEmailQueue] No data associated with event. Exiting.");
@@ -434,16 +439,59 @@ export const processEmailQueue = onDocumentCreated(
     }
 
     const notificationId = event.params.notificationId;
-    logger.log(`[processEmailQueue] Processing notification ID: ${notificationId}`);
+    const notificationData = snapshot.data() as NotificationDoc;
+    logger.log(`[processEmailQueue] Processing notification ID: ${notificationId}`, {data: notificationData});
 
-    // This is a diagnostic step. The real logic will be restored later.
-    await snapshot.ref.update({
-      status: "sent",
-      sentAt: admin.firestore.FieldValue.serverTimestamp(),
-      errorMessage: "DIAGNOSTIC: Email sending logic is disabled.",
-    });
+    if (notificationData.status !== "pending") {
+      logger.log(`[processEmailQueue] Notification ${notificationId} is not pending. Status is '${notificationData.status}'. Skipping.`);
+      return;
+    }
 
-    logger.log(`[processEmailQueue] DIAGNOSTIC: Successfully updated notification ${notificationId} to 'sent'.`);
+    if (!notificationData.recipientEmail || !notificationData.context) {
+      logger.error(`[processEmailQueue] Notification ${notificationId} is missing recipient email or context. Marking as failed.`);
+      await snapshot.ref.update({
+        status: "failed",
+        errorMessage: "Missing recipient email or context data.",
+      });
+      return;
+    }
+
+    try {
+      const resend = new Resend(resendApiKey.value());
+
+      const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
+
+      await resend.emails.send({
+        from: "LaPresh Salon <no-reply@transactional.lapreshbeauty.co.za>",
+        to: [notificationData.recipientEmail],
+        subject: "Your Booking is Confirmed!",
+        html: `
+          <h1>Booking Confirmation</h1>
+          <p>Hi ${clientName},</p>
+          <p>Your appointment for <strong>${serviceName}</strong> is confirmed!</p>
+          <p><strong>Date:</strong> ${appointmentDate}</p>
+          <p><strong>Time:</strong> ${appointmentTime}</p>
+          <p>We look forward to seeing you!</p>
+          <p>Best regards,<br/>The LaPresh Beauty Salon Team</p>
+        `,
+      });
+
+      logger.info(`[processEmailQueue] Successfully sent email for notification ID: ${notificationId}`);
+      await snapshot.ref.update({
+        status: "sent",
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {
+        error: errorMessage,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      });
+      await snapshot.ref.update({
+        status: "failed",
+        errorMessage: errorMessage,
+      });
+    }
   }
 );
 

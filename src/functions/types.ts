@@ -1,5 +1,5 @@
 
-import type {Timestamp} from "firebase/firestore";
+import type {Timestamp} from "firebase-admin/firestore";
 
 export type DayOfWeek = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
 
@@ -90,7 +90,7 @@ export interface Client {
   email?: string;
   notes?: string;
   firstSeen?: Timestamp; // Timestamp from Firestore
-  lastSeen?: Timestamp; // Timestamp from Firestore
+  lastSeen?: Timestamp;  // Timestamp from Firestore
   totalBookings: number;
 }
 
