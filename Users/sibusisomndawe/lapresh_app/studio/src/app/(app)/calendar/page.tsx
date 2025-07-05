@@ -19,7 +19,7 @@ import {
 import { format, isSameDay, addMinutes } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, type Query, serverTimestamp } from "@/lib/firebase";
+import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp, type Query } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -113,25 +113,18 @@ export default function CalendarPage() {
     const fetchBookings = async () => {
       setIsLoading(true);
       try {
-        let bookingsQuery: Query = collection(db, "bookings");
-        
-        // Apply filters first based on user role and selections
-        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
-            bookingsQuery = query(bookingsQuery, where("hairdresserId", "==", user.hairdresserProfileId));
-        } else { // Admin role
-            if (filterSalonId !== "all") {
-                bookingsQuery = query(bookingsQuery, where("salonId", "==", filterSalonId));
-            }
-            if (filterHairdresserId !== "all") {
-                bookingsQuery = query(bookingsQuery, where("hairdresserId", "==", filterHairdresserId));
-            }
-        }
-        
-        // Then apply ordering
-        const finalQuery = query(bookingsQuery, orderBy("appointmentDateTime", "asc"));
+        let baseQuery: Query;
+        const bookingsCollection = collection(db, "bookings");
 
-        const bookingSnapshot = await getDocs(finalQuery);
-        const bookingsList = bookingSnapshot.docs.map(bDoc => {
+        if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+            baseQuery = query(bookingsCollection, where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
+        } else {
+            baseQuery = query(bookingsCollection, orderBy("appointmentDateTime", "asc"));
+        }
+
+        const bookingSnapshot = await getDocs(baseQuery);
+
+        let fetchedBookings = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
           let appointmentDateTimeJS: Date;
           if (data.appointmentDateTime instanceof Timestamp) {
@@ -149,7 +142,17 @@ export default function CalendarPage() {
             washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
-        setBookings(bookingsList);
+
+        if (user.role === 'admin') {
+            if (filterSalonId !== "all") {
+                fetchedBookings = fetchedBookings.filter(b => b.salonId === filterSalonId);
+            }
+            if (filterHairdresserId !== "all") {
+                fetchedBookings = fetchedBookings.filter(b => b.hairdresserId === filterHairdresserId);
+            }
+        }
+
+        setBookings(fetchedBookings);
 
       } catch (error: any) {
         console.error("Error fetching calendar data:", error);
@@ -486,5 +489,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
-    
