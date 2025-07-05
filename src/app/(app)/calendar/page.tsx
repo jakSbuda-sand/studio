@@ -64,6 +64,7 @@ export default function CalendarPage() {
     }
     
     const fetchPrerequisites = async () => {
+      setIsLoading(true);
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
@@ -101,6 +102,8 @@ export default function CalendarPage() {
       } catch (error: any) {
         console.error("Error fetching prerequisites:", error);
         toast({ title: "Error Fetching Data", description: `Could not load base data: ${error.message}.`, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -108,8 +111,7 @@ export default function CalendarPage() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
-    if (salons.length === 0 || hairdressers.length === 0 || services.length === 0) return;
+    if (!user || services.length === 0) return;
 
     const fetchBookings = async () => {
       setIsLoading(true);
@@ -117,10 +119,9 @@ export default function CalendarPage() {
         const bookingsCollection = collection(db, "bookings");
         const queryConstraints: QueryConstraint[] = [];
 
-        // Apply filters based on user role and selections
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           queryConstraints.push(where("hairdresserId", "==", user.hairdresserProfileId));
-        } else { // Admin role
+        } else if (user.role === 'admin') {
           if (filterSalonId !== "all") {
             queryConstraints.push(where("salonId", "==", filterSalonId));
           }
@@ -129,7 +130,6 @@ export default function CalendarPage() {
           }
         }
         
-        // Always apply ordering
         queryConstraints.push(orderBy("appointmentDateTime", "asc"));
 
         const finalQuery = query(bookingsCollection, ...queryConstraints);
@@ -157,7 +157,11 @@ export default function CalendarPage() {
 
       } catch (error: any) {
         console.error("Error fetching calendar data:", error);
-        toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
+        if ((error as any).code === 'failed-precondition') {
+          toast({ title: "Filter Error", description: "This combination of filters requires a database index that is not yet configured. Please filter by only one criteria at a time.", variant: "destructive", duration: 8000 });
+        } else {
+          toast({ title: "Error Fetching Bookings", description: `Could not load appointments: ${error.message}.`, variant: "destructive" });
+        }
       } finally {
         setIsLoading(false);
       }
