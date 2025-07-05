@@ -1,6 +1,7 @@
 
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   Sidebar,
@@ -20,7 +21,6 @@ import {
   CalendarDays,
   Bell,
   LogOut,
-  Scissors,
   Store,
   PlusCircle,
   UserCircle as ProfileIcon, // Renamed to avoid conflict
@@ -36,9 +36,8 @@ import type { User } from '@/lib/types';
 
 
 const Logo = () => (
-  <div className="flex items-center gap-2 px-3 py-4">
-    <Scissors className="h-8 w-8 text-primary" />
-    <h1 className="text-2xl font-headline font-semibold text-foreground">LaPresh Beauty Salon</h1>
+  <div className="flex items-center justify-center p-2">
+     <Image src="/logo.png" alt="LaPresh Beauty Logo" width={180} height={45} />
   </div>
 );
 
@@ -118,26 +117,19 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
 const navItems: NavItemProps[] = [
   // Core items for all roles
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'hairdresser'] },
-  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin', 'hairdresser'] },
   
-  // Booking section (remains collapsible)
-  {
-    href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin', 'hairdresser'],
-    subItems: [
-      { href: '/bookings', icon: ClipboardList, label: 'All Bookings', roles: ['admin'] },
-      { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
-      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin'] },
-    ]
-  },
-
-  // Admin-only management section
+  // Conditionally rendered items
+  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin'] },
+  { href: '/bookings', icon: ClipboardList, label: 'Bookings', roles: ['admin'] },
   { href: '/clients', icon: Contact, label: 'Clients', roles: ['admin'] },
+  
+  // Admin-only management section
   {
     href: '#', icon: Settings2, label: 'Manage', roles: ['admin'],
     subItems: [
       { href: '/locations', icon: Store, label: 'Salons', roles: ['admin'] },
       { href: '/hairdressers', icon: Users, label: 'Hairdressers', roles: ['admin'] },
-      { href: '/services', icon: Scissors, label: 'Services', roles: ['admin'] },
+      { href: '/services', icon: Settings2, label: 'Services', roles: ['admin'] },
       { href: '/admins', icon: Shield, label: 'Admins', roles: ['admin'] },
       { href: '/notifications', icon: Bell, label: 'Notifications', roles: ['admin'] },
     ]
@@ -179,5 +171,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
-  
