@@ -4,10 +4,6 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "es2022",
-    "rootDirs": [
-      ".",
-      "../lib"
-    ],
     "outDir": "lib",
     "sourceMap": true,
     "strict": true,
