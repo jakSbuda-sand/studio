@@ -102,14 +102,9 @@ export default function DashboardPage() {
         let clientsQuery: Query | null = null;
         
         if (user.role === 'admin') {
-            let bookingsQueryBuilder: Query = collection(db, "bookings");
-
-            if (filterSalonId !== 'all') {
-                bookingsQueryBuilder = query(bookingsQueryBuilder, where("salonId", "==", filterSalonId));
-            }
-
+            // Fetch all bookings within the date range first. Salon filtering will happen on the client side.
             bookingsQuery = query(
-                bookingsQueryBuilder,
+                collection(db, "bookings"),
                 where("appointmentDateTime", ">=", Timestamp.fromDate(startDate)),
                 where("appointmentDateTime", "<=", Timestamp.fromDate(endDate)),
                 orderBy("appointmentDateTime", "asc")
@@ -117,6 +112,7 @@ export default function DashboardPage() {
             
             clientsQuery = query(collection(db, "clients"), where("firstSeen", ">=", Timestamp.fromDate(startDate)), where("firstSeen", "<=", Timestamp.fromDate(endDate)), orderBy("firstSeen", "desc"));
         } else if (user.role === 'hairdresser' && user.hairdresserProfileId) {
+           // Hairdresser-specific query remains the same as it correctly filters by their ID.
            bookingsQuery = query(collection(db, "bookings"), where("hairdresserId", "==", user.hairdresserProfileId), orderBy("appointmentDateTime", "asc"));
         } else {
             setStats({ totalBookings: 0, totalRevenue: 0, newClients: 0, chartData: [], popularServices: [], topHairdressers: [] });
@@ -144,7 +140,8 @@ export default function DashboardPage() {
 
         const washService = Array.from(servicesMap.values()).find(s => s.name.toLowerCase() === 'wash');
         
-        const allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
+        // Map all bookings within the fetched date range
+        let allBookings: Booking[] = bookingSnapshot.docs.map(doc => {
             const data = doc.data() as BookingDoc;
             const service = servicesMap.get(data.serviceId);
             const basePrice = service?.price || 0;
@@ -160,6 +157,11 @@ export default function DashboardPage() {
                 serviceName: service?.name || "Unknown Service",
             } as Booking;
         });
+        
+        // If admin and a salon is selected, filter the array now.
+        if (user.role === 'admin' && filterSalonId !== 'all') {
+            allBookings = allBookings.filter(booking => booking.salonId === filterSalonId);
+        }
 
 
         let totalBookings = 0, totalRevenue = 0, newClients = 0;
