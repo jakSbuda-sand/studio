@@ -88,13 +88,12 @@ export default function BookingsPage() {
 
         let bookingsQueryBuilder;
         let currentViewTitle = "All Bookings";
-        let currentViewDescription = `Viewing appointments for ${format(selectedMonth, "MMMM yyyy")}.`;
-
+        
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           bookingsQueryBuilder = query(
             collection(db, "bookings"), 
             where("hairdresserId", "==", user.hairdresserProfileId), 
-            orderBy("appointmentDateTime", "asc"),
+            orderBy("appointmentDateTime", "desc"),
             where("appointmentDateTime", ">=", Timestamp.fromDate(start)),
             where("appointmentDateTime", "<=", Timestamp.fromDate(end))
           );
@@ -102,15 +101,14 @@ export default function BookingsPage() {
         } else {
            bookingsQueryBuilder = query(
             collection(db, "bookings"), 
-            orderBy("appointmentDateTime", "asc"),
+            orderBy("appointmentDateTime", "desc"),
             where("appointmentDateTime", ">=", Timestamp.fromDate(start)),
             where("appointmentDateTime", "<=", Timestamp.fromDate(end))
           );
         }
 
         setPageTitle(currentViewTitle);
-        setPageDescription(currentViewDescription);
-
+        
         const bookingSnapshot = await getDocs(bookingsQueryBuilder);
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
@@ -134,8 +132,12 @@ export default function BookingsPage() {
             washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
-        const sortedBookingsList = bookingsList.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
+        
+        const sortedBookingsList = bookingsList.sort((a,b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime());
         setBookings(sortedBookingsList);
+
+        let currentViewDescription = `${sortedBookingsList.length} booking(s) for ${format(selectedMonth, "MMMM yyyy")}.`;
+        setPageDescription(currentViewDescription);
 
       } catch (error: any) {
         console.error("Error fetching data:", error);
@@ -153,7 +155,7 @@ export default function BookingsPage() {
     try {
         const bookingRef = doc(db, "bookings", bookingId);
         await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, updatedAt: Timestamp.now() } : b).sort((a, b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, updatedAt: Timestamp.now() } : b).sort((a, b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime()));
         toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
     } catch (error: any) {
         console.error(`Error updating booking status to ${newStatus}:`, error);
@@ -239,7 +241,7 @@ export default function BookingsPage() {
         updatedAt: Timestamp.now(), 
       };
 
-      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime()));
       toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
       setIsFormOpen(false);
       setEditingBooking(null);
@@ -295,14 +297,16 @@ export default function BookingsPage() {
                 </div>
                 <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight className="h-4 w-4" /></Button>
             </div>
-            <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Link href="/bookings/new">
-                <span className="flex items-center gap-2">
-                  <PlusCircle className="h-4 w-4" />
-                  New Booking
-                </span>
-              </Link>
-            </Button>
+            {user.role === 'admin' && (
+              <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Link href="/bookings/new">
+                  <span className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4" />
+                    New Booking
+                  </span>
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />
@@ -323,7 +327,9 @@ export default function BookingsPage() {
         <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader><CalendarDays className="mx-auto h-16 w-16 text-muted-foreground" /><CardTitle className="mt-4 text-2xl font-headline">No Bookings Found</CardTitle></CardHeader>
           <CardContent><CardDescription className="font-body text-lg">There are no appointments scheduled for {format(selectedMonth, "MMMM yyyy")}.</CardDescription></CardContent>
-          <CardFooter className="justify-center"><Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"><Link href="/bookings/new"><PlusCircle className="mr-2 h-4 w-4" /> Create First Booking</Link></Button></CardFooter>
+          {user.role === 'admin' && (
+            <CardFooter className="justify-center"><Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"><Link href="/bookings/new"><PlusCircle className="mr-2 h-4 w-4" /> Create First Booking</Link></Button></CardFooter>
+          )}
         </Card>
       ) : (
       <Card className="shadow-lg rounded-lg">
@@ -421,3 +427,5 @@ export default function BookingsPage() {
     </div>
   );
 }
+
+    

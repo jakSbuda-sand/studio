@@ -221,7 +221,7 @@ export default function DashboardPage() {
   const pageDescription = isAdmin ? "Your command center for managing salon operations efficiently." : "Manage your appointments and client interactions.";
 
   const quickActions = [
-    { href: "/bookings/new", label: "New Booking", icon: PlusCircle, roles: ['admin', 'hairdresser'] },
+    { href: "/bookings/new", label: "New Booking", icon: PlusCircle, roles: ['admin'] },
     ...(isAdmin ? [
       { href: "/locations", label: "Add Salon", icon: Store, roles: ['admin'] },
       { href: "/hairdressers/new", label: "Add Hairdresser", icon: Users, roles: ['admin'] },
@@ -472,3 +472,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

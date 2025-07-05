@@ -169,7 +169,7 @@ export default function CalendarPage() {
         filtered = filtered.filter(b => b.hairdresserId === filterHairdresserId);
       }
     }
-    setBookings(filtered);
+    setBookings(filtered.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
   }, [allBookings, filterSalonId, filterHairdresserId, user]);
 
 
@@ -287,7 +287,7 @@ export default function CalendarPage() {
         updatedAt: Timestamp.now(), 
       };
 
-      setAllBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      setAllBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b));
       toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
       setIsFormOpen(false);
       setEditingBooking(null);
@@ -351,10 +351,10 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        <div className="lg:col-span-2 space-y-8">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8 items-start">
+        <div className="xl:col-span-1 space-y-8 sticky top-20">
             <Card className="shadow-lg rounded-lg">
-                <CardContent className="p-4 sm:p-6 flex flex-col md:flex-row gap-6">
+                <CardContent className="p-2 sm:p-3 flex flex-col gap-4">
                     <div className="flex-1">
                          <ShadcnCalendar
                             mode="single"
@@ -365,24 +365,24 @@ export default function CalendarPage() {
                         />
                     </div>
                     {user.role === 'admin' && (
-                        <div className="md:w-1/3 space-y-4 pt-2">
-                            <h3 className="font-headline text-lg flex items-center gap-2">
+                        <div className="space-y-4 pt-2">
+                            <h3 className="font-headline text-lg flex items-center gap-2 px-1">
                                 <Filter className="h-5 w-5 text-primary" /> Filters
                             </h3>
                             <div>
-                                <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Salon</label>
+                                <label htmlFor="salon-filter" className="block text-sm font-medium text-muted-foreground mb-1 px-1">Filter by Salon</label>
                                 <Select value={filterSalonId} onValueChange={(value) => { setFilterSalonId(value); if (value !== "all" && filterHairdresserId !== "all") { const selectedH = hairdressers.find(h => h.id === filterHairdresserId); if (selectedH && !selectedH.assignedLocations.includes(value)) setFilterHairdresserId("all"); } }}>
                                     <SelectTrigger id="salon-filter"><SelectValue placeholder="All Salons" /></SelectTrigger>
                                     <SelectContent><SelectItem value="all">All Salons</SelectItem>{salons.map(salon => <SelectItem key={salon.id} value={salon.id}>{salon.name}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div>
-                                <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1">Filter by Hairdresser</label>
+                                <label htmlFor="hairdresser-filter" className="block text-sm font-medium text-muted-foreground mb-1 px-1">Filter by Hairdresser</label>
                                 <Select value={filterHairdresserId} onValueChange={setFilterHairdresserId} disabled={filterSalonId !== "all" && availableHairdressersForFilter.length === 0}>
                                     <SelectTrigger id="hairdresser-filter"><SelectValue placeholder="All Hairdressers" /></SelectTrigger>
                                     <SelectContent><SelectItem value="all">All Hairdressers</SelectItem>{availableHairdressersForFilter.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
                                 </Select>
-                                {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1">No hairdressers for selected salon.</p>}
+                                {filterSalonId !== "all" && availableHairdressersForFilter.length === 0 && <p className="text-xs text-muted-foreground mt-1 px-1">No hairdressers for selected salon.</p>}
                             </div>
                         </div>
                     )}
@@ -396,104 +396,103 @@ export default function CalendarPage() {
                         <Briefcase className="h-5 w-5 text-primary"/>
                         Daily Schedule
                     </CardTitle>
-                    <CardDescription>Working hours for {getHairdresserName(filterHairdresserId)} on {selectedDate ? format(selectedDate, "PPP") : ''}.</CardDescription>
+                    <CardDescription>Working hours for {getHairdresserName(filterHairdresserId)}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                      {typeof workingHoursToday === 'object' && workingHoursToday !== null ? (
                         <p className="text-sm font-medium text-foreground">
-                            Scheduled to work from <strong className="text-primary">{workingHoursToday.start}</strong> to <strong className="text-primary">{workingHoursToday.end}</strong>.
+                            Scheduled from <strong className="text-primary">{workingHoursToday.start}</strong> to <strong className="text-primary">{workingHoursToday.end}</strong>.
                         </p>
                     ) : workingHoursToday === 'off' ? (
                         <p className="text-sm text-muted-foreground">This hairdresser has the day off.</p>
                     ) : (
-                         <p className="text-sm text-muted-foreground">Working hours have not been defined for this hairdresser.</p>
+                         <p className="text-sm text-muted-foreground">Working hours not defined.</p>
                     )}
                 </CardContent>
               </Card>
             )}
-
         </div>
 
-        <div className="lg:col-span-1 space-y-4">
-            <Card className="shadow-lg rounded-lg sticky top-20">
-            <CardHeader>
-                <CardTitle className="font-headline text-xl">Appointments for:</CardTitle>
-                <CardDescription className="font-body font-bold text-lg text-primary">{selectedDate ? format(selectedDate, "PPP") : "All Dates"}</CardDescription>
-            </CardHeader>
-            <CardContent className="max-h-[65vh] overflow-y-auto">
-                {isLoading ? (
-                    <div className="flex justify-center items-center h-[200px]">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                ) : filteredBookingsByDate.length > 0 ? (
-                    <div className="space-y-4">
-                    {filteredBookingsByDate.map(booking => (
-                        <Card key={booking.id} className="hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${booking.color || 'hsl(var(--primary))'}` }}>
-                            <CardHeader className="flex flex-row items-start justify-between p-3">
-                                <div>
-                                    <CardTitle className="font-headline text-base">{booking.serviceName || "Unknown Service"}</CardTitle>
-                                    <CardDescription className="font-body flex items-center gap-2 pt-1">
-                                        <UserIcon size={14} /> {booking.clientName}
-                                    </CardDescription>
-                                </div>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" className="p-1 h-auto -mt-1 -mr-1" disabled={isSubmitting}>
-                                            <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity text-xs">
-                                                {booking.status}
-                                            </Badge>
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="font-body">
-                                        <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        {bookingStatusOptions.map((statusOption) => (
-                                            <DropdownMenuItem key={statusOption} onClick={() => handleStatusUpdate(booking.id, statusOption)} disabled={isSubmitting || booking.status === statusOption}>
-                                                {statusOption}
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </CardHeader>
-                            <CardContent className="px-3 pb-3 space-y-1 text-xs">
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <ClockIcon size={12} className="text-primary"/> 
-                                    <span>{format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</span>
-                                </div>
-                                {user.role === 'admin' && (
+        <div className="xl:col-span-3 space-y-4">
+            <Card className="shadow-lg rounded-lg">
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl">Appointments for: <span className="text-primary">{selectedDate ? format(selectedDate, "PPP") : "All Dates"}</span></CardTitle>
+                    <CardDescription className="font-body">{filteredBookingsByDate.length} appointment(s) scheduled.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <div className="flex justify-center items-center h-[200px]">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    ) : filteredBookingsByDate.length > 0 ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+                        {filteredBookingsByDate.map(booking => (
+                            <Card key={booking.id} className="hover:shadow-md transition-shadow" style={{ borderLeft: `4px solid ${booking.color || 'hsl(var(--primary))'}` }}>
+                                <CardHeader className="flex flex-row items-start justify-between p-2">
+                                    <div>
+                                        <CardTitle className="font-headline text-sm">{booking.serviceName || "Unknown Service"}</CardTitle>
+                                        <CardDescription className="font-body flex items-center gap-2 pt-1">
+                                            <UserIcon size={14} /> {booking.clientName}
+                                        </CardDescription>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" className="p-1 h-auto -mt-1 -mr-1" disabled={isSubmitting}>
+                                                <Badge variant={getStatusBadgeVariant(booking.status)} className="font-body cursor-pointer hover:opacity-80 transition-opacity text-xs">
+                                                    {booking.status}
+                                                </Badge>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="font-body">
+                                            <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            {bookingStatusOptions.map((statusOption) => (
+                                                <DropdownMenuItem key={statusOption} onClick={() => handleStatusUpdate(booking.id, statusOption)} disabled={isSubmitting || booking.status === statusOption}>
+                                                    {statusOption}
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </CardHeader>
+                                <CardContent className="px-2 pb-2 space-y-1 text-xs">
                                     <div className="flex items-center gap-2 text-muted-foreground">
-                                        <UserIcon size={12} className="text-primary"/> 
-                                        <span>{getHairdresserName(booking.hairdresserId)}</span>
+                                        <ClockIcon size={12} className="text-primary"/> 
+                                        <span>{format(booking.appointmentDateTime, "p")} ({booking.durationMinutes} mins)</span>
                                     </div>
-                                )}
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <StoreIcon size={12} className="text-primary"/> 
-                                    <span>{getSalonName(booking.salonId)}</span>
-                                </div>
-                                {booking.washServiceAdded && (
-                                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                                        <Droplets size={12} /> 
-                                        <span>Wash Included</span>
+                                    {user.role === 'admin' && (
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <UserIcon size={12} className="text-primary"/> 
+                                            <span>{getHairdresserName(booking.hairdresserId)}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <StoreIcon size={12} className="text-primary"/> 
+                                        <span>{getSalonName(booking.salonId)}</span>
                                     </div>
+                                    {booking.washServiceAdded && (
+                                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                                            <Droplets size={12} /> 
+                                            <span>Wash Included</span>
+                                        </div>
+                                    )}
+                                </CardContent>
+                                 {user.role === 'admin' && (
+                                    <CardFooter className="p-2 border-t flex justify-end bg-muted/50">
+                                        <Button variant="ghost" size="sm" onClick={() => openEditForm(booking)} className="font-body text-xs h-auto py-1 px-2" disabled={isSubmitting}>
+                                            <Edit3 className="mr-1 h-3 w-3"/>Edit
+                                        </Button>
+                                    </CardFooter>
                                 )}
-                            </CardContent>
-                             {user.role === 'admin' && (
-                                <CardFooter className="p-2 border-t flex justify-end bg-muted/50">
-                                    <Button variant="ghost" size="sm" onClick={() => openEditForm(booking)} className="font-body text-xs h-auto py-1 px-2" disabled={isSubmitting}>
-                                        <Edit3 className="mr-1 h-3 w-3"/>Edit
-                                    </Button>
-                                </CardFooter>
-                            )}
-                        </Card>
-                    ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-10">
-                        <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="mt-4 font-body text-muted-foreground">No appointments for this day or filters.</p>
-                    </div>
-                )}
-            </CardContent>
+                            </Card>
+                        ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 border rounded-lg bg-muted/50">
+                            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
+                            <p className="mt-4 font-body text-muted-foreground">No appointments for this day or filters.</p>
+                        </div>
+                    )}
+                </CardContent>
             </Card>
         </div>
       </div>

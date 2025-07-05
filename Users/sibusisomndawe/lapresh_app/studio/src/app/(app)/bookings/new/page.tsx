@@ -5,13 +5,15 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Salon, Hairdresser, User, BookingDoc, LocationDoc, HairdresserDoc, ClientDoc } from "@/lib/types";
-import { PlusCircle, Loader2 } from "lucide-react";
+import { PlusCircle, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db, collection, addDoc, getDocs, serverTimestamp, Timestamp, query, where, updateDoc, doc, writeBatch, orderBy } from "@/lib/firebase";
 import { increment } from "firebase/firestore"; // Import increment directly
 import { format, addMinutes, isSameDay } from 'date-fns';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 async function createOrUpdateClient(
   clientData: Pick<BookingFormValues, 'clientName' | 'clientPhone' | 'clientEmail'>
@@ -202,9 +204,16 @@ export default function NewBookingPage() {
   const router = useRouter();
   const [initialFormValues, setInitialFormValues] = useState<Partial<BookingFormValues>>({});
 
+  useEffect(() => {
+    if (user && user.role === 'hairdresser') {
+      toast({ title: "Access Denied", description: "You do not have permission to create new bookings.", variant: "destructive" });
+      router.replace('/dashboard');
+    }
+  }, [user, router]);
+
 
   useEffect(() => {
-    if (!user) {
+    if (!user || user.role === 'hairdresser') {
       setIsLoading(false);
       return;
     }
@@ -233,15 +242,8 @@ export default function NewBookingPage() {
         });
         setHairdressers(hairdressersList);
 
-        const prefillValues: Partial<BookingFormValues> = {};
-        if (user?.role === 'hairdresser' && user.hairdresserProfileId) {
-            prefillValues.hairdresserId = user.hairdresserProfileId;
-            const hairdresserDetails = hairdressersList.find(h => h.id === user.hairdresserProfileId);
-            if (hairdresserDetails && hairdresserDetails.assignedLocations.length > 0) {
-                prefillValues.salonId = hairdresserDetails.assignedLocations[0];
-            }
-        }
-        setInitialFormValues(prefillValues);
+        // No prefill logic as only admins can access
+        setInitialFormValues({});
 
       } catch (error: any) {
         console.error("Error fetching data for new booking:", error);
@@ -255,15 +257,15 @@ export default function NewBookingPage() {
   }, [user]);
 
   const handleCreateBooking = async (data: BookingFormValues) => {
-    if (!user) {
-        toast({ title: "Authentication Error", description: "User not authenticated.", variant: "destructive" });
+    if (!user || user.role !== 'admin') {
+        toast({ title: "Authentication Error", description: "You are not authorized to create a booking.", variant: "destructive" });
         setIsSubmitting(false);
         return;
     }
     setIsSubmitting(true);
     try {
       await createBookingInFirestore(data, user);
-      router.push(user?.role === 'hairdresser' ? '/bookings?view=mine' : '/bookings');
+      router.push('/bookings');
     } catch (error: any) {
       if (!(error instanceof Error && (error.message.startsWith("Booking conflict:") || error.message.includes("different location") || error.message.startsWith("Failed to check") || error.message.startsWith("Failed to manage client record") || error.message.includes("This client already has another booking")))) {
         console.error("Error during booking creation process:", error);
@@ -272,6 +274,18 @@ export default function NewBookingPage() {
       setIsSubmitting(false);
     }
   };
+  
+  if (user && user.role === 'hairdresser') {
+    return (
+      <div className="flex justify-center items-center h-full">
+         <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
+          <CardHeader><ShieldAlert className="mx-auto h-16 w-16 text-destructive" /><CardTitle className="mt-4 text-2xl font-headline">Access Denied</CardTitle></CardHeader>
+          <CardContent><CardDescription className="font-body text-lg">You do not have permission to create new bookings.</CardDescription></CardContent>
+          <CardFooter className="justify-center"><Button onClick={() => router.push('/dashboard')} className="bg-primary hover:bg-primary/90 text-primary-foreground">Go to Dashboard</Button></CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -293,9 +307,10 @@ export default function NewBookingPage() {
         salons={salons}
         allHairdressers={hairdressers}
         onSubmit={handleCreateBooking}
-        initialDataPreselected={initialFormValues}
         isSubmitting={isSubmitting}
       />
     </div>
   );
 }
+
+    
