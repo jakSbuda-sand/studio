@@ -43,6 +43,7 @@ export default function BookingsPage() {
   
   const [pageTitle, setPageTitle] = useState("All Bookings");
   const [pageDescription, setPageDescription] = useState("View and manage all scheduled appointments.");
+  const [visibleCount, setVisibleCount] = useState(5);
   
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
@@ -54,6 +55,7 @@ export default function BookingsPage() {
 
     const fetchData = async () => {
       setIsLoading(true);
+      setVisibleCount(5); // Reset visible count on new data fetch
       try {
         const locationsCol = collection(db, "locations");
         const locationSnapshot = await getDocs(locationsCol);
@@ -86,13 +88,12 @@ export default function BookingsPage() {
 
         let bookingsQueryBuilder;
         let currentViewTitle = "All Bookings";
-        let currentViewDescription = `Viewing appointments for ${format(selectedMonth, "MMMM yyyy")}.`;
-
+        
         if (user.role === 'hairdresser' && user.hairdresserProfileId) {
           bookingsQueryBuilder = query(
             collection(db, "bookings"), 
             where("hairdresserId", "==", user.hairdresserProfileId), 
-            orderBy("appointmentDateTime", "asc"),
+            orderBy("appointmentDateTime", "desc"),
             where("appointmentDateTime", ">=", Timestamp.fromDate(start)),
             where("appointmentDateTime", "<=", Timestamp.fromDate(end))
           );
@@ -100,15 +101,14 @@ export default function BookingsPage() {
         } else {
            bookingsQueryBuilder = query(
             collection(db, "bookings"), 
-            orderBy("appointmentDateTime", "asc"),
+            orderBy("appointmentDateTime", "desc"),
             where("appointmentDateTime", ">=", Timestamp.fromDate(start)),
             where("appointmentDateTime", "<=", Timestamp.fromDate(end))
           );
         }
 
         setPageTitle(currentViewTitle);
-        setPageDescription(currentViewDescription);
-
+        
         const bookingSnapshot = await getDocs(bookingsQueryBuilder);
         const bookingsList = bookingSnapshot.docs.map(bDoc => {
           const data = bDoc.data() as BookingDoc;
@@ -132,8 +132,12 @@ export default function BookingsPage() {
             washServiceAdded: data.washServiceAdded || false,
           } as Booking;
         });
-        const sortedBookingsList = bookingsList.sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
+        
+        const sortedBookingsList = bookingsList.sort((a,b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime());
         setBookings(sortedBookingsList);
+
+        let currentViewDescription = `${sortedBookingsList.length} booking(s) for ${format(selectedMonth, "MMMM yyyy")}.`;
+        setPageDescription(currentViewDescription);
 
       } catch (error: any) {
         console.error("Error fetching data:", error);
@@ -151,7 +155,7 @@ export default function BookingsPage() {
     try {
         const bookingRef = doc(db, "bookings", bookingId);
         await updateDoc(bookingRef, { status: newStatus, updatedAt: serverTimestamp() });
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, updatedAt: Timestamp.now() } : b).sort((a, b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus, updatedAt: Timestamp.now() } : b).sort((a, b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime()));
         toast({ title: "Status Updated", description: `Booking status changed to ${newStatus}.` });
     } catch (error: any) {
         console.error(`Error updating booking status to ${newStatus}:`, error);
@@ -237,7 +241,7 @@ export default function BookingsPage() {
         updatedAt: Timestamp.now(), 
       };
 
-      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime()));
+      setBookings(prev => prev.map(b => b.id === editingBooking.id ? updatedBookingForState : b).sort((a,b) => new Date(b.appointmentDateTime).getTime() - new Date(a.appointmentDateTime).getTime()));
       toast({ title: "Booking Updated", description: `Booking for ${data.clientName} has been updated.` });
       setIsFormOpen(false);
       setEditingBooking(null);
@@ -340,7 +344,7 @@ export default function BookingsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bookings.map((booking) => (
+              {bookings.slice(0, visibleCount).map((booking) => (
                 <TableRow key={booking.id} className="font-body">
                   <TableCell>
                     <div className="font-medium text-foreground">{booking.clientName}</div>
@@ -399,6 +403,21 @@ export default function BookingsPage() {
             </TableBody>
           </Table>
         </CardContent>
+         {bookings.length > 5 && (
+            <CardFooter className="flex items-center justify-between border-t pt-4">
+                 <p className="text-sm text-muted-foreground font-body">
+                    Showing {Math.min(visibleCount, bookings.length)} of {bookings.length} bookings.
+                </p>
+                {visibleCount < bookings.length && (
+                    <Button
+                        variant="outline"
+                        onClick={() => setVisibleCount(prev => prev + 5)}
+                    >
+                        Load More
+                    </Button>
+                )}
+            </CardFooter>
+        )}
       </Card>
       )}
     </div>
