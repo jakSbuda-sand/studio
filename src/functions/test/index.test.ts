@@ -1,11 +1,12 @@
 
 import * as admin from "firebase-admin";
-import * as functionsTest from "firebase-functions-test";
+import functionsTest from "firebase-functions-test";
 import {expect} from "chai";
 import * as sinon from "sinon";
 import {onHairdresserDeleted} from "../index";
 
 // Initialize firebase-functions-test.
+// This allows us to use an offline mode that doesn't affect real data.
 const testEnv = functionsTest();
 
 describe("Cloud Functions: SalonVerse", () => {
@@ -25,6 +26,7 @@ describe("Cloud Functions: SalonVerse", () => {
 
   beforeEach(() => {
     // Before each test, stub the specific admin SDK methods we expect to be called.
+    // We stub `admin.auth().deleteUser` to spy on its calls without actually deleting a user.
     deleteUserStub = sinon.stub(admin.auth(), "deleteUser");
   });
 
@@ -41,16 +43,19 @@ describe("Cloud Functions: SalonVerse", () => {
         email: "test@example.com",
         name: "Test Hairdresser",
       };
-      
+
       const fakeEvent = testEnv.firestore.makeDocumentSnapshot(fakeData, `hairdressers/${hairdresserId}`);
-      
+
       const wrapped = testEnv.wrap(onHairdresserDeleted);
-      
+
       // 2. Act
+      // Call the wrapped function with the fake event.
       await wrapped({params: {hairdresserId}, data: fakeEvent});
-      
+
       // 3. Assert
+      // Expect that `admin.auth().deleteUser` was called exactly once.
       expect(deleteUserStub.calledOnce).to.be.true;
+      // Expect that it was called with the correct hairdresser ID.
       expect(deleteUserStub.firstCall.args[0]).to.equal(hairdresserId);
     });
 
@@ -59,17 +64,22 @@ describe("Cloud Functions: SalonVerse", () => {
       const hairdresserId = "already-deleted-uid";
       const fakeData = {email: "deleted@example.com", name: "Deleted User"};
 
+      // Configure the stub to simulate an "auth/user-not-found" error.
       const authError = {code: "auth/user-not-found", message: "User not found."};
       deleteUserStub.throws(authError);
-      
+
       const fakeEvent = testEnv.firestore.makeDocumentSnapshot(fakeData, `hairdressers/${hairdresserId}`);
       const wrapped = testEnv.wrap(onHairdresserDeleted);
 
       // 2. Act & 3. Assert
+      // We expect the function to run without throwing an error into the test runner.
+      // The function itself should catch this specific error and log it.
       try {
         await wrapped({params: {hairdresserId}, data: fakeEvent});
+        // If we get here, the function handled the error correctly.
         expect(deleteUserStub.calledOnce).to.be.true;
       } catch (e) {
+        // If the function re-threw the error, the test fails.
         expect.fail("Function should have handled the auth/user-not-found error gracefully.");
       }
     });
