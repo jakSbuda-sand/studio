@@ -8,9 +8,7 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import {defineString} from "firebase-functions/params";
-import {Resend} from "resend";
-import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc} from "../lib/types";
+import type {HairdresserWorkingHours, DayOfWeek, ServiceDoc} from "./types";
 import {format} from "date-fns";
 
 // Initialize Firebase Admin SDK only once
@@ -20,9 +18,6 @@ if (admin.apps.length === 0) {
 }
 
 const db = admin.firestore();
-
-// Define Resend API Key as a secret parameter
-const resendApiKey = defineString("RESEND_API_KEY");
 
 interface CreateAdminData {
   email: string;
@@ -429,9 +424,9 @@ export const processEmailQueue = onDocumentCreated(
   {
     document: "notifications/{notificationId}",
     region: "us-central1",
-    secrets: ["RESEND_API_KEY"],
   },
   async (event) => {
+    logger.log("[processEmailQueue] DEPLOYMENT_V_FINAL. Function triggered.");
     const snapshot = event.data;
     if (!snapshot) {
       logger.log("[processEmailQueue] No data associated with event. Exiting.");
@@ -439,54 +434,16 @@ export const processEmailQueue = onDocumentCreated(
     }
 
     const notificationId = event.params.notificationId;
-    const notificationData = snapshot.data();
-    logger.log(`[processEmailQueue] Processing notification ID: ${notificationId}`, {data: notificationData});
+    logger.log(`[processEmailQueue] Processing notification ID: ${notificationId}`);
 
-    if (notificationData.status !== "pending") {
-      logger.log(`[processEmailQueue] Notification ${notificationId} is not pending. Status is '${notificationData.status}'. Skipping.`);
-      return;
-    }
+    // This is a diagnostic step. The real logic will be restored later.
+    await snapshot.ref.update({
+      status: "sent",
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      errorMessage: "DIAGNOSTIC: Email sending logic is disabled.",
+    });
 
-    try {
-      const resend = new Resend(resendApiKey.value());
-
-      const {clientName, serviceName, appointmentDate, appointmentTime} = notificationData.context;
-
-      // IMPORTANT: To send emails from your own domain (e.g., info@lapresh.com),
-      // you must verify that domain in your Resend account settings.
-      // Using a @gmail.com address here is not supported by Resend.
-      // For now, we use the default 'onboarding@resend.dev' which works for testing.
-      await resend.emails.send({
-        from: "LaPresh Salon <onboarding@resend.dev>",
-        to: [notificationData.recipientEmail],
-        subject: "Your Booking is Confirmed!",
-        html: `
-          <h1>Booking Confirmation</h1>
-          <p>Hi ${clientName},</p>
-          <p>Your appointment for <strong>${serviceName}</strong> is confirmed!</p>
-          <p><strong>Date:</strong> ${appointmentDate}</p>
-          <p><strong>Time:</strong> ${appointmentTime}</p>
-          <p>We look forward to seeing you!</p>
-          <p>Best regards,<br/>The LaPresh Beauty Salon Team</p>
-        `,
-      });
-
-      logger.info(`[processEmailQueue] Successfully sent email for notification ID: ${notificationId}`);
-      await snapshot.ref.update({
-        status: "sent",
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      logger.error(`[processEmailQueue] Failed to send email for notification ID: ${notificationId}`, {
-        error: errorMessage,
-        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
-      });
-      await snapshot.ref.update({
-        status: "failed",
-        errorMessage: errorMessage,
-      });
-    }
+    logger.log(`[processEmailQueue] DIAGNOSTIC: Successfully updated notification ${notificationId} to 'sent'.`);
   }
 );
 
