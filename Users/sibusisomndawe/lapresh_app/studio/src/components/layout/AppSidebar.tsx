@@ -118,14 +118,13 @@ const NavItem: React.FC<NavItemProps & { currentPath: string; userRole: User['ro
 const navItems: NavItemProps[] = [
   // Core items for all roles
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'hairdresser'] },
-  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin', 'hairdresser'] },
+  { href: '/calendar', icon: CalendarDays, label: 'Calendar', roles: ['admin'] },
   
   // Booking section (remains collapsible)
   {
-    href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin', 'hairdresser'],
+    href: '#', icon: ClipboardList, label: 'Bookings', roles: ['admin'],
     subItems: [
       { href: '/bookings', icon: ClipboardList, label: 'All Bookings', roles: ['admin'] },
-      { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
       { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin'] },
     ]
   },
@@ -179,5 +178,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
-    

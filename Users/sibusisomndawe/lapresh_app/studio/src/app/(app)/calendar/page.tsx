@@ -1,13 +1,14 @@
 
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc, DayOfWeek } from "@/lib/types";
-import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets } from "lucide-react";
+import { CalendarDays, User as UserIcon, StoreIcon, ClockIcon, Filter, Loader2, Edit3, Briefcase, Droplets, ShieldAlert } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -38,6 +39,7 @@ const getStatusColor = (status: Booking['status']): string => {
 
 export default function CalendarPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   
   const [allBookings, setAllBookings] = useState<Booking[]>([]); // Master list of all bookings
@@ -58,10 +60,16 @@ export default function CalendarPage() {
   const [workingHoursToday, setWorkingHoursToday] = useState<{start: string, end: string} | 'off' | null>(null);
 
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
+  
+  useEffect(() => {
+    if (user && user.role === 'hairdresser') {
+      router.replace('/dashboard');
+    }
+  }, [user, router]);
 
   // Effect 1: Fetch prerequisite data (salons, hairdressers, services)
   useEffect(() => {
-    if (!user) {
+    if (!user || user.role === 'hairdresser') {
       setIsLoading(false);
       return;
     }
@@ -115,7 +123,7 @@ export default function CalendarPage() {
 
   // Effect 2: Fetch all relevant bookings once prerequisites are loaded
   useEffect(() => {
-    if (!user || services.length === 0) return;
+    if (!user || services.length === 0 || user.role === 'hairdresser') return;
 
     const fetchAllBookings = async () => {
       setIsLoading(true);
@@ -327,6 +335,18 @@ export default function CalendarPage() {
     : hairdressers.filter(h => h.isActive && h.assignedLocations.includes(filterSalonId));
   
   if (!user) return <p className="text-center mt-10 font-body">Please log in to view the calendar.</p>;
+  
+  if (user && user.role === 'hairdresser') {
+    return (
+      <div className="flex justify-center items-center h-full">
+         <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
+          <CardHeader><ShieldAlert className="mx-auto h-16 w-16 text-destructive" /><CardTitle className="mt-4 text-2xl font-headline">Access Denied</CardTitle></CardHeader>
+          <CardContent><CardDescription className="font-body text-lg">You do not have permission to view this page.</CardDescription></CardContent>
+          <CardFooter className="justify-center"><Button onClick={() => router.push('/dashboard')} className="bg-primary hover:bg-primary/90 text-primary-foreground">Go to Dashboard</Button></CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

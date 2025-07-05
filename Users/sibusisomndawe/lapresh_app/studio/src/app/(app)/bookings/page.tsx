@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import BookingForm, { type BookingFormValues } from "@/components/forms/BookingForm";
 import type { Booking, Salon, Hairdresser, User, LocationDoc, HairdresserDoc, BookingDoc, Service, ServiceDoc } from "@/lib/types";
-import { ClipboardList, Edit3, PlusCircle, CalendarDays, Loader2, Droplets, ChevronLeft, ChevronRight } from "lucide-react";
+import { ClipboardList, Edit3, PlusCircle, CalendarDays, Loader2, Droplets, ChevronLeft, ChevronRight, ShieldAlert } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,12 +22,13 @@ import { format, isSameDay, addMinutes, startOfMonth, endOfMonth, addMonths, sub
 import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { db, collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp, serverTimestamp } from "@/lib/firebase";
 
 export default function BookingsPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const viewMode = searchParams.get('view');
 
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -47,8 +48,15 @@ export default function BookingsPage() {
   
   const bookingStatusOptions: Booking['status'][] = ['Confirmed', 'Completed', 'Cancelled', 'No-Show'];
 
+   useEffect(() => {
+    if (user && user.role === 'hairdresser') {
+      router.replace('/dashboard');
+    }
+  }, [user, router]);
+
+
   useEffect(() => {
-    if (!user) {
+    if (!user || user.role === 'hairdresser') {
       setIsLoading(false);
       return;
     }
@@ -283,6 +291,18 @@ export default function BookingsPage() {
   }
 
   if (!user) return <p className="text-center mt-10 font-body">Please log in to view bookings.</p>;
+  
+  if (user.role === 'hairdresser') {
+    return (
+      <div className="flex justify-center items-center h-full">
+         <Card className="text-center py-12 shadow-lg rounded-lg max-w-md">
+          <CardHeader><ShieldAlert className="mx-auto h-16 w-16 text-destructive" /><CardTitle className="mt-4 text-2xl font-headline">Access Denied</CardTitle></CardHeader>
+          <CardContent><CardDescription className="font-body text-lg">You do not have permission to view this page.</CardDescription></CardContent>
+          <CardFooter className="justify-center"><Button onClick={() => router.push('/dashboard')} className="bg-primary hover:bg-primary/90 text-primary-foreground">Go to Dashboard</Button></CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -427,5 +447,3 @@ export default function BookingsPage() {
     </div>
   );
 }
-
-    

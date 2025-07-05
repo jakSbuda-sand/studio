@@ -126,7 +126,7 @@ const navItems: NavItemProps[] = [
     subItems: [
       { href: '/bookings', icon: ClipboardList, label: 'All Bookings', roles: ['admin'] },
       { href: '/bookings?view=mine', icon: ClipboardList, label: 'My Bookings', roles: ['hairdresser'] },
-      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin', 'hairdresser'] },
+      { href: '/bookings/new', icon: PlusCircle, label: 'New Booking', roles: ['admin'] },
     ]
   },
 
@@ -179,3 +179,5 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+
+    

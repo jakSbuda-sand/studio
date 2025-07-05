@@ -297,14 +297,16 @@ export default function BookingsPage() {
                 </div>
                 <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight className="h-4 w-4" /></Button>
             </div>
-            <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Link href="/bookings/new">
-                <span className="flex items-center gap-2">
-                  <PlusCircle className="h-4 w-4" />
-                  New Booking
-                </span>
-              </Link>
-            </Button>
+            {user.role === 'admin' && (
+              <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Link href="/bookings/new">
+                  <span className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4" />
+                    New Booking
+                  </span>
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />
@@ -325,7 +327,9 @@ export default function BookingsPage() {
         <Card className="text-center py-12 shadow-lg rounded-lg">
           <CardHeader><CalendarDays className="mx-auto h-16 w-16 text-muted-foreground" /><CardTitle className="mt-4 text-2xl font-headline">No Bookings Found</CardTitle></CardHeader>
           <CardContent><CardDescription className="font-body text-lg">There are no appointments scheduled for {format(selectedMonth, "MMMM yyyy")}.</CardDescription></CardContent>
-          <CardFooter className="justify-center"><Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"><Link href="/bookings/new"><PlusCircle className="mr-2 h-4 w-4" /> Create First Booking</Link></Button></CardFooter>
+          {user.role === 'admin' && (
+            <CardFooter className="justify-center"><Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground"><Link href="/bookings/new"><PlusCircle className="mr-2 h-4 w-4" /> Create First Booking</Link></Button></CardFooter>
+          )}
         </Card>
       ) : (
       <Card className="shadow-lg rounded-lg">
